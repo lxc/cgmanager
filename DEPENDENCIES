@@ -1,0 +1,3 @@
+Build dependencies:
+ - libnih-dbus-dev
+ - libdbus-1-dev

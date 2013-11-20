@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!-- cgmanager
+
+     org.linuxcontainers.cgmanager.xml - interface definition for manager
+
+     Copyright © 2013 Stéphane Graber
+     Author: Stéphane Graber <stgraber@ubuntu.com>.
+  -->
+
+<!DOCTYPE node PUBLIC
+  "-//freedesktop//DTD D-BUS Object Introspection 1.0//EN"
+  "http://www.freedesktop.org/standards/dbus/1.0/introspect.dtd">
+
+<node name="/org/linuxcontainers/cgmanager">
+  <interface name="org.linuxcontainers.cgmanager0_0">
+    <!-- Example function -->
+    <method name="Poke">
+    </method>
+  </interface>
+</node>
