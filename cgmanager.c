@@ -84,8 +84,16 @@ int cgmanager_get_stuff (void *data, NihDBusMessage *message,
 		                 const char *key, int32_t *value)
 {
 	nih_info(_("get_stuff called with: %s"), key);
-	*value = 1234;
-	return 0;
+
+	if (strcmp(key, "abcd") == 0) {
+		*value = 1234;
+		return 0;
+	}
+	else {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "The key specified isn't valid.");
+		return -1;
+	}
 }
 
 
