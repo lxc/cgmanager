@@ -16,5 +16,15 @@
     <!-- Example function -->
     <method name="Poke">
     </method>
+
+    <method name="setStuff">
+      <arg name="key" type="s" direction="in" />
+      <arg name="value" type="i" direction="in" />
+    </method>
+
+    <method name="getStuff">
+      <arg name="key" type="s" direction="in" />
+      <arg name="value" type="i" direction="out" />
+    </method>
   </interface>
 </node>

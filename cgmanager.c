@@ -72,6 +72,24 @@ cgmanager_poke (void             *data,
 	return 0;
 }
 
+
+int cgmanager_set_stuff (void *data, NihDBusMessage *message,
+		                 const char *key, int32_t value)
+{
+	nih_info(_("set_stuff called with: %s => %d"), key, value);
+	return 0;
+}
+
+int cgmanager_get_stuff (void *data, NihDBusMessage *message,
+		                 const char *key, int32_t *value)
+{
+	nih_info(_("get_stuff called with: %s"), key);
+	*value = 1234;
+	return 0;
+}
+
+
+
 static int
 client_connect (DBusServer *server, DBusConnection *conn)
 {
@@ -81,7 +99,7 @@ client_connect (DBusServer *server, DBusConnection *conn)
 	nih_info (_("Connection from private client"));
 
 	NIH_MUST (nih_dbus_object_new (NULL, conn,
-	          "/org/linuxcontainers/Cgmanager",
+	          "/org/linuxcontainers/cgmanager",
 	          cgmanager_interfaces, NULL));
 
 	return TRUE;
