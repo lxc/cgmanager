@@ -14,17 +14,17 @@
 <node name="/org/linuxcontainers/cgmanager">
   <interface name="org.linuxcontainers.cgmanager0_0">
     <!-- Example function -->
-    <method name="Poke">
-    </method>
 
-    <method name="setStuff">
+    <method name="setValue">
       <arg name="key" type="s" direction="in" />
       <arg name="value" type="i" direction="in" />
     </method>
 
-    <method name="getStuff">
+    <method name="getValue">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
-      <arg name="value" type="i" direction="out" />
+      <arg name="value" type="s" direction="out" />
     </method>
   </interface>
 </node>

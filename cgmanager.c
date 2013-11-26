@@ -81,19 +81,60 @@ int cgmanager_set_stuff (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_get_stuff (void *data, NihDBusMessage *message,
-		                 const char *key, int32_t *value)
-{
-	nih_info(_("get_stuff called with: %s"), key);
+				 const char *controller, const char *cgroup,
+		                 const char *key, char *value)
 
-	if (strcmp(key, "abcd") == 0) {
-		*value = 1234;
-		return 0;
-	}
-	else {
+{
+	int fd = 0;
+	nih_assert (message != NULL);
+	struct ucred ucred;
+	socklen_t len;
+	const char *key_path;
+	char cgpath[MAXPATHLEN],
+	     fullpath[MAXPATHLEN];
+
+	nih_info (_("Poke has been called"));
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "The key specified isn't valid.");
+		                             "Could  not get client socket.");
 		return -1;
 	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	/* get client's cgroup */
+	if (get_pid_cgroup(pid, controller, cgpath) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client cgroup.");
+		return -1;
+	}
+
+
+	if ((key_path = get_key_path(controller, key)) == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid key %s for controller %s",
+					     key, controller);
+		return -1;
+	}
+
+	/* append the requested cgroup */
+	ret = snprintf(fullpath, MAXPATHLEN, "%s/%s/%s", cgpath, cgroup, key_path);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "path name too long for %s and %s, pid %d",
+					     cgpath, cgroup, (int)pid);
+		return -1;
+	}
+
+	/* read and return the value */
+	*value = read_string(cgpath);
+
+	return 0;
 }
 
 
