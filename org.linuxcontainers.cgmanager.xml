@@ -15,11 +15,6 @@
   <interface name="org.linuxcontainers.cgmanager0_0">
     <!-- Example function -->
 
-    <method name="setValue">
-      <arg name="key" type="s" direction="in" />
-      <arg name="value" type="i" direction="in" />
-    </method>
-
     <method name="getValue">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
