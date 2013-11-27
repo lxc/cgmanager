@@ -23,6 +23,8 @@
 #include <ctype.h>
 #include <sched.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/param.h>
 #include <stdbool.h>
 
@@ -40,6 +42,8 @@
 
 #include <sys/socket.h>
 
+#include "fs.h"
+
 #include "org.linuxcontainers.cgmanager.h"
 
 #define PACKAGE_NAME "cgmanager"
@@ -55,23 +59,17 @@
 static int daemonise = FALSE;
 
 int cgmanager_get_value (void *data, NihDBusMessage *message,
-				 const char *controller, const char *cgroup,
+				 const char *controller, const char *req_cgroup,
 		                 const char *key, char **value)
 
 {
-#if 1
-	nih_info("get_value called, controller %s cgroup %s key %s",
-		controller, cgroup, key);
-	*value = "hi there";
-	return 0;
-#else
 	int fd = 0;
 	nih_assert (message != NULL);
 	struct ucred ucred;
 	socklen_t len;
-	const char *key_path;
-	char cgpath[MAXPATHLEN],
-	     fullpath[MAXPATHLEN];
+	char path[MAXPATHLEN], *fullpath;
+	uid_t uid;
+	gid_t gid;
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -85,43 +83,40 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	/* get client's cgroup */
-	if (get_pid_cgroup(pid, controller, cgpath) < 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client cgroup.");
+	get_pid_creds(ucred.pid, &uid, &gid);
+
+	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
+		nih_fatal("Could not determine the requested cgroup");
 		return -1;
 	}
 
-
-	if ((key_path = get_key_path(controller, key)) == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid key %s for controller %s",
-					     key, controller);
+	/* Check access rights to the cgroup directory */
+	if (!may_access(ucred.pid, uid, gid, path, O_RDONLY)) {
+		nih_fatal("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
-	/* append the requested cgroup */
-	ret = snprintf(fullpath, MAXPATHLEN, "%s/%s/%s", cgpath, cgroup, key_path);
-	if (ret < 0 || ret >= MAXPATHLEN) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "path name too long for %s and %s, pid %d",
-					     cgpath, cgroup, (int)pid);
+	/* append the filename */
+	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
+		nih_fatal("filename too long for cgroup %s key %s",
+			path, key);
 		return -1;
 	}
 
-	/* Make sure client isn't passing us a bunch of bogus '../'s to
-	 * try to read host files */
-	if (!is_cgroup_path(controller, fullpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid cgroup path '%s'", cgroup);
+	strncat(path, key, MAXPATHLEN-1);
+
+	/* Check access rights to the file itself */
+	if (!may_access(ucred.pid, uid, gid, path, O_RDONLY)) {
+		nih_fatal("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* read and return the value */
-	*value = read_string(cgpath);
+	*value = file_read_string(path);
+	if (!*value)
+		return -1;
 
 	return 0;
-#endif
 }
 
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)

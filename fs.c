@@ -4,6 +4,8 @@
 #include <ctype.h>
 #include <sched.h>
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <sys/param.h>
 #include <stdbool.h>
 
@@ -146,4 +148,225 @@ int setup_cgroup_mounts(void)
 out:
 	fclose(cgf);
 	return ret;
+}
+
+static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
+{
+	FILE *f;
+	char path[100];
+	char *line = NULL, *cgroup = NULL;
+	size_t len = 0;
+
+	sprintf(path, "/proc/%d/cgroup", (int) pid);
+	if ((f = fopen(path, "r")) == NULL) {
+		nih_fatal("could not open cgroup file for %d", (int) pid);
+		return NULL;
+	}
+	while (getline(&line, &len, f) != -1) {
+		char *c1, *c2;
+		char *token, *saveptr = NULL;
+		if ((c1 = index(line, ':')) == NULL)
+			continue;
+		if ((c2 = index(++c1, ':')) == NULL)
+			continue;
+		*c2 = '\0';
+		/* TODO we need to strtok here for composed subsystems */
+		for (; (token = strtok_r(c1, ",", &saveptr)); c1 = NULL) {
+			if (strcmp(token, controller) != 0)
+				continue;
+			strncpy(retv, c2+1, MAXPATHLEN);
+			cgroup = retv;
+			goto found;
+		}
+	}
+found:
+	fclose(f);
+	free(line);
+	return cgroup;
+}
+
+/*
+ * Given host @uid, return the uid to which it maps in
+ * the namespace, or -1 if none.
+ */
+static uid_t hostuid_to_ns(uid_t uid, pid_t pid)
+{
+	FILE *f;
+	int ret, nsuid, hostuid, count;
+	char line[400];
+
+	sprintf(line, "/proc/%d/uid_map", (int)pid);
+	if ((f = fopen(line, "r")) == NULL) {
+		nih_fatal("Failed opening %s: %s", line, strerror(errno));
+		return -1;
+	}
+	while (fgets(line, 400, f)) {
+		ret = sscanf(line, "%d %d %d\n", &nsuid, &hostuid, &count);
+		if (ret != 3)
+			continue;
+		if (hostuid <= uid && hostuid+count > uid) {
+			fclose(f);
+			return (uid - hostuid) + nsuid;
+		}
+	}
+	fclose(f);
+	return -1;
+}
+
+/*
+ * pid may access path if the uids are the same, or if
+ * path's uid is mapped into the userns and pid is root
+ * there, or if the gids are the same and path has mode
+ * in group rights, or if path has mode in other rights.
+ *
+ * uid and gid are passed in to avoid recomputation.
+ */
+bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
+{
+	struct stat sb;
+	int ret;
+
+	ret = stat(path, &sb);
+	if (ret < 0) {
+		nih_fatal("Could not look up %s\n", path);
+		return false;
+	}
+	if (uid == sb.st_uid) {
+		if (mode == O_RDONLY && sb.st_mode & S_IRUSR)
+			return true;
+		if (mode == O_RDWR && (sb.st_mode & (S_IRUSR|S_IWUSR) == S_IRUSR|S_IWUSR))
+			return true;
+		if (mode == O_WRONLY && sb.st_mode & S_IWUSR)
+			return true;
+	}
+	if (gid == sb.st_gid) {
+		if (mode == O_RDONLY && sb.st_mode & S_IRGRP)
+			return true;
+		if (mode == O_RDWR && (sb.st_mode & (S_IRGRP|S_IWGRP) == S_IRGRP|S_IWGRP))
+			return true;
+		if (mode == O_WRONLY && sb.st_mode & S_IWGRP)
+			return true;
+	}
+	if (hostuid_to_ns(uid, pid) == 0 && hostuid_to_ns(sb.st_uid, pid) != -1)
+		return true;
+
+	if (mode == O_RDONLY && sb.st_mode & S_IROTH)
+		return true;
+	if (mode == O_RDWR && (sb.st_mode & (S_IROTH|S_IWOTH) == S_IROTH|S_IWOTH))
+		return true;
+	if (mode == O_WRONLY && sb.st_mode & S_IWOTH)
+		return true;
+	return false;
+}
+
+static const char *get_controller_path(const char *controller)
+{
+	int i;
+
+	for (i=0; i<num_controllers; i++) {
+		if (strcmp(all_mounts[i].controller, controller) == 0)
+			return all_mounts[i].path;
+	}
+	return NULL;
+}
+
+/*
+ * Calculate a full path to the cgroup being requested.
+ * @pid is the process making the request
+ * @controller is the mounted controller under which we will look.
+ * @cgroup is the cgroup which @pid is asking about.  If @cgroup is
+ * @path is the path in which to return the full cgroup path.
+ *    "a/b", then we concatenate "/cgroup/for/pid" with "a/b"
+ *    If @cgroup is "/a/b", then we use "/a/b"
+ */
+bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, char *path)
+{
+	int ret;
+	char requestor_cgpath[MAXPATHLEN], fullpath[MAXPATHLEN], *cg;
+	const char *cont_path;
+
+	cg = pid_cgroup(pid, controller, requestor_cgpath);
+	if (!cg) {
+		return false;
+	}
+
+	if ((cont_path = get_controller_path(controller)) == NULL) {
+		nih_fatal("Controller %s not mounted", controller);
+		return false;
+	}
+
+	/* append the requested cgroup */
+	ret = snprintf(fullpath, MAXPATHLEN, "%s/%s/%s", cont_path, cg, cgroup);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		nih_fatal("Path name too long: %s/%s/%s", cont_path, cg, cgroup);
+		return false;
+	}
+
+	/* Make sure client isn't passing us a bunch of bogus '../'s to
+	 * try to read host files */
+	if (!realpath(fullpath, path)) {
+		nih_fatal("Invalid path %s", fullpath);
+		return false;
+	}
+	if (strncmp(path, cont_path, strlen(cont_path)) != 0) {
+		nih_fatal("invalid cgroup path '%s' for pid %d", cgroup, (int)pid);
+		return false;
+	}
+
+	return true;
+}
+
+char *file_read_string(const char *path)
+{
+	int ret, fd = open(path, O_RDONLY);
+	char *string;
+	off_t sz;
+	if (fd < 0) {
+		nih_fatal("Error opening %s: %s", path, strerror(errno));
+		return NULL;
+	}
+	if ((sz = lseek(fd, 0, SEEK_END)) < 0) {
+		nih_fatal("Error seeking end of %s: %s", path, strerror(errno));
+		close(fd);
+		return NULL;
+	}
+	lseek(fd, 0, SEEK_SET);
+	if (!(string = malloc(sz+1)))
+		return NULL;
+	string[sz] = 0;
+	read(fd, string, sz);
+	return string;
+}
+
+void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
+{
+	char line[400];
+	int ret, u, g;
+	FILE *f;
+
+	*uid = -1;
+	*gid = -1;
+	sprintf(line, "/proc/%d/status", (int)pid);
+	if ((f = fopen(line, "r")) == NULL) {
+		nih_fatal("Error opening %s: %s", line, strerror(errno));
+		return;
+	}
+	while (fgets(line, 400, f)) {
+		if (strncmp(line, "Uid:", 4) == 0) {
+			if (sscanf(line+4, "%d", &u) != 1) {
+				nih_fatal("bad uid line for pid %d", (int)pid);
+				fclose(f);
+				return;
+			}
+			*uid = (uid_t)u;
+		} else if (strncmp(line, "Gid:", 4) == 0) {
+			if (sscanf(line+4, "%d", &g) != 1) {
+				nih_fatal("bad gid line for pid %d", (int)pid);
+				fclose(f);
+				return;
+			}
+			*gid = (uid_t)g;
+		}
+	}
+	fclose(f);
 }
