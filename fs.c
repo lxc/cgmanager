@@ -102,9 +102,11 @@ int setup_cgroup_mounts(void)
 		*p = '\0';
 		h = strtoul(p+1, NULL, 10);
 		if (h) {
-			nih_fatal("%s was already mounted", line);
+			nih_info("%s was already mounted!", line);
+#if STRICT
 			ret = -1;
 			goto out;
+#endif
 		}
 		ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, line);
 		if (ret < 0 || ret >= MAXPATHLEN) {
@@ -150,6 +152,15 @@ out:
 	return ret;
 }
 
+static inline void drop_newlines(char *s)
+{
+	int l;
+
+	while ((l=strlen(s)) > 0 && s[l-1] == '\n')
+		s[l-1] = '\0';
+}
+
+#define min(x, y) (x > y ? y : x)
 static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 {
 	FILE *f;
@@ -174,7 +185,12 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 		for (; (token = strtok_r(c1, ",", &saveptr)); c1 = NULL) {
 			if (strcmp(token, controller) != 0)
 				continue;
-			strncpy(retv, c2+1, MAXPATHLEN);
+			if (strlen(c2+1) + 1 > MAXPATHLEN) {
+				nih_fatal("cgroup name too long");
+				goto found;
+			}
+			strncpy(retv, c2+1, strlen(c2+1)+1);
+			drop_newlines(retv);
 			cgroup = retv;
 			goto found;
 		}
@@ -197,7 +213,6 @@ static uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 
 	sprintf(line, "/proc/%d/uid_map", (int)pid);
 	if ((f = fopen(line, "r")) == NULL) {
-		nih_fatal("Failed opening %s: %s", line, strerror(errno));
 		return -1;
 	}
 	while (fgets(line, 400, f)) {
@@ -284,11 +299,15 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 	int ret;
 	char requestor_cgpath[MAXPATHLEN], fullpath[MAXPATHLEN], *cg;
 	const char *cont_path;
+	bool abspath = false;
 
-	cg = pid_cgroup(pid, controller, requestor_cgpath);
-	if (!cg) {
-		return false;
-	}
+	if (cgroup && cgroup[0] != '/') {
+		cg = pid_cgroup(pid, controller, requestor_cgpath);
+		if (!cg) {
+			return false;
+		}
+	} else
+		abspath = true;
 
 	if ((cont_path = get_controller_path(controller)) == NULL) {
 		nih_fatal("Controller %s not mounted", controller);
@@ -296,7 +315,9 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 	}
 
 	/* append the requested cgroup */
-	ret = snprintf(fullpath, MAXPATHLEN, "%s/%s/%s", cont_path, cg, cgroup);
+	ret = snprintf(fullpath, MAXPATHLEN, "%s/%s%s%s", cont_path,
+			abspath ? "" : cg, abspath ? "" : "/",
+			cgroup ? cgroup : "");
 	if (ret < 0 || ret >= MAXPATHLEN) {
 		nih_fatal("Path name too long: %s/%s/%s", cont_path, cg, cgroup);
 		return false;
@@ -319,22 +340,35 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 char *file_read_string(const char *path)
 {
 	int ret, fd = open(path, O_RDONLY);
-	char *string;
-	off_t sz;
+	char *string = NULL;
+	off_t sz = 0;
 	if (fd < 0) {
 		nih_fatal("Error opening %s: %s", path, strerror(errno));
 		return NULL;
 	}
-	if ((sz = lseek(fd, 0, SEEK_END)) < 0) {
-		nih_fatal("Error seeking end of %s: %s", path, strerror(errno));
-		close(fd);
-		return NULL;
+nih_info("reading file %s", path);
+	while (1) {
+		char *n;
+		sz += 1024;
+		if (!(n = realloc(string, sz))) {
+			free(string);
+			string = NULL;
+			goto out;
+		}
+		string = n;
+		memset(string+sz-1024, 0, 1024);
+		ret = read(fd, string+sz-1024, 1024);
+		if (ret < 0) {
+			free(string);
+			string = NULL;
+			goto out;
+		}
+		if (ret < 1024)
+			break;
 	}
-	lseek(fd, 0, SEEK_SET);
-	if (!(string = malloc(sz+1)))
-		return NULL;
-	string[sz] = 0;
-	read(fd, string, sz);
+out:
+nih_info("returning value %s", string);
+	close(fd);
 	return string;
 }
 

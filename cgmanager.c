@@ -103,6 +103,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
+	strncat(path, "/", MAXPATHLEN-1);
 	strncat(path, key, MAXPATHLEN-1);
 
 	/* Check access rights to the file itself */
@@ -116,6 +117,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	if (!*value)
 		return -1;
 
+	nih_info("Sending to client: %s", *value);
 	return 0;
 }
 
