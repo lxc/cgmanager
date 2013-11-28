@@ -181,7 +181,6 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 		if ((c2 = index(++c1, ':')) == NULL)
 			continue;
 		*c2 = '\0';
-		/* TODO we need to strtok here for composed subsystems */
 		for (; (token = strtok_r(c1, ",", &saveptr)); c1 = NULL) {
 			if (strcmp(token, controller) != 0)
 				continue;
@@ -346,7 +345,7 @@ char *file_read_string(const char *path)
 		nih_fatal("Error opening %s: %s", path, strerror(errno));
 		return NULL;
 	}
-nih_info("reading file %s", path);
+
 	while (1) {
 		char *n;
 		sz += 1024;
@@ -367,7 +366,6 @@ nih_info("reading file %s", path);
 			break;
 	}
 out:
-nih_info("returning value %s", string);
 	close(fd);
 	return string;
 }
