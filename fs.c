@@ -273,7 +273,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 	return false;
 }
 
-static const char *get_controller_path(const char *controller)
+const char *get_controller_path(const char *controller)
 {
 	int i;
 

@@ -58,6 +58,47 @@
  **/
 static int daemonise = FALSE;
 
+int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
+				 const char *controller, char **value)
+{
+	int fd = 0;
+	nih_assert (message != NULL);
+	struct ucred ucred;
+	socklen_t len;
+	char path[MAXPATHLEN], *fullpath;
+	uid_t uid;
+	gid_t gid;
+
+	const char *controller_path = get_controller_path(controller);
+	if (!controller_path)
+		return -1;
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	if (!compute_pid_cgroup(ucred.pid, controller, "", path)) {
+		nih_fatal("Could not determine the requested cgroup");
+		return -1;
+	}
+
+	int cplen = strlen(controller_path);
+	if (strlen(path) < cplen)
+		return -1;
+
+	*value = strdup(path + cplen);
+
+	return 0;
+}
+
 int cgmanager_get_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 		                 const char *key, char **value)
