@@ -65,9 +65,7 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 	nih_assert (message != NULL);
 	struct ucred ucred;
 	socklen_t len;
-	char path[MAXPATHLEN], *fullpath;
-	uid_t uid;
-	gid_t gid;
+	char path[MAXPATHLEN];
 
 	const char *controller_path = get_controller_path(controller);
 	if (!controller_path)
@@ -109,8 +107,6 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	struct ucred ucred;
 	socklen_t len;
 	char path[MAXPATHLEN], *fullpath;
-	uid_t uid;
-	gid_t gid;
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -124,15 +120,13 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	get_pid_creds(ucred.pid, &uid, &gid);
-
 	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
 		nih_fatal("Could not determine the requested cgroup");
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
-	if (!may_access(ucred.pid, uid, gid, path, O_RDONLY)) {
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
 		nih_fatal("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
@@ -148,7 +142,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	strncat(path, key, MAXPATHLEN-1);
 
 	/* Check access rights to the file itself */
-	if (!may_access(ucred.pid, uid, gid, path, O_RDONLY)) {
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
 		nih_fatal("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
