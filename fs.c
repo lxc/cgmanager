@@ -204,9 +204,9 @@ int setup_cgroup_mounts(void)
 		nih_info("Mounted %s onto %s",
 			all_mounts[num_controllers].controller,
 			all_mounts[num_controllers].path);
-		if (strcmp(controller, "cpuset") == 0) {
+		if (strcmp(all_mounts[num_controllers].controller, "cpuset") == 0) {
 			set_clone_children(dest); // TODO make this optional?
-		} else if (strcmp(controller, "memory") == 0) {
+		} else if (strcmp(all_mounts[num_controllers].controller, "memory") == 0) {
 			set_use_hierarchy(dest);  // TODO make this optional?
 		}
 		num_controllers++;

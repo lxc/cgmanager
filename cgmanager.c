@@ -27,6 +27,7 @@
 #include <fcntl.h>
 #include <sys/param.h>
 #include <stdbool.h>
+#include <libgen.h>
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -61,11 +62,11 @@ static int daemonise = FALSE;
 int cgmanager_create (void *data, NihDBusMessage *message,
 				 const char *controller, char *cgroup)
 {
-	int fd = 0;
+	int fd = 0, ret;
 	nih_assert (message != NULL);
 	struct ucred ucred;
 	socklen_t len;
-	char path[MAXPATHLEN], *fullpath;
+	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *copy, *fnam, *dnam;
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -81,26 +82,77 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	if (!cgroup || cgroup == "")  // nothing to do
 		return 0;
+	if (cgroup[0] == '/' || cgroup[0] == '.') {
+		// We could try to be accomodating, but let's not fool around right now
+		nih_fatal("Bad requested cgroup path: %s", cgroup);
+		return -1;
+	}
 
 	// TODO - support comma-separated list of controllers?  Not sure it's worth it
-	if (!compute_pid_cgroup(ucred.pid, controller, "", path)) {
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
 		nih_fatal("Could not determine the requested cgroup");
 		return -1;
 	}
-	if (strlen(path) + strlen(cgroup) > MAXPATHLEN) {
+	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN) {
 		nih_fatal("Path name too long");
 		return -1;
 	}
 	copy = strdup(cgroup);
 	if (!copy)
 		return -1;
-	d = dirname(copy);
-	if (strcmp(d, ".") != 0) {
-		strncat(path, d);
+	fnam = basename(copy);
+	dnam = dirname(copy);
+	strcpy(path, rcgpath);
+	if (strcmp(dnam, ".") != 0) {
+		char *tmppath;
 		// verify that the real path is below the controller path
-		// verify that the path exists and caller is allowed to write the path
+		strncat(path, "/", MAXPATHLEN-1);
+		strncat(path, dnam, MAXPATHLEN-1);
+		if (!(tmppath = realpath(path, NULL))) {
+			nih_fatal("Invalid path %s", path);
+			free(copy);
+			return -1;
+		}
+		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
+			nih_fatal("Invalid cgroup path %s requested by pid %d",
+				  path, (int)ucred.pid);
+			free(copy);
+			free(tmppath);
+			return -1;
+		}
+		free(tmppath);
 	}
-	// append the cgroup name and create it
+
+	// is r allowed to create under the parent dir?
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
+		nih_fatal("pid %d (uid %d gid %d) may not create under %s",
+			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+		free(copy);
+		return -1;
+	}
+	strncat(path, "/", MAXPATHLEN-1);
+	strncat(path, fnam, MAXPATHLEN-1);
+	ret = mkdir(path, 0755);
+	if (ret < 0) {  // Should we ignore EEXIST?  Let's not...
+		nih_fatal("failed to create %s", path);
+		free(copy);
+		return -1;
+	}
+	ret = chown(path, ucred.uid, ucred.gid);
+	if (ret < 0) {
+		nih_fatal("Failed to change ownership on %s to %d:%d",
+			  path, (int)ucred.uid, (int)ucred.gid);
+		rmdir(path);
+		free(copy);
+		return -1;
+	}
+
+	free(copy);
+	nih_info("Created %s for %d (%d:%d)", path, (int)ucred.pid,
+		 (int)ucred.uid, (int)ucred.gid);
+	return 0;
 }
 
 int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
