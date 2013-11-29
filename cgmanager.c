@@ -67,8 +67,11 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	socklen_t len;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *copy, *fnam, *dnam;
 
-	if (message == NULL)
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
 		return -1;
+	}
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -86,7 +89,8 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		return 0;
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
-		nih_warn("Bad requested cgroup path: %s", cgroup);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Bad requested cgroup path: %s", cgroup);
 		return -1;
 	}
 
@@ -94,16 +98,21 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
-		nih_warn("Could not determine the requested cgroup");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the requested cgroup");
 		return -1;
 	}
 	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN) {
-		nih_warn("Path name too long");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Path name too long");
 		return -1;
 	}
 	copy = strdup(cgroup);
-	if (!copy)
+	if (!copy) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory copying cgroup name");
 		return -1;
+	}
 	fnam = basename(copy);
 	dnam = dirname(copy);
 	strcpy(path, rcgpath);
@@ -113,12 +122,14 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		strncat(path, "/", MAXPATHLEN-1);
 		strncat(path, dnam, MAXPATHLEN-1);
 		if (!(tmppath = realpath(path, NULL))) {
-			nih_warn("Invalid path %s", path);
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Invalid path %s", path);
 			free(copy);
 			return -1;
 		}
 		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
-			nih_warn("Invalid cgroup path %s requested by pid %d",
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Invalid cgroup path %s requested by pid %d",
 				  path, (int)ucred.pid);
 			free(copy);
 			free(tmppath);
@@ -129,7 +140,8 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	// is r allowed to create under the parent dir?
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
-		nih_warn("pid %d (uid %d gid %d) may not create under %s",
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"pid %d (uid %d gid %d) may not create under %s",
 			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
 		free(copy);
 		return -1;
@@ -141,13 +153,15 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		free(copy);
 		if (errno == EEXIST)
 			return 0;
-		nih_warn("failed to create %s", path);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to create %s", path);
 		return -1;
 	}
 	ret = chown(path, ucred.uid, ucred.gid);
 	if (ret < 0) {
-		nih_warn("Failed to change ownership on %s to %d:%d",
-			  path, (int)ucred.uid, (int)ucred.gid);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to change ownership on %s to %d:%d",
+			path, (int)ucred.uid, (int)ucred.gid);
 		rmdir(path);
 		free(copy);
 		return -1;
@@ -167,12 +181,18 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 	socklen_t len;
 	char path[MAXPATHLEN];
 
-	if (message == NULL)
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Message was NULL");
 		return -1;
+	}
 
 	const char *controller_path = get_controller_path(controller);
-	if (!controller_path)
+	if (!controller_path) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Controller not mounted: %s", controller);
 		return -1;
+	}
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -187,13 +207,17 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!compute_pid_cgroup(ucred.pid, controller, "", path)) {
-		nih_warn("Could not determine the requested cgroup");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the requested cgroup");
 		return -1;
 	}
 
 	int cplen = strlen(controller_path);
-	if (strlen(path) < cplen)
+	if (strlen(path) < cplen) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory copying controller path");
 		return -1;
+	}
 
 	*value = strdup(path + cplen);
 
@@ -210,8 +234,11 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	socklen_t len;
 	char path[MAXPATHLEN], *fullpath;
 
-	if (message == NULL)
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Message was NULL");
 		return -1;
+	}
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -226,20 +253,22 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
-		nih_warn("Could not determine the requested cgroup");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the requested cgroup");
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_warn("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* append the filename */
 	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_warn("filename too long for cgroup %s key %s",
-			path, key);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"filename too long for cgroup %s key %s", path, key);
 		return -1;
 	}
 
@@ -248,14 +277,18 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 
 	/* Check access rights to the file itself */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_warn("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* read and return the value */
 	*value = file_read_string(path);
-	if (!*value)
+	if (!*value) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to read value from %s", path);
 		return -1;
+	}
 
 	nih_info("Sending to client: %s", *value);
 	return 0;
