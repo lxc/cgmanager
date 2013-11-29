@@ -23,6 +23,11 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
     </method>
+    <method name="movePid">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+       <!-- Pid is passed as a scm_cred -->
+    </method>
     <method name="getValue">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />

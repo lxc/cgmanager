@@ -1,4 +1,4 @@
-all: cgmanager
+all: cgmanager movepid
 
 clean:
 	rm -f org.linuxcontainers.cgmanager.h org.linuxcontainers.cgmanager.c cgmanager
@@ -6,8 +6,11 @@ clean:
 org.linuxcontainers.cgmanager.h:
 	nih-dbus-tool --package=cgmanager --mode=object --prefix=cgmanager --default-interface=org.linuxcontainers.cgmanager0_0 org.linuxcontainers.cgmanager.xml
 
-cgmanager: org.linuxcontainers.cgmanager.h fs.h fs.c
+cgmanager: org.linuxcontainers.cgmanager.h fs.h fs.c cgmanager.c
 	gcc -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) org.linuxcontainers.cgmanager.c cgmanager.c fs.c -ldbus-1 -lnih -lnih-dbus -o cgmanager
+
+movepid: movepid.c
+	gcc -g -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) movepid.c -ldbus-1 -lnih -lnih-dbus -o movepid
 
 run-server: cgmanager
 	./cgmanager --debug

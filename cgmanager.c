@@ -59,6 +59,161 @@
  **/
 static int daemonise = FALSE;
 
+static pid_t get_scm_pid(int sock)
+{
+        struct msghdr msg = { 0 };
+        struct iovec iov;
+        struct cmsghdr *cmsg;
+	struct ucred cred;
+        char cmsgbuf[CMSG_SPACE(sizeof(cred))];
+        char buf[1];
+	int ret, optval = 1;
+
+	if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &optval,
+			sizeof(optval)) == -1) {
+		perror("setsockopt");
+		return -1;
+	}
+
+	cred.pid = -1;
+        msg.msg_name = NULL;
+        msg.msg_namelen = 0;
+        msg.msg_control = cmsgbuf;
+        msg.msg_controllen = sizeof(cmsgbuf);
+
+        iov.iov_base = buf;
+        iov.iov_len = sizeof(buf);
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+
+	ret = recvmsg(sock, &msg, 0);
+	if (ret <= 0)
+		goto out;
+
+        cmsg = CMSG_FIRSTHDR(&msg);
+
+        if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)) &&
+            cmsg->cmsg_level == SOL_SOCKET &&
+            cmsg->cmsg_type == SCM_CREDENTIALS) {
+		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
+        }
+out:
+        return cred.pid;
+}
+
+int cgmanager_move_pid (void *data, NihDBusMessage *message,
+				 const char *controller, char *cgroup)
+{
+	int fd = 0, ret;
+	struct ucred ucred;
+	socklen_t len;
+	pid_t target_pid;
+	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	FILE *f;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+nih_info("controller %s cgroup %s", controller, cgroup);
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	target_pid = get_scm_pid(fd);
+
+nih_info("pid %d", (int)target_pid);
+
+	// TODO verify that ucred.pid and target_pid either have the same
+	// uid, or that ucred.pid is uid 0 in target_pid's namespace.
+	// NOTE that right now, since scm_credentials require CAP_SYS_ADMIN,
+	// this is a given.
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	if (cgroup[0] == '/' || cgroup[0] == '.') {
+		// We could try to be accomodating, but let's not fool around right now
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Bad requested cgroup path: %s", cgroup);
+		return -1;
+	}
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the requested cgroup");
+		return -1;
+	}
+	/* rcgpath + / + cgroup + /tasks + \0 */
+	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+8) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Path name too long");
+		return -1;
+	}
+	strcpy(path, rcgpath);
+	strncat(path, "/", MAXPATHLEN-1);
+	strncat(path, cgroup, MAXPATHLEN-1);
+	{
+		/* Make sure r doesn't try to escape his cgroup with .. */
+		char *tmppath;
+		if (!(tmppath = realpath(path, NULL))) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Invalid path %s", path);
+			return -1;
+		}
+		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Invalid cgroup path %s requested by pid %d",
+				  path, (int)ucred.pid);
+			free(tmppath);
+			return -1;
+		}
+		free(tmppath);
+	}
+	// is r allowed to descend under the parent dir?
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"pid %d (uid %d gid %d) may not write under %s",
+			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+		return -1;
+	}
+	// is r allowed to write to tasks file?
+	strncat(path, "/tasks", MAXPATHLEN-1);
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_WRONLY)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"pid %d (uid %d gid %d) may not write under %s",
+			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+		return -1;
+	}
+	f = fopen(path, "w");
+	if (!f) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to open %s", path);
+		return -1;
+	}
+	if (fprintf(f, "%d", target_pid) < 0) {
+		fclose(f);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to open %s", path);
+		return -1;
+	}
+	if (fclose(f) != 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to write %d to %s", (int)target_pid, path);
+		return -1;
+	}
+	nih_info("%d moved to %s:%s by %d's request", (int)target_pid,
+		controller, cgroup, (int)ucred.pid);
+	return 0;
+}
+
 int cgmanager_create (void *data, NihDBusMessage *message,
 				 const char *controller, char *cgroup)
 {
