@@ -313,6 +313,11 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 		nih_warn("Could not look up %s\n", path);
 		return false;
 	}
+
+	/* TODO - we should check capability set as well */
+	if (uid == 0)
+		return true;
+
 	if (uid == sb.st_uid) {
 		if (mode == O_RDONLY && sb.st_mode & S_IRUSR)
 			return true;
