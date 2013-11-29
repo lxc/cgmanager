@@ -83,6 +83,42 @@ static bool setup_base_path(void)
 	return true;
 }
 
+static void set_clone_children(const char *path)
+{
+	char p[MAXPATHLEN];
+	FILE *f;
+	int ret;
+
+	ret = snprintf(p, MAXPATHLEN, "%s/cgroup.clone_children", path);
+	if (ret < 0 || ret >= MAXPATHLEN)
+		return;
+	f = fopen(p, "w");
+	if (!f) {
+		nih_fatal("Failed to set memory.use_hierarchy");
+		return;
+	}
+	fprintf(f, "1\n");
+	fclose(f);
+}
+
+static void set_use_hierarchy(const char *path)
+{
+	char p[MAXPATHLEN];
+	FILE *f;
+	int ret;
+
+	ret = snprintf(p, MAXPATHLEN, "%s/memory.use_hierarchy", path);
+	if (ret < 0 || ret >= MAXPATHLEN)
+		return;
+	f = fopen(p, "w");
+	if (!f) {
+		nih_fatal("Failed to set memory.use_hierarchy");
+		return;
+	}
+	fprintf(f, "1\n");
+	fclose(f);
+}
+
 /**
  * Mount the cgroup filesystems and record the information.
  * This should take configuration data from /etc.  For now,
@@ -168,6 +204,11 @@ int setup_cgroup_mounts(void)
 		nih_info("Mounted %s onto %s",
 			all_mounts[num_controllers].controller,
 			all_mounts[num_controllers].path);
+		if (strcmp(controller, "cpuset") == 0) {
+			set_clone_children(dest); // TODO make this optional?
+		} else if (strcmp(controller, "memory") == 0) {
+			set_use_hierarchy(dest);  // TODO make this optional?
+		}
 		num_controllers++;
 	}
 	nih_info("mounted %d controllers", num_controllers);
