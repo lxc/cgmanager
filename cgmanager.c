@@ -63,10 +63,12 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 				 const char *controller, char *cgroup)
 {
 	int fd = 0, ret;
-	nih_assert (message != NULL);
 	struct ucred ucred;
 	socklen_t len;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *copy, *fnam, *dnam;
+
+	if (message == NULL)
+		return -1;
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -161,10 +163,12 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 				 const char *controller, char **value)
 {
 	int fd = 0;
-	nih_assert (message != NULL);
 	struct ucred ucred;
 	socklen_t len;
 	char path[MAXPATHLEN];
+
+	if (message == NULL)
+		return -1;
 
 	const char *controller_path = get_controller_path(controller);
 	if (!controller_path)
@@ -202,10 +206,12 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 
 {
 	int fd = 0;
-	nih_assert (message != NULL);
 	struct ucred ucred;
 	socklen_t len;
 	char path[MAXPATHLEN], *fullpath;
+
+	if (message == NULL)
+		return -1;
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -263,8 +269,8 @@ static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, voi
 static int
 client_connect (DBusServer *server, DBusConnection *conn)
 {
-	nih_assert (server != NULL);
-	nih_assert (conn != NULL);
+	if (server == NULL || conn == NULL)
+		return FALSE;
 
 	dbus_connection_set_unix_user_function(conn, allow_user, NULL, NULL);
 
@@ -280,7 +286,8 @@ client_connect (DBusServer *server, DBusConnection *conn)
 static void
 client_disconnect (DBusConnection *conn)
 {
-	nih_assert (conn != NULL);
+	if (conn == NULL)
+		return;
 
 	nih_info (_("Disconnected from private client"));
 }
