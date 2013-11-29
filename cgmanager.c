@@ -84,7 +84,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		return 0;
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
-		nih_fatal("Bad requested cgroup path: %s", cgroup);
+		nih_warn("Bad requested cgroup path: %s", cgroup);
 		return -1;
 	}
 
@@ -92,11 +92,11 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
-		nih_fatal("Could not determine the requested cgroup");
+		nih_warn("Could not determine the requested cgroup");
 		return -1;
 	}
 	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN) {
-		nih_fatal("Path name too long");
+		nih_warn("Path name too long");
 		return -1;
 	}
 	copy = strdup(cgroup);
@@ -111,12 +111,12 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		strncat(path, "/", MAXPATHLEN-1);
 		strncat(path, dnam, MAXPATHLEN-1);
 		if (!(tmppath = realpath(path, NULL))) {
-			nih_fatal("Invalid path %s", path);
+			nih_warn("Invalid path %s", path);
 			free(copy);
 			return -1;
 		}
 		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
-			nih_fatal("Invalid cgroup path %s requested by pid %d",
+			nih_warn("Invalid cgroup path %s requested by pid %d",
 				  path, (int)ucred.pid);
 			free(copy);
 			free(tmppath);
@@ -127,7 +127,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	// is r allowed to create under the parent dir?
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
-		nih_fatal("pid %d (uid %d gid %d) may not create under %s",
+		nih_warn("pid %d (uid %d gid %d) may not create under %s",
 			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
 		free(copy);
 		return -1;
@@ -135,14 +135,16 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	strncat(path, "/", MAXPATHLEN-1);
 	strncat(path, fnam, MAXPATHLEN-1);
 	ret = mkdir(path, 0755);
-	if (ret < 0) {  // Should we ignore EEXIST?  Let's not...
-		nih_fatal("failed to create %s", path);
+	if (ret < 0) {  // Should we ignore EEXIST?  Ok, but don't chown.
 		free(copy);
+		if (errno == EEXIST)
+			return 0;
+		nih_warn("failed to create %s", path);
 		return -1;
 	}
 	ret = chown(path, ucred.uid, ucred.gid);
 	if (ret < 0) {
-		nih_fatal("Failed to change ownership on %s to %d:%d",
+		nih_warn("Failed to change ownership on %s to %d:%d",
 			  path, (int)ucred.uid, (int)ucred.gid);
 		rmdir(path);
 		free(copy);
@@ -181,7 +183,7 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!compute_pid_cgroup(ucred.pid, controller, "", path)) {
-		nih_fatal("Could not determine the requested cgroup");
+		nih_warn("Could not determine the requested cgroup");
 		return -1;
 	}
 
@@ -218,19 +220,19 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
-		nih_fatal("Could not determine the requested cgroup");
+		nih_warn("Could not determine the requested cgroup");
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_fatal("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_warn("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* append the filename */
 	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_fatal("filename too long for cgroup %s key %s",
+		nih_warn("filename too long for cgroup %s key %s",
 			path, key);
 		return -1;
 	}
@@ -240,7 +242,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 
 	/* Check access rights to the file itself */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_fatal("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_warn("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 

@@ -238,7 +238,7 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 
 	sprintf(path, "/proc/%d/cgroup", (int) pid);
 	if ((f = fopen(path, "r")) == NULL) {
-		nih_fatal("could not open cgroup file for %d", (int) pid);
+		nih_warn("could not open cgroup file for %d", (int) pid);
 		return NULL;
 	}
 	while (getline(&line, &len, f) != -1) {
@@ -253,7 +253,7 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 			if (strcmp(token, controller) != 0)
 				continue;
 			if (strlen(c2+1) + 1 > MAXPATHLEN) {
-				nih_fatal("cgroup name too long");
+				nih_warn("cgroup name too long");
 				goto found;
 			}
 			strncpy(retv, c2+1, strlen(c2+1)+1);
@@ -310,7 +310,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 
 	ret = stat(path, &sb);
 	if (ret < 0) {
-		nih_fatal("Could not look up %s\n", path);
+		nih_warn("Could not look up %s\n", path);
 		return false;
 	}
 	if (uid == sb.st_uid) {
@@ -377,7 +377,7 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 		abspath = true;
 
 	if ((cont_path = get_controller_path(controller)) == NULL) {
-		nih_fatal("Controller %s not mounted", controller);
+		nih_warn("Controller %s not mounted", controller);
 		return false;
 	}
 
@@ -386,18 +386,18 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 			abspath ? "" : cg, abspath ? "" : "/",
 			cgroup ? cgroup : "");
 	if (ret < 0 || ret >= MAXPATHLEN) {
-		nih_fatal("Path name too long: %s/%s/%s", cont_path, cg, cgroup);
+		nih_warn("Path name too long: %s/%s/%s", cont_path, cg, cgroup);
 		return false;
 	}
 
 	/* Make sure client isn't passing us a bunch of bogus '../'s to
 	 * try to read host files */
 	if (!realpath(fullpath, path)) {
-		nih_fatal("Invalid path %s", fullpath);
+		nih_warn("Invalid path %s", fullpath);
 		return false;
 	}
 	if (strncmp(path, cont_path, strlen(cont_path)) != 0) {
-		nih_fatal("invalid cgroup path '%s' for pid %d", cgroup, (int)pid);
+		nih_warn("invalid cgroup path '%s' for pid %d", cgroup, (int)pid);
 		return false;
 	}
 
@@ -410,7 +410,7 @@ char *file_read_string(const char *path)
 	char *string = NULL;
 	off_t sz = 0;
 	if (fd < 0) {
-		nih_fatal("Error opening %s: %s", path, strerror(errno));
+		nih_warn("Error opening %s: %s", path, strerror(errno));
 		return NULL;
 	}
 
@@ -448,20 +448,20 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 	*gid = -1;
 	sprintf(line, "/proc/%d/status", (int)pid);
 	if ((f = fopen(line, "r")) == NULL) {
-		nih_fatal("Error opening %s: %s", line, strerror(errno));
+		nih_warn("Error opening %s: %s", line, strerror(errno));
 		return;
 	}
 	while (fgets(line, 400, f)) {
 		if (strncmp(line, "Uid:", 4) == 0) {
 			if (sscanf(line+4, "%d", &u) != 1) {
-				nih_fatal("bad uid line for pid %d", (int)pid);
+				nih_warn("bad uid line for pid %d", (int)pid);
 				fclose(f);
 				return;
 			}
 			*uid = (uid_t)u;
 		} else if (strncmp(line, "Gid:", 4) == 0) {
 			if (sscanf(line+4, "%d", &g) != 1) {
-				nih_fatal("bad gid line for pid %d", (int)pid);
+				nih_warn("bad gid line for pid %d", (int)pid);
 				fclose(f);
 				return;
 			}
