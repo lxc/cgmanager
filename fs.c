@@ -314,7 +314,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 	if (uid == sb.st_uid) {
 		if (mode == O_RDONLY && sb.st_mode & S_IRUSR)
 			return true;
-		if (mode == O_RDWR && (sb.st_mode & (S_IRUSR|S_IWUSR) == S_IRUSR|S_IWUSR))
+		if (mode == O_RDWR && ((sb.st_mode & (S_IRUSR|S_IWUSR)) == (S_IRUSR|S_IWUSR)))
 			return true;
 		if (mode == O_WRONLY && sb.st_mode & S_IWUSR)
 			return true;
@@ -322,7 +322,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 	if (gid == sb.st_gid) {
 		if (mode == O_RDONLY && sb.st_mode & S_IRGRP)
 			return true;
-		if (mode == O_RDWR && (sb.st_mode & (S_IRGRP|S_IWGRP) == S_IRGRP|S_IWGRP))
+		if (mode == O_RDWR && ((sb.st_mode & (S_IRGRP|S_IWGRP)) == (S_IRGRP|S_IWGRP)))
 			return true;
 		if (mode == O_WRONLY && sb.st_mode & S_IWGRP)
 			return true;
@@ -332,7 +332,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 
 	if (mode == O_RDONLY && sb.st_mode & S_IROTH)
 		return true;
-	if (mode == O_RDWR && (sb.st_mode & (S_IROTH|S_IWOTH) == S_IROTH|S_IWOTH))
+	if (mode == O_RDWR && ((sb.st_mode & (S_IROTH|S_IWOTH)) == (S_IROTH|S_IWOTH)))
 		return true;
 	if (mode == O_WRONLY && sb.st_mode & S_IWOTH)
 		return true;
