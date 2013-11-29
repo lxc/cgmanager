@@ -134,8 +134,8 @@ void send_pid(int sock, int pid)
 	struct cmsghdr *cmsg;
 	struct ucred cred = {
 		.pid = pid,
-		.uid = getuid(),
-		.gid = getgid(),
+		.uid = geteuid(),
+		.gid = getegid(),
 	};
 	char cmsgbuf[CMSG_SPACE(sizeof(cred))];
 	char buf[1];
@@ -157,6 +157,7 @@ void send_pid(int sock, int pid)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
+nih_info("Sending pid %d", (int)cred.pid);
 	sendmsg(sock, &msg, 0);
 }
 
@@ -193,6 +194,12 @@ main (int   argc,
 
 	dbus_connection_get_unix_fd(conn, &fd);
 	send_message(conn);
+
+	int optval = 1;
+	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		perror("setsockopt");
+		return -1;
+	}
 	send_pid(fd, pid);
 
 	dbus_connection_unref (conn);
