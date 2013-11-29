@@ -48,10 +48,4 @@ if [ $? -eq 0 ]; then
 	exit 1
 fi
 
-dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"b"
-if [ $? -eq 0 ]; then
-	echo "Failed test 6: was able to create without having the privilege"
-	exit 1
-fi
-
 echo "All tests passed"
