@@ -94,7 +94,7 @@ static void set_clone_children(const char *path)
 		return;
 	f = fopen(p, "w");
 	if (!f) {
-		nih_fatal("Failed to set memory.use_hierarchy");
+		nih_fatal("Failed to set clone_children");
 		return;
 	}
 	fprintf(f, "1\n");
@@ -206,8 +206,10 @@ int setup_cgroup_mounts(void)
 			all_mounts[num_controllers].path);
 		if (strcmp(all_mounts[num_controllers].controller, "cpuset") == 0) {
 			set_clone_children(dest); // TODO make this optional?
+			nih_info("set clone_children");
 		} else if (strcmp(all_mounts[num_controllers].controller, "memory") == 0) {
 			set_use_hierarchy(dest);  // TODO make this optional?
+			nih_info("set memory.use_hierarchy");
 		}
 		num_controllers++;
 	}
