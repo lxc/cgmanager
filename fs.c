@@ -272,7 +272,7 @@ found:
  * Given host @uid, return the uid to which it maps in
  * the namespace, or -1 if none.
  */
-static uid_t hostuid_to_ns(uid_t uid, pid_t pid)
+uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 {
 	FILE *f;
 	int ret, nsuid, hostuid, count;

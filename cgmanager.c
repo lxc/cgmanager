@@ -73,12 +73,16 @@ static pid_t get_scm_pid(int sock)
         struct cmsghdr *cmsg;
 	struct ucred cred;
         char cmsgbuf[CMSG_SPACE(sizeof(cred))];
-        char buf[1];
-	int ret, optval = 1;
+        char buf[1], sndbuf[1];
+	int ret;
+	int optval = 1;
 
+	/* need to do this before the client sends the msg */
 	if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &optval,
 			sizeof(optval)) == -1) {
 		perror("setsockopt");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to set SO_PASSCRED socket option");
 		return -1;
 	}
 
@@ -93,9 +97,20 @@ static pid_t get_scm_pid(int sock)
         msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
 
+	// tell client we're ready
+	sndbuf[0] = 'a';
+	ret = write(sock, sndbuf, 1);
+	if (ret < 0) {
+		nih_info("Unable to write 'go' to client: %s", strerror(errno));
+		// no problem, client didn't want to send scm_cred
+		return -1;
+	}
 	ret = recvmsg(sock, &msg, 0);
-	if (ret <= 0)
+	if (ret < 0) {
+		nih_error("Failed to receive scm_cred: %s",
+			  strerror(errno));
 		goto out;
+	}
 
         cmsg = CMSG_FIRSTHDR(&msg);
 
@@ -104,6 +119,13 @@ static pid_t get_scm_pid(int sock)
             cmsg->cmsg_type == SCM_CREDENTIALS) {
 		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
         }
+	if (buf[0] != 'p')
+		nih_warn("message was %c not p", buf[0]);
+nih_info("writing sndbuf (pid was %d)", (int)cred.pid);
+	sndbuf[0] = 'b';
+	ret = write(sock, sndbuf, 1);
+nih_info("wrote sndbuf, got %d errno %s (pid was %d)", ret, strerror(errno),
+		(int)cred.pid);
 out:
         return cred.pid;
 }
@@ -118,7 +140,7 @@ static bool read_pid_ns_link(int pid, char *linkname)
 {
 	int ret;
 	char path[100];
-	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid)
+	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid);
 	if (ret < 0 || ret >= 100)
 		return false;
 	ret = readlink(path, linkname, 20);
@@ -164,7 +186,7 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
 		return true;
 	if (r_uid == 0)
 		return true;
-	get_pid_creds(v, &uid, &gid);
+	get_pid_creds(v, &v_uid, &v_gid);
 	if (r_uid == v_uid)
 		return true;
 	if (hostuid_to_ns(r_uid, r) == 0 && hostuid_to_ns(v_uid, r) != -1)
@@ -186,6 +208,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
 
+nih_info("movepid starting");
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -200,20 +223,25 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
 	target_pid = get_scm_pid(fd);
+
+nih_info("scm pid was %d\n", (int)target_pid);
 	if (target_pid == -1) {
 		// non-root users can't send an SCM_CREDENTIAL for tasks
 		// other than themselves.  For that case we accept a pid
 		// as an integer only from our own pidns Non-root users
 		// in another pidns will have to go through a root-owned
 		// proxy in their own pidns.
-		if (is_same_pidns((int)ucred.pid))
+		if (is_same_pidns((int)ucred.pid)) {
+			nih_info("Using plain pid %d", (int)plain_pid);
 			target_pid = plain_pid;
+		}
 	}
 
 	// TODO verify that ucred.pid and target_pid either have the same
 	// uid, or that ucred.pid is uid 0 in target_pid's namespace.
-	if (!may_move_pid(ucred,pid, ucred.uid, target_pid)) {
+	if (!may_move_pid(ucred.pid, ucred.uid, target_pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "%d may not move %d", (int)ucred.pid,
 					     (int)target_pid);
