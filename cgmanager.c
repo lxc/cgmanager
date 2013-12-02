@@ -59,6 +59,8 @@
  **/
 static int daemonise = FALSE;
 
+static bool setns_pid_supported = false;
+
 static pid_t get_scm_pid(int sock)
 {
         struct msghdr msg = { 0 };
@@ -101,8 +103,17 @@ out:
         return cred.pid;
 }
 
+/*
+ * We want to know if the two pids are in the same pidns.
+ */
+static bool is_same_pidns(int p1, int p2)
+{
+	if (!setns_pid_supported)
+		return false;
+}
+
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
-				 const char *controller, char *cgroup)
+			const char *controller, char *cgroup, int plain_pid)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
@@ -117,7 +128,6 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-nih_info("controller %s cgroup %s", controller, cgroup);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 		                             "Could  not get client socket.");
@@ -127,8 +137,16 @@ nih_info("controller %s cgroup %s", controller, cgroup);
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 	target_pid = get_scm_pid(fd);
-
-nih_info("pid %d", (int)target_pid);
+	if (target_pid == -1) {
+		// non-root users can't send an SCM_CREDENTIAL for tasks
+		// other than themselves.  For that case we accept a pid
+		// as an integer only from our own pidns Non-root users
+		// in another pidns will have to go through a root-owned
+		// proxy in their own pidns.
+		if (is_same_pidns((int)ucred.pid, getpid())) {
+			target_pid = plain_pid;
+		}
+	}
 
 	// TODO verify that ucred.pid and target_pid either have the same
 	// uid, or that ucred.pid is uid 0 in target_pid's namespace.
@@ -522,6 +540,9 @@ main (int   argc,
 		nih_fatal ("Failed to set up cgroup mounts");
 		exit(1);
 	}
+
+	if (access("/proc/self/ns/pid", "r") == 0)
+		setns_pid_supported = true;
 
 	/* Become daemon */
 	if (daemonise) {

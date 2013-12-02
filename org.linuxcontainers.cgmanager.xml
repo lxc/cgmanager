@@ -26,7 +26,8 @@
     <method name="movePid">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
-       <!-- Pid is passed as a scm_cred -->
+      <arg name="pid" type="i" direction="in" />
+       <!-- Pid is passed as a scm_cred if r is !root -->
     </method>
     <method name="getValue">
       <arg name="controller" type="s" direction="in" />

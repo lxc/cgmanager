@@ -121,6 +121,12 @@ void send_message(struct DBusConnection *conn)
                 nih_error_raise_no_memory ();
                 return;
         }
+	dbus_message_iter_init_append(message, &iter);
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32,
+                                              &pid)) {
+                nih_error_raise_no_memory ();
+                return;
+        }
 
 	dbus_connection_send(conn, message, NULL);
 	dbus_connection_flush(conn);
@@ -195,12 +201,18 @@ main (int   argc,
 	dbus_connection_get_unix_fd(conn, &fd);
 	send_message(conn);
 
-	int optval = 1;
-	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		perror("setsockopt");
-		return -1;
+
+	/* If we're sending our own pid, or if we're root, then
+	 * we can send an SCM_CREDENTIAL
+	 */
+	if (pid == getpid()) || geteuid() == 0) {
+		int optval = 1;
+		if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+			perror("setsockopt");
+			return -1;
+		}
+		send_pid(fd, pid);
 	}
-	send_pid(fd, pid);
 
 	dbus_connection_unref (conn);
 
