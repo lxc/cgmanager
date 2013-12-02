@@ -48,4 +48,28 @@ if [ $? -eq 0 ]; then
 	exit 1
 fi
 
+sleep 200 &
+pid=$!
+# Try to move another task to xxx/b - should work
+./movepid memory xxx/b $pid
+if [ $? -ne 0 ]; then
+	echo "Failed test 6: not able to move another pid"
+	exit 1
+fi
+# Now get $pid's cgroup
+
+# try to move antoher task to xxx/b withotu being root - should fail
+#su -u 1000 ./movepid memory xxx/b $pid
+#if [ $? -ne 0 ]; then
+	#echo "Failed test 6: not able to move another pid"
+	#exit 1
+#fi
+
+# Try to move myself task to xxx/b - should work
+./movepid memory xxx/b
+if [ $? -ne 0 ]; then
+	echo "Failed test 6: not able to move another pid"
+	exit 1
+fi
+
 echo "All tests passed"
