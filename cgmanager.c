@@ -111,6 +111,8 @@ out:
 /*
  * Tiny helper to read the /proc/pid/ns/pid link for a given pid.
  * @pid: the pid whose link name to look up
+ *
+ * TODO - switch to using stat() to get inode # ?
  */
 static bool read_pid_ns_link(int pid, char *linkname)
 {
@@ -163,7 +165,7 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
 	if (r_uid == 0)
 		return true;
 	get_pid_creds(v, &uid, &gid);
-	if (r_uid == uid)
+	if (r_uid == v_uid)
 		return true;
 	if (hostuid_to_ns(r_uid, r) == 0 && hostuid_to_ns(v_uid, r) != -1)
 		return true;
