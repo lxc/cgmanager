@@ -143,6 +143,33 @@ static bool is_same_pidns(int pid)
 }
 
 /*
+ * May the requestor @r move victim @v to a new cgroup?
+ * This is allowed if
+ *   . they are the same task
+ *   . they are ownedy by the same uid
+ *   . @r is root on the host, or
+ *   . @v's uid is mapped into @r's where @r is root.
+ *
+ * XXX do we want to add a restriction that @v must already
+ * be under @r's cgroup?
+ */
+bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
+{
+	uid_t v_uid;
+	gid_t v_gid;
+
+	if (r == v)
+		return true;
+	if (r_uid == 0)
+		return true;
+	get_pid_creds(v, &uid, &gid);
+	if (r_uid == uid)
+		return true;
+	if (hostuid_to_ns(r_uid, r) == 0 && hostuid_to_ns(v_uid, r) != -1)
+		return true;
+}
+
+/*
  * This is one of the dbus callbacks.
  * Caller requests moving a @pid to a particular cgroup identified
  * by the name (@cgroup) and controller type (@controller).
@@ -184,7 +211,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 
 	// TODO verify that ucred.pid and target_pid either have the same
 	// uid, or that ucred.pid is uid 0 in target_pid's namespace.
-	if (!may_move_pid(ucred,pid, target_pid)) {
+	if (!may_move_pid(ucred,pid, ucred.uid, target_pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "%d may not move %d", (int)ucred.pid,
 					     (int)target_pid);
