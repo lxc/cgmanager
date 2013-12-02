@@ -60,7 +60,12 @@
 static int daemonise = FALSE;
 
 static bool setns_pid_supported = false;
+static char mypidns[20];
 
+/*
+ * Get a pid passed in a SCM_CREDENTIAL over a unix socket
+ * @sock: the socket fd.
+ */
 static pid_t get_scm_pid(int sock)
 {
         struct msghdr msg = { 0 };
@@ -104,14 +109,44 @@ out:
 }
 
 /*
- * We want to know if the two pids are in the same pidns.
+ * Tiny helper to read the /proc/pid/ns/pid link for a given pid.
+ * @pid: the pid whose link name to look up
  */
-static bool is_same_pidns(int p1, int p2)
+static bool read_pid_ns_link(int pid, char *linkname)
 {
-	if (!setns_pid_supported)
+	int ret;
+	char path[100];
+	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid)
+	if (ret < 0 || ret >= 100)
 		return false;
+	ret = readlink(path, linkname, 20);
+	if (ret < 0 || ret >= 20)
+		return false;
+	return true;
 }
 
+/*
+ * Return true if pid is in my pidns
+ * Figure this out by comparing the /proc/pid/ns/pid link names.
+ */
+static bool is_same_pidns(int pid)
+{
+	char linkname[20];
+
+	if (!setns_pid_supported)
+		return false;
+	if (!read_pid_ns_link(pid, linkname))
+		return false;
+	if (strcmp(linkname, mypidns) == 0)
+		return true;
+	return false;
+}
+
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests moving a @pid to a particular cgroup identified
+ * by the name (@cgroup) and controller type (@controller).
+ */
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int plain_pid)
 {
@@ -143,15 +178,18 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 		// as an integer only from our own pidns Non-root users
 		// in another pidns will have to go through a root-owned
 		// proxy in their own pidns.
-		if (is_same_pidns((int)ucred.pid, getpid())) {
+		if (is_same_pidns((int)ucred.pid))
 			target_pid = plain_pid;
-		}
 	}
 
 	// TODO verify that ucred.pid and target_pid either have the same
 	// uid, or that ucred.pid is uid 0 in target_pid's namespace.
-	// NOTE that right now, since scm_credentials require CAP_SYS_ADMIN,
-	// this is a given.
+	if (!may_move_pid(ucred,pid, target_pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "%d may not move %d", (int)ucred.pid,
+					     (int)target_pid);
+		return -1;
+	}
 
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
@@ -232,6 +270,12 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	return 0;
 }
 
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests creating a new @cgroup name of type @controller.
+ * @name is taken to be relative to the caller's cgroup and may not
+ * start with / or .. .
+ */
 int cgmanager_create (void *data, NihDBusMessage *message,
 				 const char *controller, char *cgroup)
 {
@@ -346,6 +390,16 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	return 0;
 }
 
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests his own cgroup name for a given @controller.  The
+ * name is returned as a malloced string in @value, and is the full
+ * cgroup path.
+ * This function may not be part of the final api, but is useful for
+ * debugging now.
+ * (The 'get-cgroup-bypid' callback will return a cgroup relative to
+ * the caller's cgroup path)
+ */
 int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 				 const char *controller, char **value)
 {
@@ -397,6 +451,16 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 	return 0;
 }
 
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests the value of a particular cgroup file.
+ * @controller is the controller, @req_cgroup the cgroup name, and @key the
+ * file being queried (i.e. memory.usage_in_bytes).  @req_cgroup is relative
+ * to the caller's cgroup, unless it begins with '/' or '..'.
+ *
+ * XXX Should '/' be disallowed, only '..' allowed?  Otherwise callers can't
+ * pretend to be the cgroup root which is annoying in itself
+ */
 int cgmanager_get_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 		                 const char *key, char **value)
@@ -541,8 +605,10 @@ main (int   argc,
 		exit(1);
 	}
 
-	if (access("/proc/self/ns/pid", "r") == 0)
-		setns_pid_supported = true;
+	if (access("/proc/self/ns/pid", "r") == 0) {
+		if (read_pid_ns_link(getpid(), mypidns))
+			setns_pid_supported = true;
+	}
 
 	/* Become daemon */
 	if (daemonise) {
