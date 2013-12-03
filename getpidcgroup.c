@@ -139,17 +139,12 @@ main (int   argc,
 {
 	char **             args;
 	DBusConnection *    conn;
-	int fd, optval = 1, exitval = 1, p[2], ret;
-	DBusMessage *    message;
+	int fd, optval = 1, exitval = 1, ret;
+	DBusMessage *message, *reply;
 	DBusMessageIter iter, subiter;
-	char reply[MAXPATHLEN];
+	dbus_uint32_t serial;;
 
 	nih_main_init (argv[0]);
-
-	if (pipe(p) < 0) {
-		perror("pipe");
-		exit(1);
-	}
 
 	nih_option_set_synopsis (_("Control group client"));
 
@@ -192,18 +187,8 @@ main (int   argc,
                 nih_error_raise_no_memory ();
                 return -1;
         }
-	dbus_message_iter_init_append(message, &iter);
-	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD,
-				&(p[1]))) {
-		nih_error_raise_no_memory ();
-		return -1;
-	}
 
-	if (!dbus_connection_can_send_type(conn, DBUS_TYPE_UNIX_FD)) {
-		nih_error("connection cannot send fd!");
-		return -1;
-	}
-	if (!dbus_connection_send(conn, message, NULL)) {
+	if (!dbus_connection_send(conn, message, &serial)) {
 		nih_error("failed to send dbus message");
 		return -1;
 	}
@@ -220,21 +205,22 @@ main (int   argc,
 		}
 	}
 
-nih_info("Waiting for reply");
-
-	reply[MAXPATHLEN-1] = 0;
-	ret = read(p[0], reply, MAXPATHLEN-1);
-	if (ret < 0) {
-		nih_error("Error receiving reply: %s", strerror(errno));
+	dbus_message_unref(message);
+	while (!(reply = dbus_connection_pop_message(conn)))
+		dbus_connection_read_write(conn, -1);
+	if (dbus_message_get_reply_serial(reply) != serial) {
+		nih_error("wrong serial on reply");
 		goto out;
 	}
 
-	printf("ret was %d: %s", ret, reply);
+	dbus_message_iter_init(reply, &iter);
+	char *str_value;
+	dbus_message_iter_get_basic(&iter, &str_value);
+	printf("Cgroup: %s\n", str_value);
 	exitval = 0;
 
 out:
-	dbus_message_unref(message);
+	dbus_message_unref(reply);
 	dbus_connection_unref (conn);
-
 	exit(exitval);
 }

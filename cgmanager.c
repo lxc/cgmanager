@@ -173,7 +173,7 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
  * Caller requests the cgroup of @pid in a given @controller
  */
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, int plain_pid, int outfd)
+			const char *controller, int plain_pid, char **output)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
@@ -185,14 +185,12 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
-		close(fd);
 		return -1;
 	}
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 		                             "Could  not get client socket.");
-		close(outfd);
 		return -1;
 	}
 
@@ -221,7 +219,6 @@ nih_info("got pid %d over scm", target_pid);
 	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Could not determine the requestor cgroup");
-		close(outfd);
 		return -1;
 	}
 
@@ -229,7 +226,6 @@ nih_info("got pid %d over scm", target_pid);
 	if (!compute_pid_cgroup(target_pid, controller, "", vcgpath)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Could not determine the victim cgroup");
-		close(outfd);
 		return -1;
 	}
 
@@ -239,16 +235,12 @@ nih_info("got pid %d over scm", target_pid);
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"v (%d)'s cgroup is not below r (%d)'s",
 			(int)target_pid, (int)ucred.pid);
-		close(outfd);
 		return -1;
 	}
 	if (strlen(vcgpath) == rlen)
-		write(outfd, "/", 1);
-	else {
-		char *r = vcgpath + rlen + 1;
-		write(outfd, r, strlen(r));
-	}
-	close(outfd);
+		*output = strdup("/");
+	else
+		*output = strdup(vcgpath + rlen + 1);
 	return 0;
 }
 
