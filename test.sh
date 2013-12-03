@@ -75,6 +75,12 @@ if [ "$c" = "/xxx/b" ]; then
 	exit 1
 fi
 
+c2=`dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getPidCgroup string:'memory' int32:$pid`
+if [ $c2 != "xxx/b" ]; then
+	echo "Failed test 7b: getPidCgroup returned $c2 instead of 'xxx/b'"
+	exit 1
+fi
+
 # Try to move myself task to xxx/b - should work
 ./movepid -c memory -n xxx/b
 if [ $? -ne 0 ]; then
@@ -83,5 +89,9 @@ if [ $? -ne 0 ]; then
 fi
 # confirm that I was moved
 c=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
+if [ $c != "/xxx/b" ]; then
+	echo "I was not moved to xxx/b"
+	exit 1
+fi
 
 echo "All tests passed"

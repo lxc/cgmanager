@@ -170,11 +170,10 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
 
 /*
  * This is one of the dbus callbacks.
- * Caller requests moving a @pid to a particular cgroup identified
- * by the name (@cgroup) and controller type (@controller).
+ * Caller requests the cgroup of @pid in a given @controller
  */
-int cgmanager_move_pid (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int plain_pid)
+int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
+			const char *controller, int plain_pid)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
@@ -183,7 +182,6 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
 
-nih_info("movepid starting");
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -201,7 +199,6 @@ nih_info("movepid starting");
 
 	target_pid = get_scm_pid(fd);
 
-nih_info("scm pid was %d\n", (int)target_pid);
 	if (target_pid == -1) {
 		// non-root users can't send an SCM_CREDENTIAL for tasks
 		// other than themselves.  For that case we accept a pid
@@ -214,8 +211,83 @@ nih_info("scm pid was %d\n", (int)target_pid);
 		}
 	}
 
-	// TODO verify that ucred.pid and target_pid either have the same
-	// uid, or that ucred.pid is uid 0 in target_pid's namespace.
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the requestor cgroup");
+		return -1;
+	}
+
+	// Get v's cgroup in vcgpath
+	if (!compute_pid_cgroup(target_pid, controller, "", vcgpath)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the victim cgroup");
+		return -1;
+	}
+
+	// Make sure v's cgroup is under r's
+	int rlen = strlen(rcgpath);
+	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"v (%d)'s cgroup is not below r (%d)'s",
+			(int)target_pid, (int)ucred.pid);
+		return -1;
+	}
+	if (strlen(vcgpath) == rlen)
+		*value = strdup("");
+	else
+		*value = strdup(vcgpath + rlen + 1);
+	return 0;
+}
+
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests moving a @pid to a particular cgroup identified
+ * by the name (@cgroup) and controller type (@controller).
+ */
+int cgmanager_move_pid (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup, int plain_pid)
+{
+	int fd = 0, ret;
+	struct ucred ucred;
+	socklen_t len;
+	pid_t target_pid;
+	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	FILE *f;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	target_pid = get_scm_pid(fd);
+
+	if (target_pid == -1) {
+		// non-root users can't send an SCM_CREDENTIAL for tasks
+		// other than themselves.  For that case we accept a pid
+		// as an integer only from our own pidns Non-root users
+		// in another pidns will have to go through a root-owned
+		// proxy in their own pidns.
+		if (is_same_pidns((int)ucred.pid)) {
+			nih_info("Using plain pid %d", (int)plain_pid);
+			target_pid = plain_pid;
+		}
+	}
+
+	// verify that ucred.pid may move target_pid
 	if (!may_move_pid(ucred.pid, ucred.uid, target_pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "%d may not move %d", (int)ucred.pid,
