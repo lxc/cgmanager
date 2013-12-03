@@ -75,16 +75,6 @@ static pid_t get_scm_pid(int sock)
         char cmsgbuf[CMSG_SPACE(sizeof(cred))];
         char buf[1], sndbuf[1];
 	int ret;
-	int optval = 1;
-
-	/* need to do this before the client sends the msg */
-	if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &optval,
-			sizeof(optval)) == -1) {
-		perror("setsockopt");
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"failed to set SO_PASSCRED socket option");
-		return -1;
-	}
 
 	cred.pid = -1;
         msg.msg_name = NULL;
@@ -597,6 +587,7 @@ static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, voi
 static int
 client_connect (DBusServer *server, DBusConnection *conn)
 {
+	int optval = 1, fd;
 	if (server == NULL || conn == NULL)
 		return FALSE;
 
@@ -607,6 +598,22 @@ client_connect (DBusServer *server, DBusConnection *conn)
 	NIH_MUST (nih_dbus_object_new (NULL, conn,
 	          "/org/linuxcontainers/cgmanager",
 	          cgmanager_interfaces, NULL));
+
+	if (!dbus_connection_get_socket(conn, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	/* need to do this before the client sends the msg */
+	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval,
+			sizeof(optval)) == -1) {
+		perror("setsockopt");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to set SO_PASSCRED socket option");
+		return -1;
+	}
+
 
 	return TRUE;
 }
