@@ -68,15 +68,17 @@ fi
 
 # try to move another task to xxx/b without being root - should fail
 sudo -u \#1000 ./movepid -c memory -n xxx/b -p $pid
-if [ $? -eq 0 ]; then
-	echo "Failed test 6: non-root able to move task"
+# confirm that it was not moved
+c=`cat /proc/$pid/cgroup | grep memory | awk -F: '{ print $3 }'`
+if [ "$c" = "/xxx/b" ]; then
+	echo "sleep was moved to $c by non-root"
 	exit 1
 fi
 
 # Try to move myself task to xxx/b - should work
 ./movepid -c memory -n xxx/b
 if [ $? -ne 0 ]; then
-	echo "Failed test 6: not able to move another pid"
+	echo "Failed test 8: not able to move another pid"
 	exit 1
 fi
 # confirm that I was moved

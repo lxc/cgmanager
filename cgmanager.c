@@ -87,15 +87,6 @@ static pid_t get_scm_pid(int sock)
         msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
 
-	// tell client we're ready
-	sndbuf[0] = 'a';
-	ret = write(sock, sndbuf, 1);
-nih_info("write returned %d", ret);
-	if (ret < 0) {
-		nih_info("Unable to write 'go' to client: %s", strerror(errno));
-		// no problem, client didn't want to send scm_cred
-		return -1;
-	}
 	ret = recvmsg(sock, &msg, 0);
 	if (ret < 0) {
 		nih_error("Failed to receive scm_cred: %s",
@@ -110,13 +101,6 @@ nih_info("write returned %d", ret);
             cmsg->cmsg_type == SCM_CREDENTIALS) {
 		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
         }
-	if (buf[0] != 'p')
-		nih_warn("message was %c not p", buf[0]);
-nih_info("writing sndbuf (pid was %d)", (int)cred.pid);
-	sndbuf[0] = 'b';
-	ret = write(sock, sndbuf, 1);
-nih_info("wrote sndbuf, got %d errno %s (pid was %d)", ret, strerror(errno),
-		(int)cred.pid);
 out:
         return cred.pid;
 }

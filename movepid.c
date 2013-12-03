@@ -210,25 +210,11 @@ main (int   argc,
 	 */
 	if (pid == getpid() || geteuid() == 0) {
 		int ret;
-		ret = read(fd, buf, 1);
-		if (ret < 0) {
-			nih_error("Did not get go-ahead from cgmanager: %s",
-				strerror(errno));
-			goto out;
-		} else
-			nih_info("Got go-ahead: %c", buf[0]);
-
 		if (send_pid(fd, pid)) {
 			nih_error("Error sending pid over SCM_CREDENTIAL");
 			goto out;
 		}
-		ret = read(fd, buf, 1);
-		if (ret < 0) {
-			nih_error("Did not get final ack from cgmanager");
-		} else {
-			nih_info("got reply: %c", buf[0]);
-			exitval = 0;
-		}
+		exitval = 0;
 	} else exitval = 0;
 
 out:
