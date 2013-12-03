@@ -193,13 +193,16 @@ main (int   argc,
                 return -1;
         }
 	dbus_message_iter_init_append(message, &iter);
-	int xxxfd = p[1];
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD,
-				&xxxfd)) {
+				&(p[1]))) {
 		nih_error_raise_no_memory ();
 		return -1;
 	}
 
+	if (!dbus_connection_can_send_type(conn, DBUS_TYPE_UNIX_FD)) {
+		nih_error("connection cannot send fd!");
+		return -1;
+	}
 	if (!dbus_connection_send(conn, message, NULL)) {
 		nih_error("failed to send dbus message");
 		return -1;
