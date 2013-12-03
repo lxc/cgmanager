@@ -75,9 +75,9 @@ if [ "$c" = "/xxx/b" ]; then
 	exit 1
 fi
 
-c2=`dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getPidCgroup string:'memory' int32:$pid`
+c2=`sudo ./getpidcgroup -c memory -p $pid`
 if [ $c2 != "xxx/b" ]; then
-	echo "Failed test 7b: getPidCgroup returned $c2 instead of 'xxx/b'"
+	echo "Failed test 7b: getpidcgroup returned $c2 instead of 'xxx/b'"
 	exit 1
 fi
 

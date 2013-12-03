@@ -1,4 +1,4 @@
-all: cgmanager movepid
+all: cgmanager movepid getpidcgroup
 
 clean:
 	rm -f org.linuxcontainers.cgmanager.h org.linuxcontainers.cgmanager.c cgmanager
@@ -8,6 +8,9 @@ org.linuxcontainers.cgmanager.h:
 
 cgmanager: org.linuxcontainers.cgmanager.h fs.h fs.c cgmanager.c
 	gcc -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) org.linuxcontainers.cgmanager.c cgmanager.c fs.c -ldbus-1 -lnih -lnih-dbus -o cgmanager
+
+getpidcgroup: getpidcgroup.c
+	gcc -g -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) getpidcgroup.c -ldbus-1 -lnih -lnih-dbus -o getpidcgroup
 
 movepid: movepid.c
 	gcc -g -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) movepid.c -ldbus-1 -lnih -lnih-dbus -o movepid
