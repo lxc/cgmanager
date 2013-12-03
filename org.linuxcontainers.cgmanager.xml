@@ -22,9 +22,7 @@
     <method name="getPidCgroup">
       <arg name="controller" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
-      <!--
-      <arg name="retfd" type="h" direction="in" />
-      -->
+      <arg name="outfd" type="h" direction="in" />
     </method>
     <method name="Create">
       <arg name="controller" type="s" direction="in" />

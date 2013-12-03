@@ -89,45 +89,6 @@ static NihOption options[] = {
 	NIH_OPTION_LAST
 };
 
-int send_fd(int sock, int fd)
-{
-	struct msghdr msg = { 0 };
-	struct iovec iov;
-	struct cmsghdr *cmsg;
-	union {
-		struct cmsghdr cmh;
-		char   control[CMSG_SPACE(sizeof(int))];
-		/* Space large enough to hold an 'int' */
-	} control_un;
-	char buf[1];
-
-	buf[0] = 'f';
-
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-	iov.iov_base = buf;
-	iov.iov_len = sizeof(buf);
-
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-
-	msg.msg_control = control_un.control;
-	msg.msg_controllen = sizeof control_un.control;
-
-	cmsg = CMSG_FIRSTHDR(&msg);
-	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
-	cmsg->cmsg_level = SOL_SOCKET;
-	cmsg->cmsg_type = SCM_RIGHTS;
-	*((int *) CMSG_DATA(cmsg)) = fd;
-
-nih_info("Sending fd %d", fd);
-	if (sendmsg(sock, &msg, 0) < 0) {
-		perror("sendmsg");
-		return -1;
-	}
-	return 0;
-}
-
 int send_pid(int sock, int pid)
 {
 	struct msghdr msg = { 0 };
@@ -231,7 +192,6 @@ main (int   argc,
                 nih_error_raise_no_memory ();
                 return -1;
         }
-#ifdef DBUS_DOESNT_SUCK
 	dbus_message_iter_init_append(message, &iter);
 	int xxxfd = p[1];
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD,
@@ -239,7 +199,6 @@ main (int   argc,
 		nih_error_raise_no_memory ();
 		return -1;
 	}
-#endif
 
 	if (!dbus_connection_send(conn, message, NULL)) {
 		nih_error("failed to send dbus message");
@@ -258,13 +217,7 @@ main (int   argc,
 		}
 	}
 
-#ifndef DBUS_DOESNT_SUCK
-	if (send_fd(fd, p[1]) < 0) {
-		nih_error("Error sending return fd");
-		goto out;
-	}
 nih_info("Waiting for reply");
-#endif
 
 	reply[MAXPATHLEN-1] = 0;
 	ret = read(p[0], reply, MAXPATHLEN-1);

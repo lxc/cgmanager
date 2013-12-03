@@ -63,57 +63,6 @@ static bool setns_pid_supported = false;
 static char mypidns[20];
 
 /*
- * Get an fd passed as SCM_RIGHTS over a unix socket
- */
-static int get_fd_from_sock(int sock)
-{
-	int fd = -1;
-        struct msghdr msg = { 0 };
-        struct iovec iov;
-        struct cmsghdr *cmsg;
-        char cmsgbuf[CMSG_SPACE(sizeof(int))];
-	union {
-		struct cmsghdr cmh;
-		char   control[CMSG_SPACE(sizeof(int))];
-		/* Space large enough to hold an 'int' */
-	} control_un;
-        char buf[1];
-	int ret;
-
-	control_un.cmh.cmsg_len = CMSG_LEN(sizeof(int));
-	control_un.cmh.cmsg_level = SOL_SOCKET;
-	control_un.cmh.cmsg_type = SCM_RIGHTS;
-
-        msg.msg_control = control_un.control;
-        msg.msg_controllen = sizeof(control_un.control);
-
-        iov.iov_base = buf;
-        iov.iov_len = sizeof(buf);
-        msg.msg_iov = &iov;
-        msg.msg_iovlen = 1;
-
-        msg.msg_name = NULL;
-        msg.msg_namelen = 0;
-
-	ret = recvmsg(sock, &msg, 0);
-	if (ret < 0) {
-		nih_error("Failed to receive fd: %s",
-			  strerror(errno));
-		goto out;
-	}
-
-        cmsg = CMSG_FIRSTHDR(&msg);
-
-        if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(int)) &&
-            cmsg->cmsg_level == SOL_SOCKET &&
-            cmsg->cmsg_type == SCM_RIGHTS) {
-		memcpy(&fd, CMSG_DATA(cmsg), sizeof(int));
-        }
-out:
-        return fd;
-}
-
-/*
  * Get a pid passed in a SCM_CREDENTIAL over a unix socket
  * @sock: the socket fd.
  */
@@ -224,9 +173,9 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
  * Caller requests the cgroup of @pid in a given @controller
  */
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, int plain_pid)
+			const char *controller, int plain_pid, int outfd)
 {
-	int fd = 0, ret, outfd;
+	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
 	pid_t target_pid;
@@ -236,6 +185,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
+		close(fd);
 		return -1;
 	}
 
@@ -265,15 +215,6 @@ nih_info("got pid %d over scm", target_pid);
 			nih_info("Using plain pid %d", (int)plain_pid);
 			target_pid = plain_pid;
 		}
-	}
-
-	outfd = get_fd_from_sock(fd);
-nih_info("got fd %d over scm", outfd);
-
-	if (outfd < 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					     "Failed to get fd over socket");
-		return -1;
 	}
 
 	// Get r's current cgroup in rcgpath
