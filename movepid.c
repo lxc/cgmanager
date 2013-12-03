@@ -149,8 +149,9 @@ main (int   argc,
 	char **             args;
 	DBusConnection *    conn;
 	int fd, optval = 1, exitval = 1;
-	DBusMessage *    message;
-	DBusMessageIter iter, subiter;
+	DBusMessage *message, *reply;
+	DBusMessageIter iter;
+	dbus_uint32_t serial;;
 	char buf[1];
 
 	nih_main_init (argv[0]);
@@ -202,7 +203,10 @@ main (int   argc,
                 return;
         }
 
-	dbus_connection_send(conn, message, NULL);
+	if (!dbus_connection_send(conn, message, &serial)) {
+		nih_error("failed to send dbus message");
+		return -1;
+	}
 	dbus_connection_flush(conn);
 
 	/* If we're sending our own pid, or if we're root, then
@@ -214,11 +218,28 @@ main (int   argc,
 			nih_error("Error sending pid over SCM_CREDENTIAL");
 			goto out;
 		}
+	}
+
+	dbus_message_unref(message);
+	/* Get a reply */
+	while (!(reply = dbus_connection_pop_message(conn)))
+		dbus_connection_read_write(conn, -1);
+	if (dbus_message_get_reply_serial(reply) != serial) {
+		nih_error("wrong serial on reply");
+		goto out;
+	}
+	if (!dbus_message_iter_init(reply, &iter)) {
+		nih_error("Got no reply");
+		goto out;
+	}
+	int ok;
+	dbus_message_iter_get_basic(&iter, &ok);
+	if (ok != 1)
+		nih_error("Cgmanager returned error");
+	else
 		exitval = 0;
-	} else exitval = 0;
 
 out:
-	dbus_message_unref(message);
 	dbus_connection_unref (conn);
 
 	exit(exitval);

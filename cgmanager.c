@@ -201,7 +201,6 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	target_pid = get_scm_pid(fd);
-nih_info("got pid %d over scm", target_pid);
 
 	if (target_pid == -1) {
 		// non-root users can't send an SCM_CREDENTIAL for tasks
@@ -213,6 +212,11 @@ nih_info("got pid %d over scm", target_pid);
 			nih_info("Using plain pid %d", (int)plain_pid);
 			target_pid = plain_pid;
 		}
+	}
+	if (target_pid == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not retrieve pid from socket");
+		return -1;
 	}
 
 	// Get r's current cgroup in rcgpath
@@ -250,7 +254,8 @@ nih_info("got pid %d over scm", target_pid);
  * by the name (@cgroup) and controller type (@controller).
  */
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int plain_pid)
+			const char *controller, char *cgroup, int plain_pid,
+			int *ok)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
@@ -259,6 +264,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
 
+	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -286,6 +292,12 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			nih_info("Using plain pid %d", (int)plain_pid);
 			target_pid = plain_pid;
 		}
+	}
+
+	if (target_pid == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not get target pid from socket");
+		return -1;
 	}
 
 	// verify that ucred.pid may move target_pid
@@ -372,6 +384,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	}
 	nih_info("%d moved to %s:%s by %d's request", (int)target_pid,
 		controller, cgroup, (int)ucred.pid);
+	*ok = 1;
 	return 0;
 }
 

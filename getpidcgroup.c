@@ -141,7 +141,7 @@ main (int   argc,
 	DBusConnection *    conn;
 	int fd, optval = 1, exitval = 1, ret;
 	DBusMessage *message, *reply;
-	DBusMessageIter iter, subiter;
+	DBusMessageIter iter;
 	dbus_uint32_t serial;;
 
 	nih_main_init (argv[0]);
