@@ -173,13 +173,13 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
  * Caller requests the cgroup of @pid in a given @controller
  */
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, int plain_pid)
+			const char *controller, int plain_pid, char **value)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
 	pid_t target_pid;
-	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 	FILE *f;
 
 	if (message == NULL) {
