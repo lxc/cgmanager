@@ -120,7 +120,6 @@ int send_pid(int sock, int pid)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
-nih_info("Sending pid %d", (int)cred.pid);
 	if (sendmsg(sock, &msg, 0) < 0) {
 		perror("sendmsg");
 		return -1;
@@ -140,7 +139,7 @@ main (int   argc,
 	char **             args;
 	DBusConnection *    conn;
 	int fd, optval = 1, exitval = 1, ret;
-	DBusMessage *message, *reply;
+	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
 
@@ -198,14 +197,12 @@ main (int   argc,
 	 * we can send an SCM_CREDENTIAL
 	 */
 	if (pid == getpid() || geteuid() == 0) {
-		int ret;
 		if (send_pid(fd, pid)) {
 			nih_error("Error sending pid over SCM_CREDENTIAL");
 			goto out;
 		}
 	}
 
-	dbus_message_unref(message);
 	while (!(reply = dbus_connection_pop_message(conn)))
 		dbus_connection_read_write(conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
@@ -220,7 +217,10 @@ main (int   argc,
 	exitval = 0;
 
 out:
-	dbus_message_unref(reply);
+	if (message)
+		dbus_message_unref(message);
+	if (reply)
+		dbus_message_unref(reply);
 	dbus_connection_unref (conn);
 	exit(exitval);
 }

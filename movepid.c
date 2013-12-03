@@ -129,7 +129,6 @@ int send_pid(int sock, int pid)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
-nih_info("Sending pid %d", (int)cred.pid);
 	if (sendmsg(sock, &msg, 0) < 0) {
 		perror("sendmsg");
 		return -1;
@@ -149,7 +148,7 @@ main (int   argc,
 	char **             args;
 	DBusConnection *    conn;
 	int fd, optval = 1, exitval = 1;
-	DBusMessage *message, *reply;
+	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
 	char buf[1];
@@ -220,7 +219,6 @@ main (int   argc,
 		}
 	}
 
-	dbus_message_unref(message);
 	/* Get a reply */
 	while (!(reply = dbus_connection_pop_message(conn)))
 		dbus_connection_read_write(conn, -1);
@@ -240,6 +238,10 @@ main (int   argc,
 		exitval = 0;
 
 out:
+	if (message)
+		dbus_message_unref(message);
+	if (reply)
+		dbus_message_unref(reply);
 	dbus_connection_unref (conn);
 
 	exit(exitval);
