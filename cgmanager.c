@@ -100,6 +100,7 @@ static pid_t get_scm_pid(int sock)
 	// tell client we're ready
 	sndbuf[0] = 'a';
 	ret = write(sock, sndbuf, 1);
+nih_info("write returned %d", ret);
 	if (ret < 0) {
 		nih_info("Unable to write 'go' to client: %s", strerror(errno));
 		// no problem, client didn't want to send scm_cred
@@ -311,7 +312,7 @@ nih_info("scm pid was %d\n", (int)target_pid);
 			"Failed to open %s", path);
 		return -1;
 	}
-	if (fprintf(f, "%d", target_pid) < 0) {
+	if (fprintf(f, "%d\n", target_pid) < 0) {
 		fclose(f);
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to open %s", path);
