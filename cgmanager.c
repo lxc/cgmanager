@@ -63,6 +63,57 @@ static bool setns_pid_supported = false;
 static char mypidns[20];
 
 /*
+ * Get an fd passed as SCM_RIGHTS over a unix socket
+ */
+static int get_fd_from_sock(int sock)
+{
+	int fd = -1;
+        struct msghdr msg = { 0 };
+        struct iovec iov;
+        struct cmsghdr *cmsg;
+        char cmsgbuf[CMSG_SPACE(sizeof(int))];
+	union {
+		struct cmsghdr cmh;
+		char   control[CMSG_SPACE(sizeof(int))];
+		/* Space large enough to hold an 'int' */
+	} control_un;
+        char buf[1];
+	int ret;
+
+	control_un.cmh.cmsg_len = CMSG_LEN(sizeof(int));
+	control_un.cmh.cmsg_level = SOL_SOCKET;
+	control_un.cmh.cmsg_type = SCM_RIGHTS;
+
+        msg.msg_control = control_un.control;
+        msg.msg_controllen = sizeof(control_un.control);
+
+        iov.iov_base = buf;
+        iov.iov_len = sizeof(buf);
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+
+        msg.msg_name = NULL;
+        msg.msg_namelen = 0;
+
+	ret = recvmsg(sock, &msg, 0);
+	if (ret < 0) {
+		nih_error("Failed to receive fd: %s",
+			  strerror(errno));
+		goto out;
+	}
+
+        cmsg = CMSG_FIRSTHDR(&msg);
+
+        if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(int)) &&
+            cmsg->cmsg_level == SOL_SOCKET &&
+            cmsg->cmsg_type == SCM_RIGHTS) {
+		memcpy(&fd, CMSG_DATA(cmsg), sizeof(int));
+        }
+out:
+        return fd;
+}
+
+/*
  * Get a pid passed in a SCM_CREDENTIAL over a unix socket
  * @sock: the socket fd.
  */
@@ -73,7 +124,7 @@ static pid_t get_scm_pid(int sock)
         struct cmsghdr *cmsg;
 	struct ucred cred;
         char cmsgbuf[CMSG_SPACE(sizeof(cred))];
-        char buf[1], sndbuf[1];
+        char buf[1];
 	int ret;
 
 	cred.pid = -1;
@@ -173,9 +224,9 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
  * Caller requests the cgroup of @pid in a given @controller
  */
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, int plain_pid, char **value)
+			const char *controller, int plain_pid)
 {
-	int fd = 0, ret;
+	int fd = 0, ret, outfd;
 	struct ucred ucred;
 	socklen_t len;
 	pid_t target_pid;
@@ -191,13 +242,18 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 		                             "Could  not get client socket.");
+		close(outfd);
 		return -1;
 	}
 
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
 	target_pid = get_scm_pid(fd);
+nih_info("got pid %d over scm", target_pid);
 
 	if (target_pid == -1) {
 		// non-root users can't send an SCM_CREDENTIAL for tasks
@@ -211,13 +267,20 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 		}
 	}
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+	outfd = get_fd_from_sock(fd);
+nih_info("got fd %d over scm", outfd);
+
+	if (outfd < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Failed to get fd over socket");
+		return -1;
+	}
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Could not determine the requestor cgroup");
+		close(outfd);
 		return -1;
 	}
 
@@ -225,6 +288,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	if (!compute_pid_cgroup(target_pid, controller, "", vcgpath)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Could not determine the victim cgroup");
+		close(outfd);
 		return -1;
 	}
 
@@ -234,12 +298,16 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"v (%d)'s cgroup is not below r (%d)'s",
 			(int)target_pid, (int)ucred.pid);
+		close(outfd);
 		return -1;
 	}
 	if (strlen(vcgpath) == rlen)
-		*value = strdup("");
-	else
-		*value = strdup(vcgpath + rlen + 1);
+		write(outfd, "/", 1);
+	else {
+		char *r = vcgpath + rlen + 1;
+		write(outfd, r, strlen(r));
+	}
+	close(outfd);
 	return 0;
 }
 

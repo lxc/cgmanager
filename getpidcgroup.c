@@ -52,7 +52,6 @@
 
 static int pid = -1;
 static const char *controller;
-static const char *cgroup;
 
 typedef int (*NihOptionSetter) (NihOption *option, const char *arg);
 
@@ -89,6 +88,45 @@ static NihOption options[] = {
 
 	NIH_OPTION_LAST
 };
+
+int send_fd(int sock, int fd)
+{
+	struct msghdr msg = { 0 };
+	struct iovec iov;
+	struct cmsghdr *cmsg;
+	union {
+		struct cmsghdr cmh;
+		char   control[CMSG_SPACE(sizeof(int))];
+		/* Space large enough to hold an 'int' */
+	} control_un;
+	char buf[1];
+
+	buf[0] = 'f';
+
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+
+	msg.msg_control = control_un.control;
+	msg.msg_controllen = sizeof control_un.control;
+
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_RIGHTS;
+	*((int *) CMSG_DATA(cmsg)) = fd;
+
+nih_info("Sending fd %d", fd);
+	if (sendmsg(sock, &msg, 0) < 0) {
+		perror("sendmsg");
+		return -1;
+	}
+	return 0;
+}
 
 int send_pid(int sock, int pid)
 {
@@ -140,12 +178,17 @@ main (int   argc,
 {
 	char **             args;
 	DBusConnection *    conn;
-	int fd, optval = 1, exitval = 1;
+	int fd, optval = 1, exitval = 1, p[2], ret;
 	DBusMessage *    message;
 	DBusMessageIter iter, subiter;
-	char buf[1];
+	char reply[MAXPATHLEN];
 
 	nih_main_init (argv[0]);
+
+	if (pipe(p) < 0) {
+		perror("pipe");
+		exit(1);
+	}
 
 	nih_option_set_synopsis (_("Control group client"));
 
@@ -153,7 +196,7 @@ main (int   argc,
 	if (! args)
 		exit (1);
 
-	if (!controller || !cgroup)
+	if (!controller)
 		usage(argv[0]);
 
 	if (pid == -1)
@@ -169,6 +212,7 @@ main (int   argc,
 	if (!dbus_connection_get_socket(conn, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					"Could not get socket");
+		return -1;
 	}
 	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		perror("setsockopt");
@@ -179,16 +223,28 @@ main (int   argc,
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
                                               &controller)) {
                 nih_error_raise_no_memory ();
-                return;
+                return -1;
         }
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32,
                                               &pid)) {
                 nih_error_raise_no_memory ();
-                return;
+                return -1;
         }
+#ifdef DBUS_DOESNT_SUCK
+	dbus_message_iter_init_append(message, &iter);
+	int xxxfd = p[1];
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD,
+				&xxxfd)) {
+		nih_error_raise_no_memory ();
+		return -1;
+	}
+#endif
 
-	dbus_connection_send(conn, message, NULL);
+	if (!dbus_connection_send(conn, message, NULL)) {
+		nih_error("failed to send dbus message");
+		return -1;
+	}
 	dbus_connection_flush(conn);
 
 	/* If we're sending our own pid, or if we're root, then
@@ -200,8 +256,25 @@ main (int   argc,
 			nih_error("Error sending pid over SCM_CREDENTIAL");
 			goto out;
 		}
-		exitval = 0;
-	} else exitval = 0;
+	}
+
+#ifndef DBUS_DOESNT_SUCK
+	if (send_fd(fd, p[1]) < 0) {
+		nih_error("Error sending return fd");
+		goto out;
+	}
+nih_info("Waiting for reply");
+#endif
+
+	reply[MAXPATHLEN-1] = 0;
+	ret = read(p[0], reply, MAXPATHLEN-1);
+	if (ret < 0) {
+		nih_error("Error receiving reply: %s", strerror(errno));
+		goto out;
+	}
+
+	printf("ret was %d: %s", ret, reply);
+	exitval = 0;
 
 out:
 	dbus_message_unref(message);
