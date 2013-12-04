@@ -60,7 +60,7 @@
 static int daemonise = FALSE;
 
 static bool setns_pid_supported = false;
-static char mypidns[20];
+static unsigned long mypidns;
 
 /*
  * Get a pid passed in a SCM_CREDENTIAL over a unix socket
@@ -120,16 +120,16 @@ out:
  *
  * TODO - switch to using stat() to get inode # ?
  */
-static bool read_pid_ns_link(int pid, char *linkname)
+static unsigned long read_pid_ns_link(int pid)
 {
 	int ret;
+	struct stat sb;
 	char path[100];
 	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid);
 	if (ret < 0 || ret >= 100)
 		return false;
-	ret = readlink(path, linkname, 20);
-	if (ret < 0 || ret >= 20)
-		return false;
+	ret = stat(path, &sb);
+	return sb.st_ino;
 	return true;
 }
 
@@ -139,15 +139,13 @@ static bool read_pid_ns_link(int pid, char *linkname)
  */
 static bool is_same_pidns(int pid)
 {
-	char linkname[20];
+	unsigned long ino;
 
 	if (!setns_pid_supported)
 		return false;
-	if (!read_pid_ns_link(pid, linkname))
+	if (read_pid_ns_link(pid) != mypidns)
 		return false;
-	if (strcmp(linkname, mypidns) == 0)
-		return true;
-	return false;
+	return true;
 }
 
 /*
@@ -175,6 +173,7 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
 		return true;
 	if (hostuid_to_ns(r_uid, r) == 0 && hostuid_to_ns(v_uid, r) != -1)
 		return true;
+	return false;
 }
 
 /*
@@ -731,7 +730,7 @@ main (int   argc,
 	char *              pidfile_path = NULL;
 	char *              pidfile = NULL;
 	DBusServer *        server;
-
+	struct stat sb;
 
 	nih_main_init (argv[0]);
 
@@ -752,9 +751,9 @@ main (int   argc,
 		exit(1);
 	}
 
-	if (access("/proc/self/ns/pid", "r") == 0) {
-		if (read_pid_ns_link(getpid(), mypidns))
-			setns_pid_supported = true;
+	if (stat("/proc/self/ns/pid", &sb) == 0) {
+		mypidns = read_pid_ns_link(getpid());
+		setns_pid_supported = true;
 	}
 
 	/* Become daemon */
