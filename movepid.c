@@ -164,7 +164,7 @@ main (int   argc,
 	if (!controller || !cgroup)
 		usage(argv[0]);
 
-	if (pid == -1)
+	if (pid == -1 || !pid)
 		pid = getpid();
 
 	conn = nih_dbus_connect("unix:path=/tmp/cgmanager", NULL);
@@ -244,5 +244,6 @@ out:
 		dbus_message_unref(reply);
 	dbus_connection_unref (conn);
 
+	printf("exiting %d", exitval);
 	exit(exitval);
 }

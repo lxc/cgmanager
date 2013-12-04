@@ -74,7 +74,7 @@ static pid_t get_scm_pid(int sock)
 	struct ucred cred;
         char cmsgbuf[CMSG_SPACE(sizeof(cred))];
         char buf[1];
-	int ret;
+	int ret, tries=0;
 
 	cred.pid = -1;
         msg.msg_name = NULL;
@@ -87,8 +87,17 @@ static pid_t get_scm_pid(int sock)
         msg.msg_iov = &iov;
         msg.msg_iovlen = 1;
 
+	// retry logic is not ideal, especially as we are not
+	// threaded.  Sleep at most 1 second waiting for the client
+	// to send us the scm_cred
+again:
 	ret = recvmsg(sock, &msg, 0);
 	if (ret < 0) {
+		if (tries++ == 0) {
+			nih_info("got EAGAIN for scm_cred");
+			sleep(1);
+			goto again;
+		}
 		nih_error("Failed to receive scm_cred: %s",
 			  strerror(errno));
 		goto out;

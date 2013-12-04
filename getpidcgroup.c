@@ -213,7 +213,7 @@ main (int   argc,
 	dbus_message_iter_init(reply, &iter);
 	char *str_value;
 	dbus_message_iter_get_basic(&iter, &str_value);
-	printf("Cgroup: %s\n", str_value);
+	printf("%s\n", str_value);
 	exitval = 0;
 
 out:
