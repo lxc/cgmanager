@@ -220,8 +220,14 @@ main (int   argc,
 	}
 
 	/* Get a reply */
+	DBusError error;
+	dbus_error_init(&error);
 	while (!(reply = dbus_connection_pop_message(conn)))
 		dbus_connection_read_write(conn, -1);
+	if (dbus_error_is_set(&error)) {
+		nih_error("Error: %s: %s\n", error.name, error.message);
+		goto out;
+	}
 	if (dbus_message_get_reply_serial(reply) != serial) {
 		nih_error("wrong serial on reply");
 		goto out;
@@ -243,7 +249,7 @@ main (int   argc,
 		break;
 	case DBUS_TYPE_STRING: // uh oh, must've failed
 		dbus_message_iter_get_basic(&iter, &replystr);
-		nih_error("Got error: %s", replystr);
+		nih_error("Cgmanager returned error: %s", replystr);
 		goto out;
 	default:
 		nih_error("Got bad reply type: %d", t);
