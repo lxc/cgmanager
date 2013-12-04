@@ -211,6 +211,10 @@ main (int   argc,
 	}
 
 	dbus_message_iter_init(reply, &iter);
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
+		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
+		goto out;
+	}
 	char *str_value;
 	dbus_message_iter_get_basic(&iter, &str_value);
 	printf("%s\n", str_value);

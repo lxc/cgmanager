@@ -147,7 +147,7 @@ main (int   argc,
 {
 	char **             args;
 	DBusConnection *    conn;
-	int fd, optval = 1, exitval = 1;
+	int fd, optval = 1, exitval = 1, ok;
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
@@ -230,8 +230,25 @@ main (int   argc,
 		nih_error("Got no reply");
 		goto out;
 	}
-	int ok;
-	dbus_message_iter_get_basic(&iter, &ok);
+	int t= dbus_message_iter_get_arg_type(&iter);
+	short r;
+	char *replystr;
+	switch(t) {
+	case DBUS_TYPE_INT16:
+		dbus_message_iter_get_basic(&iter, &r);
+		ok = r;
+		break;
+	case DBUS_TYPE_INT32:
+		dbus_message_iter_get_basic(&iter, &ok);
+		break;
+	case DBUS_TYPE_STRING: // uh oh, must've failed
+		dbus_message_iter_get_basic(&iter, &replystr);
+		nih_error("Got error: %s", replystr);
+		goto out;
+	default:
+		nih_error("Got bad reply type: %d", t);
+		goto out;
+	}
 	if (ok != 1)
 		nih_error("Cgmanager returned error");
 	else
@@ -244,6 +261,5 @@ out:
 		dbus_message_unref(reply);
 	dbus_connection_unref (conn);
 
-	printf("exiting %d", exitval);
 	exit(exitval);
 }
