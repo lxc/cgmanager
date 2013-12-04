@@ -289,7 +289,10 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	target_pid = get_scm_pid(fd);
+	if (plain_pid == ucred.pid)
+		target_pid = plain_pid;
+	else
+		target_pid = get_scm_pid(fd);
 
 	if (target_pid == -1) {
 		// non-root users can't send an SCM_CREDENTIAL for tasks

@@ -85,15 +85,10 @@ if [ $? -eq 0 ]; then
 fi
 
 # Try to move myself task to xxx/b - should work
+# (useless though since movepid, not its caller, will be moved)
 ./movepid -c memory -n xxx/b
 if [ $? -ne 0 ]; then
-	echo "Failed test 8: not able to move another pid"
-	exit 1
-fi
-# confirm that I was moved
-c=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
-if [ $c != "/xxx/b" ]; then
-	echo "I was not moved to xxx/b"
+	echo "Failed test 8: not able to move myself"
 	exit 1
 fi
 

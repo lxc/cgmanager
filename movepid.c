@@ -208,10 +208,9 @@ main (int   argc,
 	}
 	dbus_connection_flush(conn);
 
-	/* If we're sending our own pid, or if we're root, then
-	 * we can send an SCM_CREDENTIAL
+	/* If we're root, then we can send an SCM_CREDENTIAL
 	 */
-	if (pid == getpid() || geteuid() == 0) {
+	if (geteuid() == 0) {
 		int ret;
 		if (send_pid(fd, pid)) {
 			nih_error("Error sending pid over SCM_CREDENTIAL");
