@@ -1,7 +1,12 @@
-all: cgmanager movepid getpidcgroup
+all: cgmanager client movepid getpidcgroup
 
 clean:
-	rm -f org.linuxcontainers.cgmanager.h org.linuxcontainers.cgmanager.c cgmanager
+	rm -f \
+		org.linuxcontainers.cgmanager.h org.linuxcontainers.cgmanager.c \
+		cgmanager-client.c cgmanager-client.h \
+		cgmanager-client.o getpidcgroup \
+		cgmanager \
+		movepid cgmanager 
 
 org.linuxcontainers.cgmanager.h:
 	nih-dbus-tool --package=cgmanager --mode=object --prefix=cgmanager --default-interface=org.linuxcontainers.cgmanager0_0 org.linuxcontainers.cgmanager.xml
@@ -14,6 +19,19 @@ getpidcgroup: getpidcgroup.c
 
 movepid: movepid.c
 	gcc -g -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) movepid.c -ldbus-1 -lnih -lnih-dbus -o movepid
+
+client: cgmanager-client.o
+
+cgmanager-client.o: cgmanager-client.h cgmanager-client.c
+		gcc -g -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) -c -I. cgmanager-client.c -ldbus-1 -lnih -lnih-dbus
+
+cgmanager-client.h:
+	nih-dbus-tool \
+    --package=cgmanager \
+    --mode=proxy --prefix=cgmanager \
+    --default-interface=org.linuxcontainers.cgmanager0_0 \
+    --output=cgmanager-client.c \
+	org.linuxcontainers.cgmanager.xml
 
 run-server: cgmanager
 	./cgmanager --debug
