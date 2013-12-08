@@ -673,6 +673,7 @@ client_connect (DBusServer *server, DBusConnection *conn)
 		return FALSE;
 
 	dbus_connection_set_unix_user_function(conn, allow_user, NULL, NULL);
+	dbus_connection_set_allow_anonymous(conn, TRUE);
 
 	nih_info (_("Connection from private client"));
 
