@@ -28,8 +28,10 @@
 #include <string.h>
 #include <ctype.h>
 #include <sched.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/mount.h>
 #include <fcntl.h>
 #include <sys/param.h>
 #include <stdbool.h>
@@ -134,7 +136,7 @@ static void set_use_hierarchy(const char *path)
 int setup_cgroup_mounts(void)
 {
 	FILE *cgf;
-	int ret, len=0;
+	int ret;
 	char line[400];
 
 	if (unshare(CLONE_NEWNS) < 0) {
@@ -150,7 +152,7 @@ int setup_cgroup_mounts(void)
 		return -1;
 	}
 	while (fgets(line, 400, cgf)) {
-		char *p, *p2;
+		char *p;
 		struct controller_mounts *tmp;
 		char dest[MAXPATHLEN];
 		unsigned long h;
@@ -446,7 +448,7 @@ out:
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 {
 	char line[400];
-	int ret, u, g;
+	int u, g;
 	FILE *f;
 
 	*uid = -1;

@@ -29,6 +29,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <sys/param.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <stdbool.h>
 #include <libgen.h>
 
@@ -43,6 +45,7 @@
 
 #include <nih-dbus/dbus_connection.h>
 #include <nih-dbus/dbus_proxy.h>
+#include <nih-dbus/dbus_error.h>
 
 #include <sys/socket.h>
 
@@ -151,7 +154,6 @@ main (int   argc,
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
-	char buf[1];
 
 	nih_main_init (argv[0]);
 
@@ -187,19 +189,19 @@ main (int   argc,
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
                                               &controller)) {
                 nih_error_raise_no_memory ();
-                return;
+                return -1;
         }
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
                                               &cgroup)) {
                 nih_error_raise_no_memory ();
-                return;
+                return -1;
         }
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32,
                                               &pid)) {
                 nih_error_raise_no_memory ();
-                return;
+                return -1;
         }
 
 	if (!dbus_connection_send(conn, message, &serial)) {
@@ -211,7 +213,6 @@ main (int   argc,
 	/* If we're root, then we can send an SCM_CREDENTIAL
 	 */
 	if (geteuid() == 0) {
-		int ret;
 		if (send_pid(fd, pid)) {
 			nih_error("Error sending pid over SCM_CREDENTIAL");
 			goto out;

@@ -1,7 +1,7 @@
 /* cgmanager
  *
- * Copyright © 2013 Stéphane Graber
- * Author: Stéphane Graber <stgraber@ubuntu.com>
+ * Copyright  2013 Stphane Graber
+ * Author: Stphane Graber <stgraber@ubuntu.com>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2, as
@@ -28,6 +28,7 @@
 #include <sys/param.h>
 #include <stdbool.h>
 #include <libgen.h>
+#include <unistd.h>
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -39,7 +40,9 @@
 #include <nih/error.h>
 
 #include <nih-dbus/dbus_connection.h>
+#include <nih-dbus/dbus_object.h>
 #include <nih-dbus/dbus_proxy.h>
+#include <nih-dbus/dbus_error.h>
 
 #include <sys/socket.h>
 
@@ -139,8 +142,6 @@ static unsigned long read_pid_ns_link(int pid)
  */
 static bool is_same_pidns(int pid)
 {
-	unsigned long ino;
-
 	if (!setns_pid_supported)
 		return false;
 	if (read_pid_ns_link(pid) != mypidns)
@@ -183,12 +184,11 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 			const char *controller, int plain_pid, char **output)
 {
-	int fd = 0, ret;
+	int fd = 0;
 	struct ucred ucred;
 	socklen_t len;
 	pid_t target_pid;
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
-	FILE *f;
 
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -265,7 +265,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int plain_pid,
 			int *ok)
 {
-	int fd = 0, ret;
+	int fd = 0;
 	struct ucred ucred;
 	socklen_t len;
 	pid_t target_pid;
@@ -431,7 +431,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	if (!cgroup || cgroup == "")  // nothing to do
+	if (!cgroup || ! *cgroup)  // nothing to do
 		return 0;
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
@@ -568,7 +568,7 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	int cplen = strlen(controller_path);
+	size_t cplen = strlen(controller_path);
 	if (strlen(path) < cplen) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
 			"Out of memory copying controller path");
@@ -598,7 +598,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	int fd = 0;
 	struct ucred ucred;
 	socklen_t len;
-	char path[MAXPATHLEN], *fullpath;
+	char path[MAXPATHLEN];
 
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -728,8 +728,6 @@ main (int   argc,
 {
 	char **             args;
 	int                 ret;
-	char *              pidfile_path = NULL;
-	char *              pidfile = NULL;
 	DBusServer *        server;
 	struct stat sb;
 
