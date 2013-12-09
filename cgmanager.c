@@ -543,6 +543,18 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
+	if (controller == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"controller was NULL");
+		return -1;
+	}
+
+	if (value == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"value was NULL");
+		return -1;
+	}
+
 	const char *controller_path = get_controller_path(controller);
 	if (!controller_path) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -575,9 +587,11 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	*value = strdup(path + cplen);
+    *value = nih_strdup (message, path + cplen);
+    if (! *value)
+        nih_return_no_memory_error (-1);
 
-	return 0;
+    return 0;
 }
 
 /* 
