@@ -23,17 +23,24 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <arg name="output" type="s" direction="out" />
+      <!-- Pid is passed as a scm_cred if r is not in init_pid_ns -->
     </method>
     <method name="Create">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
+    </method>
+    <method name="Chown">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="uid" type="i" direction="in" />
+      <!-- uid is passed as scm_cred if r is not in init_user_ns -->
     </method>
     <method name="movePid">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <arg name="ok" type="i" direction="out" />
-       <!-- Pid is passed as a scm_cred if r is !root -->
+      <!-- Pid is passed as a scm_cred if r is not in init_pid_ns -->
     </method>
     <method name="getValue">
       <arg name="controller" type="s" direction="in" />

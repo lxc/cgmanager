@@ -518,6 +518,151 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	return 0;
 }
 
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests chowning a cgroup @name in controoler @cgroup to a
+ * particular @uid.  If the caller is not in init_user_ns, then the
+ * uid must be passed in as an scm_cred so the kernel translates it
+ * for us.  @r must be root in its own user ns.
+ */
+int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup, int uid)
+{
+	int fd = 0, ret;
+	struct ucred ucred;
+	socklen_t len;
+	pid_t target_pid;
+	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	FILE *f;
+
+	*ok = -1;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	if (plain_pid == ucred.pid)
+		target_pid = plain_pid;
+	else
+		target_pid = get_scm_pid(fd);
+
+	if (target_pid == -1) {
+		// non-root users can't send an SCM_CREDENTIAL for tasks
+		// other than themselves.  For that case we accept a pid
+		// as an integer only from our own pidns Non-root users
+		// in another pidns will have to go through a root-owned
+		// proxy in their own pidns.
+		if (is_same_pidns((int)ucred.pid)) {
+			nih_info("Using plain pid %d", (int)plain_pid);
+			target_pid = plain_pid;
+		}
+	}
+
+	if (target_pid == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not get target pid from socket");
+		return -1;
+	}
+
+	// verify that ucred.pid may move target_pid
+	if (!may_move_pid(ucred.pid, ucred.uid, target_pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "%d may not move %d", (int)ucred.pid,
+					     (int)target_pid);
+		return -1;
+	}
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	if (cgroup[0] == '/' || cgroup[0] == '.') {
+		// We could try to be accomodating, but let's not fool around right now
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Bad requested cgroup path: %s", cgroup);
+		return -1;
+	}
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the requested cgroup");
+		return -1;
+	}
+	/* rcgpath + / + cgroup + /tasks + \0 */
+	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+8) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Path name too long");
+		return -1;
+	}
+	strcpy(path, rcgpath);
+	strncat(path, "/", MAXPATHLEN-1);
+	strncat(path, cgroup, MAXPATHLEN-1);
+	{
+		/* Make sure r doesn't try to escape his cgroup with .. */
+		char *tmppath;
+		if (!(tmppath = realpath(path, NULL))) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Invalid path %s", path);
+			return -1;
+		}
+		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Invalid cgroup path %s requested by pid %d",
+				  path, (int)ucred.pid);
+			free(tmppath);
+			return -1;
+		}
+		free(tmppath);
+	}
+	// is r allowed to descend under the parent dir?
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"pid %d (uid %d gid %d) may not write under %s",
+			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+		return -1;
+	}
+	// is r allowed to write to tasks file?
+	strncat(path, "/tasks", MAXPATHLEN-1);
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_WRONLY)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"pid %d (uid %d gid %d) may not write under %s",
+			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+		return -1;
+	}
+	f = fopen(path, "w");
+	if (!f) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to open %s", path);
+		return -1;
+	}
+	if (fprintf(f, "%d\n", target_pid) < 0) {
+		fclose(f);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to open %s", path);
+		return -1;
+	}
+	if (fclose(f) != 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to write %d to %s", (int)target_pid, path);
+		return -1;
+	}
+	nih_info("%d moved to %s:%s by %d's request", (int)target_pid,
+		controller, cgroup, (int)ucred.pid);
+	*ok = 1;
+	return 0;
+}
+
+
 /* 
  * This is one of the dbus callbacks.
  * Caller requests his own cgroup name for a given @controller.  The
