@@ -250,9 +250,13 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 		return -1;
 	}
 	if (strlen(vcgpath) == rlen)
-		*output = strdup("/");
+		*output = nih_strdup(message, "/");
 	else
-		*output = strdup(vcgpath + rlen + 1);
+		*output = nih_strdup(message, vcgpath + rlen + 1);
+
+	if (! *output)
+		nih_return_no_memory_error(-1);
+
 	return 0;
 }
 
@@ -411,7 +415,8 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
-	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *copy, *fnam, *dnam;
+	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *fnam, *dnam;
+	nih_local char *copy = NULL;
 
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -453,7 +458,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 			"Path name too long");
 		return -1;
 	}
-	copy = strdup(cgroup);
+	copy = nih_strdup(NULL, cgroup);
 	if (!copy) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
 			"Out of memory copying cgroup name");
@@ -470,14 +475,12 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		if (!(tmppath = realpath(path, NULL))) {
 			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"Invalid path %s", path);
-			free(copy);
 			return -1;
 		}
 		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
 			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"Invalid cgroup path %s requested by pid %d",
 				  path, (int)ucred.pid);
-			free(copy);
 			free(tmppath);
 			return -1;
 		}
@@ -489,14 +492,12 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"pid %d (uid %d gid %d) may not create under %s",
 			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
-		free(copy);
 		return -1;
 	}
 	strncat(path, "/", MAXPATHLEN-1);
 	strncat(path, fnam, MAXPATHLEN-1);
 	ret = mkdir(path, 0755);
 	if (ret < 0) {  // Should we ignore EEXIST?  Ok, but don't chown.
-		free(copy);
 		if (errno == EEXIST)
 			return 0;
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -509,11 +510,9 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 			"Failed to change ownership on %s to %d:%d",
 			path, (int)ucred.uid, (int)ucred.gid);
 		rmdir(path);
-		free(copy);
 		return -1;
 	}
 
-	free(copy);
 	nih_info("Created %s for %d (%d:%d)", path, (int)ucred.pid,
 		 (int)ucred.uid, (int)ucred.gid);
 	return 0;
