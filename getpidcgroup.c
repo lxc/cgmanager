@@ -31,6 +31,8 @@
 #include <sys/param.h>
 #include <stdbool.h>
 #include <libgen.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -43,6 +45,7 @@
 
 #include <nih-dbus/dbus_connection.h>
 #include <nih-dbus/dbus_proxy.h>
+#include <nih-dbus/dbus_error.h>
 
 #include <sys/socket.h>
 
@@ -138,7 +141,7 @@ main (int   argc,
 {
 	char **             args;
 	DBusConnection *    conn;
-	int fd, optval = 1, exitval = 1, ret;
+	int fd, optval = 1, exitval = 1;
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
