@@ -1,5 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -ggdb -D_GNU_SOURCE
+CFLAGS += $(shell pkg-config --cflags dbus-1)
+LDFLAGS = $(shell pkg-config --libs dbus-1 libnih libnih-dbus)
 
 all: cgmanager client movepid getpidcgroup chowncgroup
 
@@ -15,21 +17,21 @@ org.linuxcontainers.cgmanager.h:
 	nih-dbus-tool --package=cgmanager --mode=object --prefix=cgmanager --default-interface=org.linuxcontainers.cgmanager0_0 org.linuxcontainers.cgmanager.xml
 
 cgmanager: org.linuxcontainers.cgmanager.h fs.h fs.c cgmanager.c
-	$(CC) $(CFLAGS) -D_GNU_SOURCE $(shell pkg-config --cflags dbus-1) org.linuxcontainers.cgmanager.c cgmanager.c fs.c -ldbus-1 -lnih -lnih-dbus -o cgmanager
+	$(CC) $(CFLAGS) -D_GNU_SOURCE org.linuxcontainers.cgmanager.c cgmanager.c fs.c $(LDFLAGS) -o cgmanager
 
 getpidcgroup: getpidcgroup.c
-	$(CC) $(CFLAGS) $(shell pkg-config --cflags dbus-1) getpidcgroup.c -ldbus-1 -lnih -lnih-dbus -o getpidcgroup
+	$(CC) $(CFLAGS) getpidcgroup.c $(LDFLAGS) -o getpidcgroup
 
 chowncgroup: chowncgroup.c
-	$(CC) $(CFLAGS) $(shell pkg-config --cflags dbus-1) chowncgroup.c -ldbus-1 -lnih -lnih-dbus -o chowncgroup
+	$(CC) $(CFLAGS) chowncgroup.c $(LDFLAGS) -o chowncgroup
 
 movepid: movepid.c
-	$(CC) $(CFLAGS) $(shell pkg-config --cflags dbus-1) movepid.c -ldbus-1 -lnih -lnih-dbus -o movepid
+	$(CC) $(CFLAGS) movepid.c $(LDFLAGS) -o movepid
 
 client: cgmanager-client.o
 
 cgmanager-client.o: cgmanager-client.h cgmanager-client.c
-		$(CC) $(CFLAGS) $(shell pkg-config --cflags dbus-1) -c -I. cgmanager-client.c -ldbus-1 -lnih -lnih-dbus
+		$(CC) $(CFLAGS) -c -I. cgmanager-client.c $(LDFLAGS)
 
 cgmanager-client.h:
 	nih-dbus-tool \
