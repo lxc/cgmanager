@@ -35,6 +35,7 @@
 #include <fcntl.h>
 #include <sys/param.h>
 #include <stdbool.h>
+#include <dirent.h>
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -226,11 +227,16 @@ static inline void drop_newlines(char *s)
 {
 	int l;
 
-	while ((l=strlen(s)) > 0 && s[l-1] == '\n')
+	for (l=strlen(s); l>0 && s[l-1] == '\n'; l--)
 		s[l-1] = '\0';
 }
 
 #define min(x, y) (x > y ? y : x)
+/*
+ * pid_cgroup: return the cgroup of @pid for @controller.
+ * retv must be a (at least) MAXPATHLEN size buffer into
+ * which the answer will be copied.
+ */
 static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 {
 	FILE *f;
@@ -272,7 +278,7 @@ found:
 
 /*
  * Given host @uid, return the uid to which it maps in
- * the namespace, or -1 if none.
+ * @pid's user namespace, or -1 if none.
  */
 uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 {
@@ -303,7 +309,8 @@ uid_t hostuid_to_ns(uid_t uid, pid_t pid)
  * there, or if the gids are the same and path has mode
  * in group rights, or if path has mode in other rights.
  *
- * uid and gid are passed in to avoid recomputation.
+ * uid and gid are passed in to avoid recomputation.  uid
+ * and gid are the host uids, not mapped into the ns.
  */
 bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 {
@@ -445,6 +452,11 @@ out:
 	return string;
 }
 
+/*
+ * get_pid_creds: get the real uid and gid of @pid from
+ * /proc/$$/status
+ * (XXX should we use euid here?)
+ */
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 {
 	char line[400];
@@ -477,3 +489,51 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 	}
 	fclose(f);
 }
+
+/*
+ * Given a directory path, chown it to a userid.
+ * We will chown $path and try to chown $path/tasks and $path/procs.
+ * if @all_children is true, then chown all files under @path.  (This
+ * is for the case where the caller had the rights to mkdir the path.
+ * In that case he gets to write to all files - the kernel will ensure
+ * hierarhical limits)
+ *
+ * Return true so long as we could chown the directory itself.
+ */
+bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children)
+{
+	int len = strlen(path), ret;
+	nih_local char *fpath = NULL;
+
+	if (chown(path, uid, gid) < 0)
+		return false;
+	if (all_children) {
+		struct dirent dirent, *direntp;
+		char fpath[MAXPATHLEN];
+		DIR *d = opendir(path);
+		if (len >= MAXPATHLEN)
+			return true;
+		strcpy(fpath, path);
+		while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
+			if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
+				continue;
+			ret = snprintf(fpath+len, MAXPATHLEN-len, "/%s", direntp->d_name);
+			if (ret < 0 || ret >= MAXPATHLEN-len)
+				continue;
+			if (chown(fpath, uid, gid) < 0)
+				nih_info("Failed to chown file %s to %d:%d",
+					fpath, (int)uid, (int)gid);
+		}
+		closedir(d);
+	} else
+		fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
+		if (!fpath)
+			return true;
+		if (chown(fpath, uid, gid) < 0)
+			nih_info("Failed to chown procs file %s", fpath);
+		sprintf(fpath+len, "/tasks");
+		if (chown(fpath, uid, gid) < 0)
+			nih_info("Failed to chown tasks file %s", fpath);
+	return true;
+}
+

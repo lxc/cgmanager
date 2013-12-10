@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -ggdb -D_GNU_SOURCE
 
-all: cgmanager client movepid getpidcgroup
+all: cgmanager client movepid getpidcgroup chowncgroup
 
 clean:
 	rm -f \
@@ -9,7 +9,7 @@ clean:
 		cgmanager-client.c cgmanager-client.h \
 		cgmanager-client.o getpidcgroup \
 		cgmanager \
-		movepid cgmanager 
+		movepid cgmanager chowncgroup
 
 org.linuxcontainers.cgmanager.h:
 	nih-dbus-tool --package=cgmanager --mode=object --prefix=cgmanager --default-interface=org.linuxcontainers.cgmanager0_0 org.linuxcontainers.cgmanager.xml
@@ -19,6 +19,9 @@ cgmanager: org.linuxcontainers.cgmanager.h fs.h fs.c cgmanager.c
 
 getpidcgroup: getpidcgroup.c
 	$(CC) $(CFLAGS) $(shell pkg-config --cflags dbus-1) getpidcgroup.c -ldbus-1 -lnih -lnih-dbus -o getpidcgroup
+
+chowncgroup: chowncgroup.c
+	$(CC) $(CFLAGS) $(shell pkg-config --cflags dbus-1) chowncgroup.c -ldbus-1 -lnih -lnih-dbus -o chowncgroup
 
 movepid: movepid.c
 	$(CC) $(CFLAGS) $(shell pkg-config --cflags dbus-1) movepid.c -ldbus-1 -lnih -lnih-dbus -o movepid
