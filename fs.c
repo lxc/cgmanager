@@ -232,6 +232,11 @@ static inline void drop_newlines(char *s)
 }
 
 #define min(x, y) (x > y ? y : x)
+/*
+ * pid_cgroup: return the cgroup of @pid for @controller.
+ * retv must be a (at least) MAXPATHLEN size buffer into
+ * which the answer will be copied.
+ */
 static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 {
 	FILE *f;
@@ -273,7 +278,7 @@ found:
 
 /*
  * Given host @uid, return the uid to which it maps in
- * the namespace, or -1 if none.
+ * @pid's user namespace, or -1 if none.
  */
 uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 {
@@ -304,7 +309,8 @@ uid_t hostuid_to_ns(uid_t uid, pid_t pid)
  * there, or if the gids are the same and path has mode
  * in group rights, or if path has mode in other rights.
  *
- * uid and gid are passed in to avoid recomputation.
+ * uid and gid are passed in to avoid recomputation.  uid
+ * and gid are the host uids, not mapped into the ns.
  */
 bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 {
@@ -446,6 +452,11 @@ out:
 	return string;
 }
 
+/*
+ * get_pid_creds: get the real uid and gid of @pid from
+ * /proc/$$/status
+ * (XXX should we use euid here?)
+ */
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 {
 	char line[400];
