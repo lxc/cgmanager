@@ -32,8 +32,7 @@
     <method name="Chown">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
-      <arg name="uid" type="i" direction="in" />
-      <!-- uid is passed as scm_cred if r is not in init_user_ns -->
+      <!-- uid+gid is passed as scm_cred -->
     </method>
     <method name="movePid">
       <arg name="controller" type="s" direction="in" />

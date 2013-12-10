@@ -68,8 +68,9 @@ static unsigned long mypidns;
 /*
  * Get a pid passed in a SCM_CREDENTIAL over a unix socket
  * @sock: the socket fd.
+ * Credentials are invalid of *p == 1.
  */
-static pid_t get_scm_pid(int sock)
+static void get_scm_creds(int sock, uid_t *u, gid_t *g, pid_t *p)
 {
         struct msghdr msg = { 0 };
         struct iovec iov;
@@ -80,6 +81,8 @@ static pid_t get_scm_pid(int sock)
 	int ret, tries=0;
 
 	cred.pid = -1;
+	cred.uid = -1;
+	cred.gid = -1;
         msg.msg_name = NULL;
         msg.msg_namelen = 0;
         msg.msg_control = cmsgbuf;
@@ -96,7 +99,7 @@ static pid_t get_scm_pid(int sock)
 again:
 	ret = recvmsg(sock, &msg, 0);
 	if (ret < 0) {
-		if (tries++ == 0) {
+		if (tries++ == 0 && errno == EAGAIN) {
 			nih_info("got EAGAIN for scm_cred");
 			sleep(1);
 			goto again;
@@ -114,7 +117,20 @@ again:
 		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
         }
 out:
-        return cred.pid;
+	*u = cred.uid;
+	*g = cred.gid;
+	*p = cred.pid;
+        return;
+}
+
+static pid_t get_scm_pid(int sock)
+{
+	pid_t p;
+	uid_t u;
+	gid_t g;
+
+	get_scm_creds(sock, &u, &g, &p);
+	return p;
 }
 
 /*
@@ -208,6 +224,8 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
+	/* Todo - we don't want to waste time waiting for scm_pid if none
+	 * will be available. */
 	target_pid = get_scm_pid(fd);
 
 	if (target_pid == -1) {
@@ -260,6 +278,25 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	return 0;
 }
 
+static bool realpath_escapes(char *path, char *safety)
+{
+		/* Make sure r doesn't try to escape his cgroup with .. */
+	char *tmppath;
+	if (!(tmppath = realpath(path, NULL))) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Invalid path %s", path);
+		return true;
+	}
+	if (strncmp(safety, tmppath, strlen(safety)) != 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Improper requested path %s escapes safety %s", path, safety);
+		free(tmppath);
+		return true;
+	}
+	free(tmppath);
+	return false;
+}
+
 /*
  * This is one of the dbus callbacks.
  * Caller requests moving a @pid to a particular cgroup identified
@@ -292,10 +329,9 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	if (plain_pid == ucred.pid)
-		target_pid = plain_pid;
-	else
-		target_pid = get_scm_pid(fd);
+	/* Todo - we don't want to waste time waiting for scm_pid if none
+	 * will be available. */
+	target_pid = get_scm_pid(fd);
 
 	if (target_pid == -1) {
 		// non-root users can't send an SCM_CREDENTIAL for tasks
@@ -348,22 +384,10 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	strcpy(path, rcgpath);
 	strncat(path, "/", MAXPATHLEN-1);
 	strncat(path, cgroup, MAXPATHLEN-1);
-	{
-		/* Make sure r doesn't try to escape his cgroup with .. */
-		char *tmppath;
-		if (!(tmppath = realpath(path, NULL))) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Invalid path %s", path);
-			return -1;
-		}
-		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Invalid cgroup path %s requested by pid %d",
-				  path, (int)ucred.pid);
-			free(tmppath);
-			return -1;
-		}
-		free(tmppath);
+	if (realpath_escapes(path, rcgpath)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Invalid path %s", path);
+		return -1;
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
@@ -401,6 +425,28 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 		controller, cgroup, (int)ucred.pid);
 	*ok = 1;
 	return 0;
+}
+
+/*
+ * Given a directory path, chown it to a userid.
+ * We will chown $path and try to chown $path/tasks and $path/procs.
+ * Return true so long as we could chown the directory itself.
+ */
+static bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid)
+{
+	nih_local char *fpath = NULL;
+	int len = strlen(path);
+	if (chown(path, uid, gid) < 0)
+		return false;
+	fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
+	if (!fpath)
+		return true;
+	if (chown_cgroup_path(fpath, uid, gid) < 0)
+		nih_info("Failed to chown procs file %s", fpath);
+	sprintf(fpath+len, "tasks");
+	if (chown_cgroup_path(fpath, uid, gid) < 0)
+		nih_info("Failed to chown tasks file %s", fpath);
+	return true;
 }
 
 /* 
@@ -468,23 +514,14 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	dnam = dirname(copy);
 	strcpy(path, rcgpath);
 	if (strcmp(dnam, ".") != 0) {
-		char *tmppath;
 		// verify that the real path is below the controller path
 		strncat(path, "/", MAXPATHLEN-1);
 		strncat(path, dnam, MAXPATHLEN-1);
-		if (!(tmppath = realpath(path, NULL))) {
+		if (realpath_escapes(path, rcgpath)) {
 			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"Invalid path %s", path);
 			return -1;
 		}
-		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Invalid cgroup path %s requested by pid %d",
-				  path, (int)ucred.pid);
-			free(tmppath);
-			return -1;
-		}
-		free(tmppath);
 	}
 
 	// is r allowed to create under the parent dir?
@@ -504,8 +541,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 			"failed to create %s", path);
 		return -1;
 	}
-	ret = chown(path, ucred.uid, ucred.gid);
-	if (ret < 0) {
+	if (!chown_cgroup_path(path, ucred.uid, ucred.gid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to change ownership on %s to %d:%d",
 			path, (int)ucred.uid, (int)ucred.gid);
@@ -521,21 +557,25 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 /*
  * This is one of the dbus callbacks.
  * Caller requests chowning a cgroup @name in controoler @cgroup to a
- * particular @uid.  If the caller is not in init_user_ns, then the
- * uid must be passed in as an scm_cred so the kernel translates it
- * for us.  @r must be root in its own user ns.
+ * particular @uid.  The uid must be passed in as an scm_cred so the
+ * kernel translates it for us.  @r must be root in its own user ns.
+ *
+ * If we are asked to chown /b to UID, then we will chown:
+ * /b itself, /b/tasks, and /b/procs.  Any other files in /b will not be
+ * chown.  UID can then create subdirs of /b, but not raise his limits.
  */
 int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int uid)
+			const char *controller, char *cgroup)
 {
-	int fd = 0, ret;
+	int fd = 0;
 	struct ucred ucred;
 	socklen_t len;
 	pid_t target_pid;
-	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
-	FILE *f;
+	uid_t target_uid;
+	gid_t target_gid;
+	char rcgpath[MAXPATHLEN];
+	nih_local char *path = NULL;
 
-	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -551,35 +591,21 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	if (plain_pid == ucred.pid)
-		target_pid = plain_pid;
-	else
-		target_pid = get_scm_pid(fd);
-
-	if (target_pid == -1) {
-		// non-root users can't send an SCM_CREDENTIAL for tasks
-		// other than themselves.  For that case we accept a pid
-		// as an integer only from our own pidns Non-root users
-		// in another pidns will have to go through a root-owned
-		// proxy in their own pidns.
-		if (is_same_pidns((int)ucred.pid)) {
-			nih_info("Using plain pid %d", (int)plain_pid);
-			target_pid = plain_pid;
-		}
-	}
-
-	if (target_pid == -1) {
+	/* If caller is not root in his userns, then he can't chown, as
+	 * that requires privilege over two uids */
+	if (hostuid_to_ns(ucred.uid, ucred.pid) != 0) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not get target pid from socket");
+			"Chown requested by non-root uid %d", ucred.uid);
 		return -1;
 	}
 
-	// verify that ucred.pid may move target_pid
-	if (!may_move_pid(ucred.pid, ucred.uid, target_pid)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					     "%d may not move %d", (int)ucred.pid,
-					     (int)target_pid);
-		return -1;
+	get_scm_creds(fd, &target_uid, &target_gid, &target_pid);
+
+	if (target_pid == -1) {
+		/* note, only root in his ns can call chown - so we 
+		 * can assume he can send an SCM_CRED */
+		nih_dbus_error_raise_printf(DBUS_ERROR_INVALID_ARGS,
+			"Could not calculate desired uid and gid");
 	}
 
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
@@ -598,31 +624,22 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 			"Could not determine the requested cgroup");
 		return -1;
 	}
-	/* rcgpath + / + cgroup + /tasks + \0 */
-	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+8) {
+	/* rcgpath + / + cgroup + \0 */
+	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+2) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Path name too long");
 		return -1;
 	}
-	strcpy(path, rcgpath);
-	strncat(path, "/", MAXPATHLEN-1);
-	strncat(path, cgroup, MAXPATHLEN-1);
-	{
-		/* Make sure r doesn't try to escape his cgroup with .. */
-		char *tmppath;
-		if (!(tmppath = realpath(path, NULL))) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Invalid path %s", path);
-			return -1;
-		}
-		if (strncmp(rcgpath, tmppath, strlen(rcgpath)) != 0) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Invalid cgroup path %s requested by pid %d",
-				  path, (int)ucred.pid);
-			free(tmppath);
-			return -1;
-		}
-		free(tmppath);
+	path = nih_sprintf(NULL, "%s/%s", rcgpath, cgroup);
+	if (!path) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory calculating pathname");
+		return -1;
+	}
+	if (realpath_escapes(path, rcgpath)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Invalid path %s", path);
+		return -1;
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
@@ -631,37 +648,20 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
 		return -1;
 	}
-	// is r allowed to write to tasks file?
-	strncat(path, "/tasks", MAXPATHLEN-1);
-	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_WRONLY)) {
+
+	// does r have privilege over the cgroup dir?
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"pid %d (uid %d gid %d) may not write under %s",
-			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+			"Pid %d may not chown %s\n", (int)ucred.pid, path);
 		return -1;
 	}
-	f = fopen(path, "w");
-	if (!f) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to open %s", path);
+
+	// go ahead and chown it.
+	if (!chown_cgroup_path(path, target_uid, target_gid))
 		return -1;
-	}
-	if (fprintf(f, "%d\n", target_pid) < 0) {
-		fclose(f);
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to open %s", path);
-		return -1;
-	}
-	if (fclose(f) != 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to write %d to %s", (int)target_pid, path);
-		return -1;
-	}
-	nih_info("%d moved to %s:%s by %d's request", (int)target_pid,
-		controller, cgroup, (int)ucred.pid);
-	*ok = 1;
+
 	return 0;
 }
-
 
 /* 
  * This is one of the dbus callbacks.
