@@ -227,7 +227,7 @@ static inline void drop_newlines(char *s)
 {
 	int l;
 
-	while ((l=strlen(s)) > 0 && s[l-1] == '\n')
+	for (l=strlen(s); l>0 && s[l-1] == '\n'; l--)
 		s[l-1] = '\0';
 }
 
