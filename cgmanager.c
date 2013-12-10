@@ -443,7 +443,7 @@ static bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid)
 		return true;
 	if (chown_cgroup_path(fpath, uid, gid) < 0)
 		nih_info("Failed to chown procs file %s", fpath);
-	sprintf(fpath+len, "tasks");
+	sprintf(fpath+len, "/tasks");
 	if (chown_cgroup_path(fpath, uid, gid) < 0)
 		nih_info("Failed to chown tasks file %s", fpath);
 	return true;
@@ -563,9 +563,11 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  * If we are asked to chown /b to UID, then we will chown:
  * /b itself, /b/tasks, and /b/procs.  Any other files in /b will not be
  * chown.  UID can then create subdirs of /b, but not raise his limits.
+ *
+ * On success, ok will be sent with value 1.  On failure, -1.
  */
 int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup)
+			const char *controller, char *cgroup, int *ok)
 {
 	int fd = 0;
 	struct ucred ucred;
@@ -576,6 +578,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	char rcgpath[MAXPATHLEN];
 	nih_local char *path = NULL;
 
+	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -660,6 +663,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	if (!chown_cgroup_path(path, target_uid, target_gid))
 		return -1;
 
+	*ok = 1;
 	return 0;
 }
 
