@@ -800,6 +800,87 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	return 0;
 }
 
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests that a particular cgroup @key be set to @value
+ * @controller is the controller, @req_cgroup the cgroup name, and @key the
+ * file being queried (i.e. memory.usage_in_bytes).  @req_cgroup is relative
+ * to the caller's cgroup.
+ *
+ * @ok is set to 1 if succeeds, -1 otherwise
+ */
+int cgmanager_set_value (void *data, NihDBusMessage *message,
+				 const char *controller, const char *req_cgroup,
+		                 const char *key, const char *value, int *ok)
+
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+	char path[MAXPATHLEN];
+
+	*ok = -1;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Message was NULL");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not determine the requested cgroup");
+		return -1;
+	}
+
+	/* Check access rights to the cgroup directory */
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Pid %d may not access %s\n", (int)ucred.pid, path);
+		return -1;
+	}
+
+	/* append the filename */
+	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"filename too long for cgroup %s key %s", path, key);
+		return -1;
+	}
+
+	strncat(path, "/", MAXPATHLEN-1);
+	strncat(path, key, MAXPATHLEN-1);
+
+	/* Check access rights to the file itself */
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Pid %d may not access %s\n", (int)ucred.pid, path);
+		return -1;
+	}
+
+	/* read and return the value */
+	if (!set_value(path, value)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to set value %s to %s", path, value);
+		return -1;
+	}
+
+	*ok = 1;
+	return 0;
+}
+
+
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)
 {
 	return TRUE;

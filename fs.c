@@ -537,3 +537,28 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 	return true;
 }
 
+bool set_value(const char *path, const char *value)
+{
+	int len = strlen(value);
+	FILE *f;
+
+	if (!value)
+		value = "";
+	if ((f = fopen(path, "w")) == NULL) {
+		nih_error("Error opening %s for writing", path);
+		return false;
+	}
+	if (fprintf(f, "%s", value) < 0) {
+		nih_error("Error writing %s to %s: %s", value, path,
+			  strerror(errno));
+		fclose(f);
+		return false;
+	}
+	if (*value && value[len-1] != '\n')
+		fprintf(f, "\n");
+	if (fclose(f) != 0) {
+		nih_error("Error closing %s", path);
+		return false;
+	}
+	return true;
+}

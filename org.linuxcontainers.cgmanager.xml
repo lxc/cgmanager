@@ -48,5 +48,12 @@
       <arg name="key" type="s" direction="in" />
       <arg name="value" type="s" direction="out" />
     </method>
+    <method name="setValue">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="key" type="s" direction="in" />
+      <arg name="value" type="s" direction="in" />
+      <arg name="ok" type="i" direction="out" />
+    </method>
   </interface>
 </node>
