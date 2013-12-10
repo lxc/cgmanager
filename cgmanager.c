@@ -283,13 +283,12 @@ static bool realpath_escapes(char *path, char *safety)
 		/* Make sure r doesn't try to escape his cgroup with .. */
 	char *tmppath;
 	if (!(tmppath = realpath(path, NULL))) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Invalid path %s", path);
+		nih_error("Invalid path %s", path);
 		return true;
 	}
 	if (strncmp(safety, tmppath, strlen(safety)) != 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Improper requested path %s escapes safety %s", path, safety);
+		nih_error("Improper requested path %s escapes safety %s",
+			   path, safety);
 		free(tmppath);
 		return true;
 	}
@@ -496,6 +495,8 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		strncat(path, "/", MAXPATHLEN-1);
 		strncat(path, dnam, MAXPATHLEN-1);
 		if (realpath_escapes(path, rcgpath)) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Invalid path %s", path);
 			return -1;
 		}
 	}
