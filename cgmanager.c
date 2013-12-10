@@ -427,28 +427,6 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	return 0;
 }
 
-/*
- * Given a directory path, chown it to a userid.
- * We will chown $path and try to chown $path/tasks and $path/procs.
- * Return true so long as we could chown the directory itself.
- */
-static bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid)
-{
-	nih_local char *fpath = NULL;
-	int len = strlen(path);
-	if (chown(path, uid, gid) < 0)
-		return false;
-	fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
-	if (!fpath)
-		return true;
-	if (chown(fpath, uid, gid) < 0)
-		nih_info("Failed to chown procs file %s", fpath);
-	sprintf(fpath+len, "/tasks");
-	if (chown(fpath, uid, gid) < 0)
-		nih_info("Failed to chown tasks file %s", fpath);
-	return true;
-}
-
 /* 
  * This is one of the dbus callbacks.
  * Caller requests creating a new @cgroup name of type @controller.
@@ -541,7 +519,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 			"failed to create %s", path);
 		return -1;
 	}
-	if (!chown_cgroup_path(path, ucred.uid, ucred.gid)) {
+	if (!chown_cgroup_path(path, ucred.uid, ucred.gid, true)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to change ownership on %s to %d:%d",
 			path, (int)ucred.uid, (int)ucred.gid);
@@ -661,7 +639,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	}
 
 	// go ahead and chown it.
-	if (!chown_cgroup_path(path, target_uid, target_gid))
+	if (!chown_cgroup_path(path, target_uid, target_gid, false))
 		return -1;
 
 	*ok = 1;

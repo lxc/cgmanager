@@ -35,6 +35,7 @@
 #include <fcntl.h>
 #include <sys/param.h>
 #include <stdbool.h>
+#include <dirent.h>
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -477,3 +478,51 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 	}
 	fclose(f);
 }
+
+/*
+ * Given a directory path, chown it to a userid.
+ * We will chown $path and try to chown $path/tasks and $path/procs.
+ * if @all_children is true, then chown all files under @path.  (This
+ * is for the case where the caller had the rights to mkdir the path.
+ * In that case he gets to write to all files - the kernel will ensure
+ * hierarhical limits)
+ *
+ * Return true so long as we could chown the directory itself.
+ */
+bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children)
+{
+	int len = strlen(path), ret;
+	nih_local char *fpath = NULL;
+
+	if (chown(path, uid, gid) < 0)
+		return false;
+	if (all_children) {
+		struct dirent dirent, *direntp;
+		char fpath[MAXPATHLEN];
+		DIR *d = opendir(path);
+		if (len >= MAXPATHLEN)
+			return true;
+		strcpy(fpath, path);
+		while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
+			if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
+				continue;
+			ret = snprintf(fpath+len, MAXPATHLEN-len, "/%s", direntp->d_name);
+			if (ret < 0 || ret >= MAXPATHLEN-len)
+				continue;
+			if (chown(fpath, uid, gid) < 0)
+				nih_info("Failed to chown file %s to %d:%d",
+					fpath, (int)uid, (int)gid);
+		}
+		closedir(d);
+	} else
+		fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
+		if (!fpath)
+			return true;
+		if (chown(fpath, uid, gid) < 0)
+			nih_info("Failed to chown procs file %s", fpath);
+		sprintf(fpath+len, "/tasks");
+		if (chown(fpath, uid, gid) < 0)
+			nih_info("Failed to chown tasks file %s", fpath);
+	return true;
+}
+
