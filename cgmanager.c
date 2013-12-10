@@ -609,6 +609,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 		 * can assume he can send an SCM_CRED */
 		nih_dbus_error_raise_printf(DBUS_ERROR_INVALID_ARGS,
 			"Could not calculate desired uid and gid");
+		return -1;
 	}
 
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
