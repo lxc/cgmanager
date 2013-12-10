@@ -496,8 +496,6 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		strncat(path, "/", MAXPATHLEN-1);
 		strncat(path, dnam, MAXPATHLEN-1);
 		if (realpath_escapes(path, rcgpath)) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Invalid path %s", path);
 			return -1;
 		}
 	}
