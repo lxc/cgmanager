@@ -441,10 +441,10 @@ static bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid)
 	fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
 	if (!fpath)
 		return true;
-	if (chown_cgroup_path(fpath, uid, gid) < 0)
+	if (chown(fpath, uid, gid) < 0)
 		nih_info("Failed to chown procs file %s", fpath);
 	sprintf(fpath+len, "/tasks");
-	if (chown_cgroup_path(fpath, uid, gid) < 0)
+	if (chown(fpath, uid, gid) < 0)
 		nih_info("Failed to chown tasks file %s", fpath);
 	return true;
 }
