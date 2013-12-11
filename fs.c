@@ -1,4 +1,4 @@
-/* cgmanager
+/*
  *
  * Copyright © 2013 Serge Hallyn
  * Author: Serge Hallyn <serge.hallyn@ubuntu.com>
