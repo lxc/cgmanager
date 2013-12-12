@@ -231,7 +231,6 @@ static inline void drop_newlines(char *s)
 		s[l-1] = '\0';
 }
 
-#define min(x, y) (x > y ? y : x)
 /*
  * pid_cgroup: return the cgroup of @pid for @controller.
  * retv must be a (at least) MAXPATHLEN size buffer into
@@ -502,17 +501,28 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
  */
 bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children)
 {
-	int len = strlen(path), ret;
+	int len, ret;
 	nih_local char *fpath = NULL;
+
+	nih_assert (path);
+
+	len = strlen(path);
 
 	if (chown(path, uid, gid) < 0)
 		return false;
+
 	if (all_children) {
 		struct dirent dirent, *direntp;
 		char fpath[MAXPATHLEN];
-		DIR *d = opendir(path);
+		DIR *d;
+
 		if (len >= MAXPATHLEN)
 			return true;
+
+		d = opendir(path);
+		if (!d)
+			goto out;
+
 		strcpy(fpath, path);
 		while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
 			if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
@@ -525,7 +535,7 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 					fpath, (int)uid, (int)gid);
 		}
 		closedir(d);
-	} else
+	} else {
 		fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
 		if (!fpath)
 			return true;
@@ -534,16 +544,24 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		sprintf(fpath+len, "/tasks");
 		if (chown(fpath, uid, gid) < 0)
 			nih_info("Failed to chown tasks file %s", fpath);
+	}
+
+out:
 	return true;
 }
 
 bool set_value(const char *path, const char *value)
 {
-	int len = strlen(value);
+	int len;
 	FILE *f;
+
+	nih_assert (path);
 
 	if (!value)
 		value = "";
+
+	len = strlen(value);
+
 	if ((f = fopen(path, "w")) == NULL) {
 		nih_error("Error opening %s for writing", path);
 		return false;
