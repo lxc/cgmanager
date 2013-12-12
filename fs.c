@@ -418,7 +418,20 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 	return true;
 }
 
-char *file_read_string(const char *path)
+/*
+ * file_read_string:
+ *
+ * @parent: parent which will be given a reference to the returned string
+ * (to allow the returned value to be freed automatically when @parent is
+ * freed).
+ * @path: Full path to file to read.
+ *
+ * Read specified file and return its contents.
+ *
+ * Returns: newly-allocated contents of file @path, or NULL on
+ * insufficient memory.
+ */
+char *file_read_string(void *parent, const char *path)
 {
 	int ret, fd = open(path, O_RDONLY);
 	char *string = NULL;
@@ -431,8 +444,9 @@ char *file_read_string(const char *path)
 	while (1) {
 		char *n;
 		sz += 1024;
-		if (!(n = realloc(string, sz))) {
-			free(string);
+		if (!(n = nih_realloc(string, parent, sz))) {
+			if (string)
+				nih_free(string);
 			string = NULL;
 			goto out;
 		}
@@ -440,7 +454,7 @@ char *file_read_string(const char *path)
 		memset(string+sz-1024, 0, 1024);
 		ret = read(fd, string+sz-1024, 1024);
 		if (ret < 0) {
-			free(string);
+			nih_free(string);
 			string = NULL;
 			goto out;
 		}
@@ -449,6 +463,8 @@ char *file_read_string(const char *path)
 	}
 out:
 	close(fd);
+	if (string && *string)
+		drop_newlines(string);
 	return string;
 }
 
