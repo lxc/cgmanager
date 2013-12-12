@@ -533,7 +533,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 /*
  * This is one of the dbus callbacks.
- * Caller requests chowning a cgroup @name in controoler @cgroup to a
+ * Caller requests chowning a cgroup @name in controller @cgroup to a
  * particular @uid.  The uid must be passed in as an scm_cred so the
  * kernel translates it for us.  @r must be root in its own user ns.
  *
@@ -648,8 +648,8 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 /* 
  * This is one of the dbus callbacks.
  * Caller requests his own cgroup name for a given @controller.  The
- * name is returned as a malloced string in @value, and is the full
- * cgroup path.
+ * name is returned as a nih_alloc'd string in @value with parent
+ * @message, and is the full cgroup path.
  * This function may not be part of the final api, but is useful for
  * debugging now.
  * (The 'get-cgroup-bypid' callback will return a cgroup relative to
@@ -748,7 +748,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+		                             "Could not get client socket.");
 		return -1;
 	}
 
@@ -789,7 +789,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	}
 
 	/* read and return the value */
-	*value = file_read_string(path);
+	*value = file_read_string(message, path);
 	if (!*value) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to read value from %s", path);
