@@ -3,20 +3,22 @@ CFLAGS = -Wall -ggdb -D_GNU_SOURCE
 CFLAGS += $(shell pkg-config --cflags dbus-1)
 LDFLAGS = $(shell pkg-config --libs dbus-1 libnih libnih-dbus)
 
-all: cgmanager client movepid getpidcgroup chowncgroup
+all: cgmanager client movepid getpidcgroup chowncgroup cgproxy
 
 clean:
 	rm -f \
 		org.linuxcontainers.cgmanager.h org.linuxcontainers.cgmanager.c \
 		cgmanager-client.c cgmanager-client.h \
-		cgmanager-client.o getpidcgroup \
-		movepid cgmanager chowncgroup
+		getpidcgroup movepid cgmanager chowncgroup cgproxy *.o
 
 org.linuxcontainers.cgmanager.h:
 	nih-dbus-tool --package=cgmanager --mode=object --prefix=cgmanager --default-interface=org.linuxcontainers.cgmanager0_0 org.linuxcontainers.cgmanager.xml
 
-cgmanager: org.linuxcontainers.cgmanager.h fs.h fs.c cgmanager.c
-	$(CC) $(CFLAGS) -D_GNU_SOURCE org.linuxcontainers.cgmanager.c cgmanager.c fs.c $(LDFLAGS) -o cgmanager
+cgmanager: org.linuxcontainers.cgmanager.h fs.h fs.c cgmanager.c access_checks.h access_checks.c
+	$(CC) $(CFLAGS) -D_GNU_SOURCE org.linuxcontainers.cgmanager.c cgmanager.c fs.c access_checks.c $(LDFLAGS) -o cgmanager
+
+cgproxy: org.linuxcontainers.cgmanager.c org.linuxcontainers.cgmanager.h cgmanager-proxy.c access_checks.c access_checks.h
+	$(CC) $(CFLAGS) -D_GNU_SOURCE org.linuxcontainers.cgmanager.c cgmanager-proxy.c fs.c access_checks.c $(LDFLAGS) -o cgproxy
 
 getpidcgroup: getpidcgroup.c
 	$(CC) $(CFLAGS) getpidcgroup.c $(LDFLAGS) -o getpidcgroup
@@ -26,6 +28,9 @@ chowncgroup: chowncgroup.c
 
 movepid: movepid.c
 	$(CC) $(CFLAGS) movepid.c $(LDFLAGS) -o movepid
+
+access_checks.o: access_checks.c access_checks.h
+	$(CC) $(CFLAGS) -c access_checks.c
 
 client: cgmanager-client.o
 

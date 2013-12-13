@@ -597,3 +597,40 @@ bool set_value(const char *path, const char *value)
 	}
 	return true;
 }
+
+/*
+ * Tiny helper to read the /proc/pid/ns/pid link for a given pid.
+ * @pid: the pid whose link name to look up
+ *
+ * TODO - switch to using stat() to get inode # ?
+ */
+unsigned long read_pid_ns_link(int pid)
+{
+	int ret;
+	struct stat sb;
+	char path[100];
+	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid);
+	if (ret < 0 || ret >= 100)
+		return false;
+	ret = stat(path, &sb);
+	return sb.st_ino;
+	return true;
+}
+
+bool realpath_escapes(char *path, char *safety)
+{
+		/* Make sure r doesn't try to escape his cgroup with .. */
+	char *tmppath;
+	if (!(tmppath = realpath(path, NULL))) {
+		nih_error("Invalid path %s", path);
+		return true;
+	}
+	if (strncmp(safety, tmppath, strlen(safety)) != 0) {
+		nih_error("Improper requested path %s escapes safety %s",
+			   path, safety);
+		free(tmppath);
+		return true;
+	}
+	free(tmppath);
+	return false;
+}

@@ -47,6 +47,7 @@
 #include <sys/socket.h>
 
 #include "fs.h"
+#include "access_checks.h"
 
 #include "org.linuxcontainers.cgmanager.h"
 
@@ -62,136 +63,8 @@
  **/
 static int daemonise = FALSE;
 
-static bool setns_pid_supported = false;
-static unsigned long mypidns;
-
-/*
- * Get a pid passed in a SCM_CREDENTIAL over a unix socket
- * @sock: the socket fd.
- * Credentials are invalid of *p == 1.
- */
-static void get_scm_creds(int sock, uid_t *u, gid_t *g, pid_t *p)
-{
-        struct msghdr msg = { 0 };
-        struct iovec iov;
-        struct cmsghdr *cmsg;
-	struct ucred cred;
-        char cmsgbuf[CMSG_SPACE(sizeof(cred))];
-        char buf[1];
-	int ret, tries=0;
-
-	cred.pid = -1;
-	cred.uid = -1;
-	cred.gid = -1;
-        msg.msg_name = NULL;
-        msg.msg_namelen = 0;
-        msg.msg_control = cmsgbuf;
-        msg.msg_controllen = sizeof(cmsgbuf);
-
-        iov.iov_base = buf;
-        iov.iov_len = sizeof(buf);
-        msg.msg_iov = &iov;
-        msg.msg_iovlen = 1;
-
-	// retry logic is not ideal, especially as we are not
-	// threaded.  Sleep at most 1 second waiting for the client
-	// to send us the scm_cred
-again:
-	ret = recvmsg(sock, &msg, 0);
-	if (ret < 0) {
-		if (tries++ == 0 && errno == EAGAIN) {
-			nih_info("got EAGAIN for scm_cred");
-			sleep(1);
-			goto again;
-		}
-		nih_error("Failed to receive scm_cred: %s",
-			  strerror(errno));
-		goto out;
-	}
-
-        cmsg = CMSG_FIRSTHDR(&msg);
-
-        if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)) &&
-            cmsg->cmsg_level == SOL_SOCKET &&
-            cmsg->cmsg_type == SCM_CREDENTIALS) {
-		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
-        }
-out:
-	*u = cred.uid;
-	*g = cred.gid;
-	*p = cred.pid;
-        return;
-}
-
-static pid_t get_scm_pid(int sock)
-{
-	pid_t p;
-	uid_t u;
-	gid_t g;
-
-	get_scm_creds(sock, &u, &g, &p);
-	return p;
-}
-
-/*
- * Tiny helper to read the /proc/pid/ns/pid link for a given pid.
- * @pid: the pid whose link name to look up
- *
- * TODO - switch to using stat() to get inode # ?
- */
-static unsigned long read_pid_ns_link(int pid)
-{
-	int ret;
-	struct stat sb;
-	char path[100];
-	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid);
-	if (ret < 0 || ret >= 100)
-		return false;
-	ret = stat(path, &sb);
-	return sb.st_ino;
-	return true;
-}
-
-/*
- * Return true if pid is in my pidns
- * Figure this out by comparing the /proc/pid/ns/pid link names.
- */
-static bool is_same_pidns(int pid)
-{
-	if (!setns_pid_supported)
-		return false;
-	if (read_pid_ns_link(pid) != mypidns)
-		return false;
-	return true;
-}
-
-/*
- * May the requestor @r move victim @v to a new cgroup?
- * This is allowed if
- *   . they are the same task
- *   . they are ownedy by the same uid
- *   . @r is root on the host, or
- *   . @v's uid is mapped into @r's where @r is root.
- *
- * XXX do we want to add a restriction that @v must already
- * be under @r's cgroup?
- */
-bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
-{
-	uid_t v_uid;
-	gid_t v_gid;
-
-	if (r == v)
-		return true;
-	if (r_uid == 0)
-		return true;
-	get_pid_creds(v, &v_uid, &v_gid);
-	if (r_uid == v_uid)
-		return true;
-	if (hostuid_to_ns(r_uid, r) == 0 && hostuid_to_ns(v_uid, r) != -1)
-		return true;
-	return false;
-}
+bool setns_pid_supported = false;
+unsigned long mypidns;
 
 /*
  * This is one of the dbus callbacks.
@@ -276,24 +149,6 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 		nih_return_no_memory_error(-1);
 
 	return 0;
-}
-
-static bool realpath_escapes(char *path, char *safety)
-{
-		/* Make sure r doesn't try to escape his cgroup with .. */
-	char *tmppath;
-	if (!(tmppath = realpath(path, NULL))) {
-		nih_error("Invalid path %s", path);
-		return true;
-	}
-	if (strncmp(safety, tmppath, strlen(safety)) != 0) {
-		nih_error("Improper requested path %s escapes safety %s",
-			   path, safety);
-		free(tmppath);
-		return true;
-	}
-	free(tmppath);
-	return false;
 }
 
 /*
@@ -883,7 +738,6 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	*ok = 1;
 	return 0;
 }
-
 
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)
 {
