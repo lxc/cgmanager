@@ -10,7 +10,6 @@ clean:
 		org.linuxcontainers.cgmanager.h org.linuxcontainers.cgmanager.c \
 		cgmanager-client.c cgmanager-client.h \
 		cgmanager-client.o getpidcgroup \
-		cgmanager \
 		movepid cgmanager chowncgroup
 
 org.linuxcontainers.cgmanager.h:
