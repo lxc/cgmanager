@@ -1,6 +1,10 @@
 cgmanager
-org.linuxcontainers.cgmanager.c
-org.linuxcontainers.cgmanager.h
-movepid
+cgmanager-client.c
+cgmanager-client.h
+cgproxy
 chowncgroup
 getpidcgroup
+movepid
+*.o
+org.linuxcontainers.cgmanager.c
+org.linuxcontainers.cgmanager.h
