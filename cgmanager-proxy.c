@@ -134,10 +134,8 @@ static bool proxy_get_pid_cgroup(pid_t pid, const char *controller,
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
-	int fd, optval = 1, retval = -1;
-
-	if (!dest || !*dest || *dest == '.' || *dest == '/')
-		return false;
+	int fd, optval = 1;
+	bool bret = false;
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
@@ -146,24 +144,24 @@ static bool proxy_get_pid_cgroup(pid_t pid, const char *controller,
 	if (!dbus_connection_get_socket(server_conn, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					"Could not get socket");
-		return -1;
+		return false;
 	}
 	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		perror("setsockopt");
-		return -1;
+		return false;
 	}
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
                                               &controller)) {
                 nih_error_raise_no_memory ();
-                return -1;
+                return false;
         }
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32,
                                               &pid)) {
                 nih_error_raise_no_memory ();
-                return -1;
+                return false;
         }
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
@@ -192,7 +190,7 @@ static bool proxy_get_pid_cgroup(pid_t pid, const char *controller,
 	char *str_value;
 	dbus_message_iter_get_basic(&iter, &str_value);
 	printf("%s\n", str_value);
-	retval = 0;
+	bret = true;
 
 out:
 	if (message)
@@ -200,7 +198,7 @@ out:
 	if (reply)
 		dbus_message_unref(reply);
 
-	return retval;
+	return bret;
 }
 
 /*
