@@ -143,7 +143,7 @@ static bool proxy_get_pid_cgroup(pid_t pid, const char *controller,
 
 	if (!dbus_connection_get_socket(server_conn, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					"Could not get socket");
+					"Could not get socket to send scm");
 		return false;
 	}
 	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
