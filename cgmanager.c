@@ -440,54 +440,21 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  *
  * On success, ok will be sent with value 1.  On failure, -1.
  */
-int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int *ok)
+int chown_cgroup_main (NihDBusMessage *message, const char *controller,
+		char *cgroup, struct ucred r, struct ucred v, int *ok)
 {
-	int fd = 0;
-	struct ucred ucred;
-	socklen_t len;
-	pid_t target_pid;
-	uid_t target_uid;
-	gid_t target_gid;
 	char rcgpath[MAXPATHLEN];
 	nih_local char *path = NULL;
 
 	*ok = -1;
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		return -1;
-	}
-
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	/* If caller is not root in his userns, then he can't chown, as
 	 * that requires privilege over two uids */
-	if (hostuid_to_ns(ucred.uid, ucred.pid) != 0) {
+	if (hostuid_to_ns(r.uid, r.pid) != 0) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Chown requested by non-root uid %d", ucred.uid);
 		return -1;
 	}
-
-	get_scm_creds(fd, &target_uid, &target_gid, &target_pid);
-
-	if (target_pid == -1) {
-		/* note, only root in his ns can call chown - so we 
-		 * can assume he can send an SCM_CRED */
-		nih_dbus_error_raise_printf(DBUS_ERROR_INVALID_ARGS,
-			"Could not calculate desired uid and gid");
-		return -1;
-	}
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
@@ -497,7 +464,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	}
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Could not determine the requested cgroup");
 		return -1;
@@ -520,26 +487,64 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 		return -1;
 	}
 	// is r allowed to descend under the parent dir?
-	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"pid %d (uid %d gid %d) may not write under %s",
-			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+			(int)r.pid, (int)r.uid, (int)r.gid, path);
 		return -1;
 	}
 
 	// does r have privilege over the cgroup dir?
-	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Pid %d may not chown %s\n", (int)ucred.pid, path);
+			"Pid %d may not chown %s\n", (int)r.pid, path);
 		return -1;
 	}
 
 	// go ahead and chown it.
-	if (!chown_cgroup_path(path, target_uid, target_gid, false))
+	if (!chown_cgroup_path(path, v.uid, v.gid, false))
 		return -1;
 
 	*ok = 1;
 	return 0;
+}
+
+int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup, int sockfd,
+			int *ok)
+{
+	int fd = 0;
+	struct ucred ucred, vcred;
+	socklen_t len;
+
+	*ok = -1;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	get_scm_creds(sockfd, &v.cred.uid, &v.cred.gid, &v.cred.pid);
+
+	if (target_pid == -1) {
+		nih_dbus_error_raise_printf(DBUS_ERROR_INVALID_ARGS,
+			"Could not calculate desired uid and gid");
+		return -1;
+	}
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	return chown_cgroup_main(message, controller, cgroup, ucred, vcred, ok);
 }
 
 /* 

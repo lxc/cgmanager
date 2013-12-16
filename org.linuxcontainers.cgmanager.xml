@@ -54,14 +54,6 @@
       <arg name="ok" type="i" direction="out" />
       <!-- uid+gid are passed as scm_cred over sockfd-->
     </method>
-    <method name="chownCgroup">
-      <arg name="controller" type="s" direction="in" />
-      <arg name="cgroup" type="s" direction="in" />
-      <arg name="uid" type="i" direction="in" />
-      <arg name="gid" type="i" direction="in" />
-      <arg name="ok" type="i" direction="out" />
-      <!-- task must be in init pid and user namespaces -->
-    </method>
     <method name="movePidScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
