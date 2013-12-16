@@ -194,66 +194,19 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  * Caller requests moving a @pid to a particular cgroup identified
  * by the name (@cgroup) and controller type (@controller).
  */
-int cgmanager_move_pid (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int plain_pid,
-			int sockfd, int *ok)
+int move_pid_main (NihDBusMessage *message, const char *controller, char *cgroup,
+		struct ucred r, int target_pid,  int *ok)
 {
-	int fd = 0;
-	struct ucred ucred;
-	socklen_t len;
-	pid_t target_pid;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
 
-	nih_info("sockfd is %d", sockfd);
-	*ok = -1;
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		return -1;
-	}
-
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
-	/* Todo - we don't want to waste time waiting for scm_pid if none
-	 * will be available. */
-	target_pid = get_scm_pid(fd);
-
-	if (target_pid == -1) {
-		// non-root users can't send an SCM_CREDENTIAL for tasks
-		// other than themselves.  For that case we accept a pid
-		// as an integer only from our own pidns Non-root users
-		// in another pidns will have to go through a root-owned
-		// proxy in their own pidns.
-		if (is_same_pidns((int)ucred.pid)) {
-			nih_info("Using plain pid %d", (int)plain_pid);
-			target_pid = plain_pid;
-		}
-	}
-
-	if (target_pid == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not get target pid from socket");
-		return -1;
-	}
-
 	// verify that ucred.pid may move target_pid
-	if (!may_move_pid(ucred.pid, ucred.uid, target_pid)) {
+	if (!may_move_pid(r.pid, r.uid, target_pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					     "%d may not move %d", (int)ucred.pid,
-					     (int)target_pid);
+					     "%d may not move %d", (int)r.pid,
+					     (int)r.pid);
 		return -1;
 	}
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
@@ -263,7 +216,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	}
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Could not determine the requested cgroup");
 		return -1;
@@ -283,18 +236,18 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 		return -1;
 	}
 	// is r allowed to descend under the parent dir?
-	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"pid %d (uid %d gid %d) may not write under %s",
-			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+			(int)r.pid, (int)r.uid, (int)r.gid, path);
 		return -1;
 	}
 	// is r allowed to write to tasks file?
 	strncat(path, "/tasks", MAXPATHLEN-1);
-	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_WRONLY)) {
+	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"pid %d (uid %d gid %d) may not write under %s",
-			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+			(int)r.pid, (int)r.uid, (int)r.gid, path);
 		return -1;
 	}
 	f = fopen(path, "w");
@@ -315,9 +268,74 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 		return -1;
 	}
 	nih_info("%d moved to %s:%s by %d's request", (int)target_pid,
-		controller, cgroup, (int)ucred.pid);
+		controller, cgroup, (int)r.pid);
 	*ok = 1;
 	return 0;
+}
+
+int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup,
+			int sockfd, int *ok)
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+	pid_t target_pid;
+
+	*ok = -1;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	target_pid = get_scm_pid(fd);
+
+	if (target_pid == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not get target pid from socket");
+		return -1;
+	}
+
+	return move_pid_main(message, controller, cgroup, ucred, target_pid, ok);
+}
+int cgmanager_move_pid (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup, int plain_pid,
+			int *ok)
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+
+	*ok = -1;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	return move_pid_main(message, controller, cgroup, ucred, plain_pid, ok);
 }
 
 /* 
