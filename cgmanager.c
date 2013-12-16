@@ -66,60 +66,15 @@ static int daemonise = FALSE;
 bool setns_pid_supported = false;
 unsigned long mypidns;
 
-/*
- * This is one of the dbus callbacks.
- * Caller requests the cgroup of @pid in a given @controller
- */
-int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, int plain_pid, char **output)
+/* getPidCgroup */
+int get_pid_cgroup_main (NihDBusMessage *message, const char *controller,
+			 int target_pid, struct ucred c, char **output)
 {
-	int fd = 0;
-	struct ucred ucred;
-	socklen_t len;
 	pid_t target_pid;
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		return -1;
-	}
-
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
-
-	/* Todo - we don't want to waste time waiting for scm_pid if none
-	 * will be available. */
-	target_pid = get_scm_pid(fd);
-
-	if (target_pid == -1) {
-		// non-root users can't send an SCM_CREDENTIAL for tasks
-		// other than themselves.  For that case we accept a pid
-		// as an integer only from our own pidns Non-root users
-		// in another pidns will have to go through a root-owned
-		// proxy in their own pidns.
-		if (is_same_pidns((int)ucred.pid)) {
-			nih_info("Using plain pid %d", (int)plain_pid);
-			target_pid = plain_pid;
-		}
-	}
-	if (target_pid == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not retrieve pid from socket");
-		return -1;
-	}
-
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(c.pid, controller, "", rcgpath)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Could not determine the requestor cgroup");
 		return -1;
@@ -151,6 +106,88 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	return 0;
 }
 
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests the cgroup of @pid in a given @controller
+ */
+int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
+			const char *controller, int sockfd, char **output)
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+	pid_t target_pid;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	target_pid = get_scm_pid(sockfd);
+
+	if (target_pid == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Could not retrieve pid from socket");
+		return -1;
+	}
+
+	return get_pid_cgroup_main(message, controller, target_pid,
+				   ucred, output);
+}
+
+/* getPidCgroup */
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests the cgroup of @pid in a given @controller
+ */
+int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
+			const char *controller, int plain_pid, char **output)
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	if (!is_same_pidns((int)ucred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"getPidCgroup called from non-init namespace");
+		return -1;
+	}
+	return get_pid_cgroup_main(message, controller, plain_pid, ucred,
+				   output);
+}
+
+/* movePid */
 /*
  * This is one of the dbus callbacks.
  * Caller requests moving a @pid to a particular cgroup identified
