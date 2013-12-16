@@ -79,6 +79,7 @@ void get_scm_creds(int sock, uid_t *u, gid_t *g, pid_t *p)
 		nih_error("Failed to set passcred: %s", strerror(errno));
 		goto out;
 	}
+	buf[0] = '1';
 	if (write(sock, buf, 1) != 1) {
 		nih_error("Failed to start write on scm fd: %s", strerror(errno));
 		goto out;
