@@ -65,12 +65,13 @@ static int daemonise = FALSE;
 
 bool setns_pid_supported = false;
 unsigned long mypidns;
+bool setns_user_supported = false;
+unsigned long myuserns;
 
 /* getPidCgroup */
 int get_pid_cgroup_main (NihDBusMessage *message, const char *controller,
 			 int target_pid, struct ucred c, char **output)
 {
-	pid_t target_pid;
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 
 	// Get r's current cgroup in rcgpath
@@ -92,7 +93,7 @@ int get_pid_cgroup_main (NihDBusMessage *message, const char *controller,
 	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"v (%d)'s cgroup is not below r (%d)'s",
-			(int)target_pid, (int)ucred.pid);
+			(int)target_pid, (int)c.pid);
 		return -1;
 	}
 	if (strlen(vcgpath) == rlen)
@@ -452,7 +453,7 @@ int chown_cgroup_main (NihDBusMessage *message, const char *controller,
 	 * that requires privilege over two uids */
 	if (hostuid_to_ns(r.uid, r.pid) != 0) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Chown requested by non-root uid %d", ucred.uid);
+			"Chown requested by non-root uid %d", r.uid);
 		return -1;
 	}
 
@@ -533,9 +534,9 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	get_scm_creds(sockfd, &v.cred.uid, &v.cred.gid, &v.cred.pid);
+	get_scm_creds(sockfd, &vcred.uid, &vcred.gid, &vcred.pid);
 
-	if (target_pid == -1) {
+	if (vcred.pid == -1) {
 		nih_dbus_error_raise_printf(DBUS_ERROR_INVALID_ARGS,
 			"Could not calculate desired uid and gid");
 		return -1;
@@ -543,6 +544,51 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	return chown_cgroup_main(message, controller, cgroup, ucred, vcred, ok);
+}
+
+int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup, int uid, int gid,
+			int *ok)
+{
+	int fd = 0;
+	struct ucred ucred, vcred;
+	socklen_t len;
+
+	*ok = -1;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	if (!is_same_pidns((int)ucred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"chown called from non-init pid namespace");
+		return -1;
+	}
+	if (!is_same_userns((int)ucred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"chown called from non-init user namespace");
+		return -1;
+	}
+
+	vcred.pid = 0;
+	vcred.uid = uid;
+	vcred.gid = gid;
 
 	return chown_cgroup_main(message, controller, cgroup, ucred, vcred, ok);
 }
@@ -875,6 +921,11 @@ main (int   argc,
 	if (stat("/proc/self/ns/pid", &sb) == 0) {
 		mypidns = read_pid_ns_link(getpid());
 		setns_pid_supported = true;
+	}
+
+	if (stat("/proc/self/ns/user", &sb) == 0) {
+		mypidns = read_user_ns_link(getpid());
+		setns_user_supported = true;
 	}
 
 	/* Become daemon */

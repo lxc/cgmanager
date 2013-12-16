@@ -601,8 +601,6 @@ bool set_value(const char *path, const char *value)
 /*
  * Tiny helper to read the /proc/pid/ns/pid link for a given pid.
  * @pid: the pid whose link name to look up
- *
- * TODO - switch to using stat() to get inode # ?
  */
 unsigned long read_pid_ns_link(int pid)
 {
@@ -610,6 +608,23 @@ unsigned long read_pid_ns_link(int pid)
 	struct stat sb;
 	char path[100];
 	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid);
+	if (ret < 0 || ret >= 100)
+		return false;
+	ret = stat(path, &sb);
+	return sb.st_ino;
+	return true;
+}
+
+/*
+ * Tiny helper to read the /proc/pid/ns/user link for a given pid.
+ * @pid: the pid whose link name to look up
+ */
+unsigned long read_user_ns_link(int pid)
+{
+	int ret;
+	struct stat sb;
+	char path[100];
+	ret = snprintf(path, 100, "/proc/%d/ns/user", pid);
 	if (ret < 0 || ret >= 100)
 		return false;
 	ret = stat(path, &sb);

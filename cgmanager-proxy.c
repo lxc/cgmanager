@@ -121,6 +121,8 @@ static int daemonise = FALSE;
 
 bool setns_pid_supported = false;
 unsigned long mypidns;
+bool setns_user_supported = false;
+unsigned long myuserns;
 
 /*
  * Compute cgroup for @pid in @controller, appending @cgroup to
@@ -490,6 +492,11 @@ main (int   argc,
 	if (stat("/proc/self/ns/pid", &sb) == 0) {
 		mypidns = read_pid_ns_link(getpid());
 		setns_pid_supported = true;
+	}
+
+	if (stat("/proc/self/ns/user", &sb) == 0) {
+		mypidns = read_user_ns_link(getpid());
+		setns_user_supported = true;
 	}
 
 	/* Become daemon */

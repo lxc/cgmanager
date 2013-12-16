@@ -27,5 +27,6 @@
 void get_scm_creds(int sock, uid_t *u, gid_t *g, pid_t *p);
 pid_t get_scm_pid(int sock);
 bool is_same_pidns(int pid);
+bool is_same_userns(int pid);
 bool may_move_pid(pid_t r, uid_t r_uid, pid_t v);
 int send_pid(int sock, int pid);

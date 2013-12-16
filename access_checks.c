@@ -52,8 +52,8 @@
 
 #include "fs.h"
 
-extern bool setns_pid_supported;
-extern unsigned long mypidns;
+extern bool setns_pid_supported, setns_user_supported;
+extern unsigned long mypidns, myuserns;
 
 /*
  * Get a pid passed in a SCM_CREDENTIAL over a unix socket
@@ -170,6 +170,19 @@ bool is_same_pidns(int pid)
 	if (!setns_pid_supported)
 		return false;
 	if (read_pid_ns_link(pid) != mypidns)
+		return false;
+	return true;
+}
+
+/*
+ * Return true if pid is in my pidns
+ * Figure this out by comparing the /proc/pid/ns/user link names.
+ */
+bool is_same_userns(int pid)
+{
+	if (!setns_user_supported)
+		return false;
+	if (read_user_ns_link(pid) != myuserns)
 		return false;
 	return true;
 }

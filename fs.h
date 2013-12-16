@@ -35,4 +35,5 @@ uid_t hostuid_to_ns(uid_t uid, pid_t pid);
 bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children);
 bool set_value(const char *path, const char *value);
 unsigned long read_pid_ns_link(int pid);
+unsigned long read_user_ns_link(int pid);
 bool realpath_escapes(char *path, char *safety);
