@@ -175,6 +175,7 @@ int setup_cgroup_mounts(void)
 		ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, line);
 		if (ret < 0 || ret >= MAXPATHLEN) {
 			nih_fatal("Error calculating pathname for %s and %s", base_path, line);
+			ret = -1;
 			goto out;
 		}
 		if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
