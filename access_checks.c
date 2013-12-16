@@ -69,10 +69,21 @@ void get_scm_creds(int sock, uid_t *u, gid_t *g, pid_t *p)
         char cmsgbuf[CMSG_SPACE(sizeof(cred))];
         char buf[1];
 	int ret, tries=0;
+	int optval = 1;
 
 	cred.pid = -1;
 	cred.uid = -1;
 	cred.gid = -1;
+
+	if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("Failed to set passcred: %s", strerror(errno));
+		goto out;
+	}
+	if (write(sock, buf, 1) != 1) {
+		nih_error("Failed to start write on scm fd: %s", strerror(errno));
+		goto out;
+	}
+
         msg.msg_name = NULL;
         msg.msg_namelen = 0;
         msg.msg_control = cmsgbuf;
@@ -110,6 +121,7 @@ out:
 	*u = cred.uid;
 	*g = cred.gid;
 	*p = cred.pid;
+	close(sock);
         return;
 }
 

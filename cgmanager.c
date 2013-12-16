@@ -282,6 +282,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	socklen_t len;
 	pid_t target_pid;
 
+	nih_info("%s called, sockfd is %d", __func__, sockfd);
 	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -298,7 +299,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	target_pid = get_scm_pid(fd);
+	target_pid = get_scm_pid(sockfd);
 
 	if (target_pid == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -316,6 +317,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	struct ucred ucred;
 	socklen_t len;
 
+	nih_info("%s called, plain_pid is %d", __func__, plain_pid);
 	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -854,7 +856,6 @@ static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, voi
 static int
 client_connect (DBusServer *server, DBusConnection *conn)
 {
-	int optval = 1, fd;
 	if (server == NULL || conn == NULL)
 		return FALSE;
 
@@ -866,22 +867,6 @@ client_connect (DBusServer *server, DBusConnection *conn)
 	NIH_MUST (nih_dbus_object_new (NULL, conn,
 	          "/org/linuxcontainers/cgmanager",
 	          cgmanager_interfaces, NULL));
-
-	if (!dbus_connection_get_socket(conn, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	/* need to do this before the client sends the msg */
-	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval,
-			sizeof(optval)) == -1) {
-		perror("setsockopt");
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"failed to set SO_PASSCRED socket option");
-		return -1;
-	}
-
 
 	return TRUE;
 }
@@ -942,7 +927,7 @@ main (int   argc,
 	}
 
 	if (stat("/proc/self/ns/user", &sb) == 0) {
-		mypidns = read_user_ns_link(getpid());
+		myuserns = read_user_ns_link(getpid());
 		setns_user_supported = true;
 	}
 

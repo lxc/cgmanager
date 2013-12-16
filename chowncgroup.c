@@ -164,10 +164,25 @@ main (int   argc,
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
+	int sv[2] = {-1, -1};
+	char buf[1];
 
 	nih_main_init (argv[0]);
 	if (geteuid() != 0) {
 		fprintf(stderr, "Must be called by root");
+		exit(1);
+	}
+
+	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+		nih_error("Error creating socketpair: %s", strerror(errno));
+		exit(1);
+	}
+	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		perror("setsockopt");
+		exit(1);
+	}
+	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		perror("setsockopt");
 		exit(1);
 	}
 
@@ -187,7 +202,7 @@ main (int   argc,
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "chownCgroup");
+			"org.linuxcontainers.cgmanager0_0", "chownCgroupScm");
 
 	if (!dbus_connection_get_socket(conn, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -211,16 +226,29 @@ main (int   argc,
                 return -1;
         }
 
+	dbus_message_iter_init_append(message, &iter);
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD,
+					      &sv[1])) {
+		nih_error_raise_no_memory ();
+		return -1;
+	}
+
 	if (!dbus_connection_send(conn, message, &serial)) {
 		nih_error("failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(conn);
 
-	if (send_creds(fd)) {
+	if (read(sv[0], &buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0])) {
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
+	close(sv[0]);
+	close(sv[1]);
 
 	/* Get a reply */
 	DBusError error;
