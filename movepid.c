@@ -154,6 +154,8 @@ main (int   argc,
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
+	int sv[2] = {-1, -1};
+	char buf[1];
 
 	nih_main_init (argv[0]);
 
@@ -169,6 +171,21 @@ main (int   argc,
 	if (pid == -1 || !pid)
 		pid = getpid();
 
+	if (geteuid() == 0) {
+		if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+			nih_error("Error creating socketpair: %s", strerror(errno));
+			exit(1);
+		}
+		if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+			perror("setsockopt");
+			exit(1);
+		}
+		if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+			perror("setsockopt");
+			exit(1);
+		}
+	}
+
 	conn = nih_dbus_connect("unix:path=/tmp/cgmanager", NULL);
 	nih_assert (conn != NULL);
 
@@ -179,10 +196,6 @@ main (int   argc,
 	if (!dbus_connection_get_socket(conn, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					"Could not get socket");
-	}
-	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		perror("setsockopt");
-		return -1;
 	}
 
 	dbus_message_iter_init_append(message, &iter);
@@ -203,6 +216,14 @@ main (int   argc,
                 nih_error_raise_no_memory ();
                 return -1;
         }
+	if (geteuid() == 0) {
+		dbus_message_iter_init_append(message, &iter);
+		if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD,
+						      &sv[1])) {
+			nih_error_raise_no_memory ();
+			return -1;
+		}
+	}
 
 	if (!dbus_connection_send(conn, message, &serial)) {
 		nih_error("failed to send dbus message");
@@ -213,7 +234,10 @@ main (int   argc,
 	/* If we're root, then we can send an SCM_CREDENTIAL
 	 */
 	if (geteuid() == 0) {
-		if (send_pid(fd, pid)) {
+		if (read(sv[0], &buf, 1) != 1) {
+			nih_error("Error getting reply from server over socketpair");
+		}
+		if (send_pid(sv[0], pid)) {
 			nih_error("Error sending pid over SCM_CREDENTIAL");
 			goto out;
 		}

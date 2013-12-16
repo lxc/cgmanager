@@ -158,7 +158,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  */
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int plain_pid,
-			int *ok)
+			int sockfd, int *ok)
 {
 	int fd = 0;
 	struct ucred ucred;
@@ -167,6 +167,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
 
+	nih_info("sockfd is %d", sockfd);
 	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,

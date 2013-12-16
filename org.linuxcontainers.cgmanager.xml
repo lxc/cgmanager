@@ -31,28 +31,50 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="out" />
     </method>
+    <method name="getPidCgroupScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <arg name="output" type="s" direction="out" />
+      <!-- Pid is passed as a scm_cred over sockfd -->
+    </method>
     <method name="getPidCgroup">
       <arg name="controller" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <arg name="output" type="s" direction="out" />
-      <!-- Pid is passed as a scm_cred if r is not in init_pid_ns -->
+      <!-- client must be in init pidns -->
     </method>
     <method name="Create">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
     </method>
+    <method name="chownCgroupScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <arg name="ok" type="i" direction="out" />
+      <!-- uid+gid are passed as scm_cred over sockfd-->
+    </method>
     <method name="chownCgroup">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
+      <arg name="uid" type="i" direction="in" />
+      <arg name="gid" type="i" direction="in" />
       <arg name="ok" type="i" direction="out" />
-      <!-- uid+gid are passed as scm_cred -->
+      <!-- task must be in init pid and user namespaces -->
+    </method>
+    <method name="movePidScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <arg name="ok" type="i" direction="out" />
+      <!-- Pid is passed as a scm_cred over sockfd -->
     </method>
     <method name="movePid">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <arg name="ok" type="i" direction="out" />
-      <!-- Pid is passed as a scm_cred if r is not in init_pid_ns -->
+      <!-- task must be in init_pid_ns -->
     </method>
     <method name="getValue">
       <arg name="controller" type="s" direction="in" />
