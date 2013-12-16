@@ -41,7 +41,7 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <arg name="output" type="s" direction="out" />
-      <!-- client must be in init pidns -->
+      <!-- client must be in manager's pidns -->
     </method>
     <method name="Create">
       <arg name="controller" type="s" direction="in" />
@@ -60,7 +60,7 @@
       <arg name="uid" type="i" direction="in" />
       <arg name="gid" type="i" direction="in" />
       <arg name="ok" type="i" direction="out" />
-      <!-- caller must be in init pid and user namespaces -->
+      <!-- caller must be in manager's pid and user namespaces -->
     </method>
     <method name="movePidScm">
       <arg name="controller" type="s" direction="in" />
@@ -74,7 +74,7 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <arg name="ok" type="i" direction="out" />
-      <!-- task must be in init_pid_ns -->
+      <!-- task must be in manager's pidns -->
     </method>
     <method name="getValue">
       <arg name="controller" type="s" direction="in" />
