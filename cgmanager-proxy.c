@@ -318,7 +318,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	}
 	if (!is_same_pidns(plain_pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"kernel too old, use getPidCgroupScm");
+			"requestor is in a different namespace from cgrpoxy");
 		return -1;
 	}
 	return get_pid_cgroup_main(controller, ucred, vcred, output);
