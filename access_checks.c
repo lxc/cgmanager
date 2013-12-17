@@ -122,7 +122,6 @@ out:
 	*u = cred.uid;
 	*g = cred.gid;
 	*p = cred.pid;
-	close(sock);
         return;
 }
 

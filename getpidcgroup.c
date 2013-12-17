@@ -229,6 +229,14 @@ main (int   argc,
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
+	if (send_pid(sv[0], getpid())) {
+		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	if (read(sv[0], &buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
 	if (send_pid(sv[0], pid)) {
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;

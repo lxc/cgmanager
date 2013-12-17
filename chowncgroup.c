@@ -130,15 +130,15 @@ static NihOption options[] = {
 	NIH_OPTION_LAST
 };
 
-int send_creds(int sock)
+int send_creds(int sock, int rpid, int ruid, int rgid)
 {
 	struct msghdr msg = { 0 };
 	struct iovec iov;
 	struct cmsghdr *cmsg;
 	struct ucred cred = {
-		.pid = getpid(),
-		.uid = uid,
-		.gid = gid,
+		.pid = rpid,
+		.uid = ruid,
+		.gid = rgid,
 	};
 	char cmsgbuf[CMSG_SPACE(sizeof(cred))];
 	char buf[1];
@@ -253,7 +253,15 @@ main (int   argc,
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
-	if (send_creds(sv[0])) {
+	if (send_creds(sv[0], getpid(), getuid(), getgid())) {
+		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	if (read(sv[0], &buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0], getpid(), uid, gid)) {
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}

@@ -125,9 +125,7 @@ int get_pid_cgroup_main (NihDBusMessage *message, const char *controller,
 int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 			const char *controller, int sockfd, char **output)
 {
-	int fd = 0;
 	struct ucred ucred;
-	socklen_t len;
 	pid_t target_pid;
 
 	if (message == NULL) {
@@ -136,19 +134,11 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
-
+		  sockfd, ucred.pid, ucred.uid, ucred.gid);
 	target_pid = get_scm_pid(sockfd);
+	close(sockfd);
 
 	if (target_pid == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -288,12 +278,9 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup,
 			int sockfd, int *ok)
 {
-	int fd = 0;
 	struct ucred ucred;
-	socklen_t len;
 	pid_t target_pid;
 
-	nih_info("%s called, sockfd is %d", __func__, sockfd);
 	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -301,16 +288,9 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
 	target_pid = get_scm_pid(sockfd);
+	close(sockfd);
 
 	if (target_pid == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -460,6 +440,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	 * to send these scm credentials, caller must have had privilege
 	 */
 	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	close(sockfd);
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  sockfd, ucred.pid, ucred.uid, ucred.gid);
 	return create_main(message, controller, cgroup, ucred);
@@ -579,7 +560,6 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 {
 	int fd = 0;
 	struct ucred ucred, vcred;
-	socklen_t len;
 
 	*ok = -1;
 	if (message == NULL) {
@@ -588,16 +568,9 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
 	get_scm_creds(sockfd, &vcred.uid, &vcred.gid, &vcred.pid);
+	close(sockfd);
 
 	if (vcred.pid == -1) {
 		nih_dbus_error_raise_printf(DBUS_ERROR_INVALID_ARGS,
@@ -728,6 +701,7 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 	 * to send these scm credentials, caller must have had privilege
 	 */
 	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	close(sockfd);
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  sockfd, ucred.pid, ucred.uid, ucred.gid);
 
@@ -840,6 +814,7 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 	 * to send these scm credentials, caller must have had privilege
 	 */
 	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	close(sockfd);
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  sockfd, ucred.pid, ucred.uid, ucred.gid);
 
