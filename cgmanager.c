@@ -279,6 +279,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
+		close(sockfd);
 		return -1;
 	}
 
@@ -338,12 +339,6 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *fnam, *dnam;
 	nih_local char *copy = NULL;
 	size_t cgroup_len;
-
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		return -1;
-	}
 
 	if (!cgroup || ! *cgroup)  // nothing to do
 		return 0;
@@ -427,6 +422,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
+		close(sockfd);
 		return -1;
 	}
 
@@ -559,6 +555,7 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
+		close(sockfd);
 		return -1;
 	}
 
@@ -688,6 +685,7 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Message was NULL");
+		close(sockfd);
 		return -1;
 	}
 
@@ -801,6 +799,7 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Message was NULL");
+		close(sockfd);
 		return -1;
 	}
 
