@@ -59,6 +59,24 @@ static const char *cgroup;
 
 typedef int (*NihOptionSetter) (NihOption *option, const char *arg);
 
+void send_dummy_msg(DBusConnection *conn)
+{
+	DBusMessage *message = NULL;
+	DBusMessageIter iter;
+	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
+			"/org/linuxcontainers/cgmanager",
+			"org.linuxcontainers.cgmanager0_0", "ping");
+	dbus_message_set_no_reply(message, TRUE);
+	dbus_message_iter_init_append(message, &iter);
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
+                                              &controller)) {
+                nih_error_raise_no_memory ();
+                return;
+        }
+	dbus_connection_send(conn, message, NULL);
+	dbus_connection_flush(conn);
+}
+
 int set_pid(NihOption *option, const char *arg)
 {
 	unsigned long int p;
@@ -150,7 +168,7 @@ main (int   argc,
 {
 	char **             args;
 	DBusConnection *    conn;
-	int fd, optval = 1, exitval = 1, ok;
+	int optval = 1, exitval = 1, ok;
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
@@ -191,14 +209,11 @@ main (int   argc,
 	conn = nih_dbus_connect("unix:path=/tmp/cgmanager", NULL);
 	nih_assert (conn != NULL);
 
+	send_dummy_msg(conn);
+
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
 			"org.linuxcontainers.cgmanager0_0", "movePidScm");
-
-	if (!dbus_connection_get_socket(conn, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					"Could not get socket");
-	}
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
@@ -206,13 +221,11 @@ main (int   argc,
                 nih_error_raise_no_memory ();
                 return -1;
         }
-	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
                                               &cgroup)) {
                 nih_error_raise_no_memory ();
                 return -1;
         }
-	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD,
 					      &sv[1])) {
 		nih_error_raise_no_memory ();

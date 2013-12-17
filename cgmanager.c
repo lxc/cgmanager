@@ -68,6 +68,17 @@ unsigned long mypidns;
 bool setns_user_supported = false;
 unsigned long myuserns;
 
+int cgmanager_ping (void *data, NihDBusMessage *message, const char *controller)
+{
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	return 0;
+}
+
 /* getPidCgroup */
 int get_pid_cgroup_main (NihDBusMessage *message, const char *controller,
 			 int target_pid, struct ucred c, char **output)
@@ -309,6 +320,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 
 	return move_pid_main(message, controller, cgroup, ucred, target_pid, ok);
 }
+
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int plain_pid,
 			int *ok)

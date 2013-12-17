@@ -27,6 +27,9 @@
   <interface name="org.linuxcontainers.cgmanager0_0">
     <!-- Example function -->
 
+    <method name="ping">
+      <arg name="controller" type="s" direction="in" />
+    </method>
     <method name="getMyCgroup">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="out" />
