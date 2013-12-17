@@ -75,6 +75,7 @@ void send_dummy_msg(DBusConnection *conn)
         }
 	dbus_connection_send(conn, message, NULL);
 	dbus_connection_flush(conn);
+	dbus_message_unref(message);
 }
 
 int set_pid(NihOption *option, const char *arg)
@@ -215,6 +216,10 @@ main (int   argc,
 			"/org/linuxcontainers/cgmanager",
 			"org.linuxcontainers.cgmanager0_0", "movePidScm");
 
+	if (!message) {
+		nih_error("Failed to create a message");
+                return -1;
+	}
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
                                               &controller)) {

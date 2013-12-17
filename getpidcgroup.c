@@ -74,6 +74,7 @@ void send_dummy_msg(DBusConnection *conn)
         }
 	dbus_connection_send(conn, message, NULL);
 	dbus_connection_flush(conn);
+	dbus_message_unref(message);
 }
 
 int set_pid(NihOption *option, const char *arg)
