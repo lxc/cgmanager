@@ -440,6 +440,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	socklen_t len;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *fnam, *dnam;
 	nih_local char *copy = NULL;
+	size_t cgroup_len;
 
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -476,12 +477,15 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 			"Could not determine the requested cgroup");
 		return -1;
 	}
-	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN) {
+
+	cgroup_len = strlen(cgroup);
+
+	if (strlen(rcgpath) + cgroup_len > MAXPATHLEN) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Path name too long");
 		return -1;
 	}
-	copy = nih_strdup(NULL, cgroup);
+	copy = nih_strndup(NULL, cgroup, cgroup_len);
 	if (!copy) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
 			"Out of memory copying cgroup name");
