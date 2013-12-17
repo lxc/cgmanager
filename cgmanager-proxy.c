@@ -207,6 +207,14 @@ out:
  * This is one of the dbus callbacks.
  * Caller requests the cgroup of @pid in a given @controller
  */
+int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
+			const char *controller, int sockfd, char **output)
+{
+	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		"not yet implemented");
+	return -1;
+}
+
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 			const char *controller, int plain_pid, char **output)
 {
@@ -293,6 +301,14 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  * Caller requests moving a @pid to a particular cgroup identified
  * by the name (@cgroup) and controller type (@controller).
  */
+int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup, int sockfd,
+			int *ok)
+{
+	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		"not yet implemented");
+	return -1;
+}
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int plain_pid,
 			int *ok)
@@ -328,8 +344,16 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  *
  * On success, ok will be sent with value 1.  On failure, -1.
  */
+int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup, int sockfd, int *ok)
+{
+	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		"not yet implemented");
+	return -1;
+}
 int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int *ok)
+			const char *controller, char *cgroup, int uid,
+			int gid, int *ok)
 {
 	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 		"not yet implemented");
@@ -393,6 +417,16 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	return -1;
 }
 
+int cgmanager_ping (void *data, NihDBusMessage *message, const char *controller)
+{
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	return 0;
+}
 
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)
 {
@@ -402,7 +436,6 @@ static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, voi
 static int
 client_connect (DBusServer *server, DBusConnection *conn)
 {
-	int optval = 1, fd;
 	if (server == NULL || conn == NULL)
 		return FALSE;
 
@@ -414,22 +447,6 @@ client_connect (DBusServer *server, DBusConnection *conn)
 	NIH_MUST (nih_dbus_object_new (NULL, conn,
 	          "/org/linuxcontainers/cgmanager",
 	          cgmanager_interfaces, NULL));
-
-	if (!dbus_connection_get_socket(conn, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	/* need to do this before the client sends the msg */
-	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval,
-			sizeof(optval)) == -1) {
-		perror("setsockopt");
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"failed to set SO_PASSCRED socket option");
-		return -1;
-	}
-
 
 	return TRUE;
 }
@@ -495,7 +512,7 @@ main (int   argc,
 	}
 
 	if (stat("/proc/self/ns/user", &sb) == 0) {
-		mypidns = read_user_ns_link(getpid());
+		myuserns = read_user_ns_link(getpid());
 		setns_user_supported = true;
 	}
 
