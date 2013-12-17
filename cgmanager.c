@@ -128,12 +128,6 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 	struct ucred ucred;
 	pid_t target_pid;
 
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		return -1;
-	}
-
 	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  sockfd, ucred.pid, ucred.uid, ucred.gid);

@@ -44,6 +44,7 @@
 #include <nih-dbus/dbus_object.h>
 #include <nih-dbus/dbus_proxy.h>
 #include <nih-dbus/dbus_error.h>
+#include <nih-dbus/dbus_message.h>
 
 #include <sys/socket.h>
 
@@ -124,59 +125,124 @@ unsigned long mypidns;
 bool setns_user_supported = false;
 unsigned long myuserns;
 
-/*
- * Compute cgroup for @pid in @controller, appending @cgroup to
- * it.
- *
- * @dest is a pre-allocated MAXPATHLEN size array.
- */
-static bool proxy_get_pid_cgroup(pid_t pid, const char *controller,
-		const char *cgroup, char *dest)
+int send_creds(int sock, struct ucred cred)
 {
-	DBusMessage *message = NULL, *reply = NULL;
+	struct msghdr msg = { 0 };
+	struct iovec iov;
+	struct cmsghdr *cmsg;
+	char cmsgbuf[CMSG_SPACE(sizeof(cred))];
+	char buf[1];
+	buf[0] = 'p';
+
+	msg.msg_control = cmsgbuf;
+	msg.msg_controllen = sizeof(cmsgbuf);
+
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_len = CMSG_LEN(sizeof(struct ucred));
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_CREDENTIALS;
+	memcpy(CMSG_DATA(cmsg), &cred, sizeof(cred));
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	if (sendmsg(sock, &msg, 0) < 0) {
+		perror("sendmsg");
+		return -1;
+	}
+	return 0;
+}
+
+void send_dummy_msg(DBusConnection *conn)
+{
+	DBusMessage *message = NULL;
 	DBusMessageIter iter;
+	int a;
+	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
+			"/org/linuxcontainers/cgmanager",
+			"org.linuxcontainers.cgmanager0_0", "ping");
+	dbus_message_set_no_reply(message, TRUE);
+	dbus_message_iter_init_append(message, &iter);
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &a)) {
+                nih_error_raise_no_memory ();
+                return;
+        }
+	dbus_connection_send(conn, message, NULL);
+	dbus_connection_flush(conn);
+	dbus_message_unref(message);
+}
+
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests the cgroup of @pid in a given @controller
+ */
+int get_pid_cgroup_main (const char *controller,
+		struct ucred ucred, struct ucred vcred, char **output)
+{
+	char buf[1];
+	DBusMessage *reply, *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
-	int fd, optval = 1;
-	bool bret = false;
+
+	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+		nih_error("Error creating socketpair: %s", strerror(errno));
+		return -1;
+	}
+	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "getPidCgroup");
-
-	if (!dbus_connection_get_socket(server_conn, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					"Could not get socket to send scm");
-		return false;
-	}
-	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		perror("setsockopt");
-		return false;
-	}
+			"org.linuxcontainers.cgmanager0_0", "getPidCgroupScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
-                                              &controller)) {
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
                 nih_error_raise_no_memory ();
-                return false;
+                goto out;
         }
-	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32,
-                                              &pid)) {
-                nih_error_raise_no_memory ();
-                return false;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
 		nih_error("failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(server_conn);
+	if (message) {
+		dbus_message_unref(message);
+		message = NULL;
+	}
 
-	if (send_pid(fd, pid)) {
+	if (read(sv[0], &buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0], ucred)) {
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-
+	if (read(sv[0], &buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0], vcred)) {
+		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
 	while (!(reply = dbus_connection_pop_message(server_conn)))
 		dbus_connection_read_write(server_conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
@@ -191,38 +257,43 @@ static bool proxy_get_pid_cgroup(pid_t pid, const char *controller,
 	}
 	char *str_value;
 	dbus_message_iter_get_basic(&iter, &str_value);
+	*output = strdup(str_value);
 	printf("%s\n", str_value);
-	bret = true;
-
+	ret = 0;
 out:
+	close(sv[0]);
+	close(sv[1]);
 	if (message)
 		dbus_message_unref(message);
 	if (reply)
 		dbus_message_unref(reply);
-
-	return bret;
+	return ret;
 }
 
-/*
- * This is one of the dbus callbacks.
- * Caller requests the cgroup of @pid in a given @controller
- */
 int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 			const char *controller, int sockfd, char **output)
 {
-	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		"not yet implemented");
-	return -1;
+	struct ucred ucred, vcred;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		close(sockfd);
+		return -1;
+	}
+
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	get_scm_creds(sockfd, &vcred.uid, &vcred.gid, &vcred.pid);
+	close(sockfd);
+	return get_pid_cgroup_main(controller, ucred, vcred, output);
 }
 
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 			const char *controller, int plain_pid, char **output)
 {
-	int fd = 0;
-	struct ucred ucred;
+	struct ucred ucred, vcred;
+	int fd;
 	socklen_t len;
-	pid_t target_pid;
-	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -238,62 +309,19 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
-
-	/* Todo - we don't want to waste time waiting for scm_pid if none
-	 * will be available. */
-	target_pid = get_scm_pid(fd);
-
-	if (target_pid == -1) {
-		// non-root users can't send an SCM_CREDENTIAL for tasks
-		// other than themselves.  For that case we accept a pid
-		// as an integer only from our own pidns Non-root users
-		// in another pidns will have to go through a root-owned
-		// proxy in their own pidns.
-		if (is_same_pidns((int)ucred.pid)) {
-			nih_info("Using plain pid %d", (int)plain_pid);
-			target_pid = plain_pid;
-		}
-	}
-	if (target_pid == -1) {
+	vcred.pid = plain_pid;
+	vcred.uid = 0; vcred.gid = 0; // cgmanager ignores these
+	if (!setns_pid_supported) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not retrieve pid from socket");
+			"kernel too old, use getPidCgroupScm");
 		return -1;
 	}
-
-	// Get r's current cgroup in rcgpath
-	if (!proxy_get_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+	if (!is_same_pidns(plain_pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requestor cgroup");
+			"kernel too old, use getPidCgroupScm");
 		return -1;
 	}
-
-	// Get v's cgroup in vcgpath
-	if (!proxy_get_pid_cgroup(target_pid, controller, "", vcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the victim cgroup");
-		return -1;
-	}
-
-	// Make sure v's cgroup is under r's
-	int rlen = strlen(rcgpath);
-	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"v (%d)'s cgroup is not below r (%d)'s",
-			(int)target_pid, (int)ucred.pid);
-		return -1;
-	}
-	if (strlen(vcgpath) == rlen)
-		*output = nih_strdup(message, "/");
-	else
-		*output = nih_strdup(message, vcgpath + rlen + 1);
-
-	if (! *output)
-		nih_return_no_memory_error(-1);
-
-	return 0;
+	return get_pid_cgroup_main(controller, ucred, vcred, output);
 }
 
 /*
@@ -324,6 +352,13 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
+int cgmanager_create_scm (void *data, NihDBusMessage *message,
+				 const char *controller, char *cgroup, int sockfd)
+{
+	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		"not yet implemented");
+	return -1;
+}
 int cgmanager_create (void *data, NihDBusMessage *message,
 				 const char *controller, char *cgroup)
 {
@@ -388,6 +423,15 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
  * XXX Should '/' be disallowed, only '..' allowed?  Otherwise callers can't
  * pretend to be the cgroup root which is annoying in itself
  */
+int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
+			 const char *controller, const char *req_cgroup,
+			 const char *key, int sockfd, char **value)
+
+{
+	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		"not yet implemented");
+	return -1;
+}
 int cgmanager_get_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 		                 const char *key, char **value)
@@ -407,6 +451,15 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
  *
  * @ok is set to 1 if succeeds, -1 otherwise
  */
+int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
+		 const char *controller, const char *req_cgroup,
+		 const char *key, const char *value, int sockf, int *ok)
+
+{
+	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		"not yet implemented");
+	return -1;
+}
 int cgmanager_set_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 		                 const char *key, const char *value, int *ok)
@@ -529,6 +582,8 @@ main (int   argc,
 			exit (1);
 		}
 	}
+
+	send_dummy_msg(server_conn);
 
 	ret = nih_main_loop ();
 

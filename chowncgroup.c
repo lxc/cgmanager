@@ -63,13 +63,13 @@ void send_dummy_msg(DBusConnection *conn)
 {
 	DBusMessage *message = NULL;
 	DBusMessageIter iter;
+	int a;
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
 			"org.linuxcontainers.cgmanager0_0", "ping");
 	dbus_message_set_no_reply(message, TRUE);
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,
-                                              &controller)) {
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &a)) {
                 nih_error_raise_no_memory ();
                 return;
         }
