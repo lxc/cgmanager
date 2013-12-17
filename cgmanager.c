@@ -358,12 +358,9 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int cgmanager_create (void *data, NihDBusMessage *message,
-				 const char *controller, char *cgroup)
+int create_main (NihDBusMessage *message, const char *controller, char *cgroup, struct ucred ucred)
 {
-	int fd = 0, ret;
-	struct ucred ucred;
-	socklen_t len;
+	int ret;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *fnam, *dnam;
 	nih_local char *copy = NULL;
 	size_t cgroup_len;
@@ -373,18 +370,6 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 			"message was null");
 		return -1;
 	}
-
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!cgroup || ! *cgroup)  // nothing to do
 		return 0;
@@ -459,6 +444,52 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	nih_info("Created %s for %d (%d:%d)", path, (int)ucred.pid,
 		 (int)ucred.uid, (int)ucred.gid);
 	return 0;
+}
+int cgmanager_create_scm (void *data, NihDBusMessage *message,
+			 const char *controller, char *cgroup, int sockfd)
+{
+	struct ucred ucred;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	/*
+	 * to send these scm credentials, caller must have had privilege
+	 */
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  sockfd, ucred.pid, ucred.uid, ucred.gid);
+	return create_main(message, controller, cgroup, ucred);
+}
+int cgmanager_create (void *data, NihDBusMessage *message,
+				 const char *controller, char *cgroup)
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	return create_main(message, controller, cgroup, ucred);
 }
 
 /*
@@ -627,81 +658,6 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 
 /* 
  * This is one of the dbus callbacks.
- * Caller requests his own cgroup name for a given @controller.  The
- * name is returned as a nih_alloc'd string in @value with parent
- * @message, and is the full cgroup path.
- * This function may not be part of the final api, but is useful for
- * debugging now.
- * (The 'get-cgroup-bypid' callback will return a cgroup relative to
- * the caller's cgroup path)
- */
-int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
-				 const char *controller, char **value)
-{
-	int fd = 0;
-	struct ucred ucred;
-	socklen_t len;
-	char path[MAXPATHLEN];
-
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Message was NULL");
-		return -1;
-	}
-
-	if (controller == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"controller was NULL");
-		return -1;
-	}
-
-	if (value == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"value was NULL");
-		return -1;
-	}
-
-	const char *controller_path = get_controller_path(controller);
-	if (!controller_path) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Controller not mounted: %s", controller);
-		return -1;
-	}
-
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
-
-	if (!compute_pid_cgroup(ucred.pid, controller, "", path)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requested cgroup");
-		return -1;
-	}
-
-	size_t cplen = strlen(controller_path);
-	if (strlen(path) < cplen) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory copying controller path");
-		return -1;
-	}
-
-    *value = nih_strdup (message, path + cplen);
-    if (! *value)
-        nih_return_no_memory_error (-1);
-
-    return 0;
-}
-
-/* 
- * This is one of the dbus callbacks.
  * Caller requests the value of a particular cgroup file.
  * @controller is the controller, @req_cgroup the cgroup name, and @key the
  * file being queried (i.e. memory.usage_in_bytes).  @req_cgroup is relative
@@ -710,33 +666,10 @@ int cgmanager_get_my_cgroup (void *data, NihDBusMessage *message,
  * XXX Should '/' be disallowed, only '..' allowed?  Otherwise callers can't
  * pretend to be the cgroup root which is annoying in itself
  */
-int cgmanager_get_value (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
-		                 const char *key, char **value)
-
+int get_value_main (NihDBusMessage *message, const char *controller, const char *req_cgroup,
+		                 const char *key, struct ucred ucred, char **value)
 {
-	int fd = 0;
-	struct ucred ucred;
-	socklen_t len;
 	char path[MAXPATHLEN];
-
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Message was NULL");
-		return -1;
-	}
-
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -779,6 +712,57 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	nih_info("Sending to client: %s", *value);
 	return 0;
 }
+int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
+				 const char *controller, const char *req_cgroup,
+		                 const char *key, int sockfd, char **value)
+{
+	struct ucred ucred;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Message was NULL");
+		return -1;
+	}
+
+	/*
+	 * to send these scm credentials, caller must have had privilege
+	 */
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  sockfd, ucred.pid, ucred.uid, ucred.gid);
+
+	return get_value_main(message, controller, req_cgroup, key, ucred, value);
+
+}
+int cgmanager_get_value (void *data, NihDBusMessage *message,
+				 const char *controller, const char *req_cgroup,
+		                 const char *key, char **value)
+
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Message was NULL");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	return get_value_main(message, controller, req_cgroup, key, ucred, value);
+}
 
 /* 
  * This is one of the dbus callbacks.
@@ -789,35 +773,13 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
  *
  * @ok is set to 1 if succeeds, -1 otherwise
  */
-int cgmanager_set_value (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
-		                 const char *key, const char *value, int *ok)
+int set_value_main (NihDBusMessage *message, const char *controller, const char *req_cgroup,
+		                 const char *key, const char *value, struct ucred ucred, int *ok)
 
 {
-	int fd = 0;
-	struct ucred ucred;
-	socklen_t len;
 	char path[MAXPATHLEN];
 
 	*ok = -1;
-
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Message was NULL");
-		return -1;
-	}
-
-	if (!dbus_connection_get_socket(message->connection, &fd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
-		return -1;
-	}
-
-	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -858,6 +820,61 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 
 	*ok = 1;
 	return 0;
+}
+int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
+				 const char *controller, const char *req_cgroup,
+		                 const char *key, const char *value, int sockfd, int *ok)
+
+{
+	struct ucred ucred;
+
+	*ok = -1;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Message was NULL");
+		return -1;
+	}
+
+	/*
+	 * to send these scm credentials, caller must have had privilege
+	 */
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  sockfd, ucred.pid, ucred.uid, ucred.gid);
+
+	return set_value_main(message, controller, req_cgroup, key, value, ucred, ok);
+}
+int cgmanager_set_value (void *data, NihDBusMessage *message,
+				 const char *controller, const char *req_cgroup,
+		                 const char *key, const char *value, int *ok)
+
+{
+	int fd = 0;
+	struct ucred ucred;
+	socklen_t len;
+
+	*ok = -1;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Message was NULL");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	return set_value_main(message, controller, req_cgroup, key, value, ucred, ok);
 }
 
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)
