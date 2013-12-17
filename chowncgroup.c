@@ -248,6 +248,10 @@ main (int   argc,
 		return -1;
 	}
 	dbus_connection_flush(conn);
+	if (message) {
+		dbus_message_unref(message);
+		message = NULL;
+	}
 
 	if (read(sv[0], &buf, 1) != 1) {
 		nih_error("Error getting reply from server over socketpair");
