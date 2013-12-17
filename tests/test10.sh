@@ -13,7 +13,7 @@ sudo -u \#$uid sleep 200 &
 pp=$!
 sleep 1
 p=`ps -ef | grep sleep | grep $pp | grep -v sudo | tail -1 | awk '{ print $2 }'`
-sudo -u \#$uid ./movepid -c memory -n zzz -p $p > /dev/null 2>&1
+sudo -u \#$uid dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.movePid string:'memory' string:'zzz' int32:$p
 if [ $? -ne 0 ]; then
 	kill -9 $pp $p
 	exit 1
