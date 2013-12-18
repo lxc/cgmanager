@@ -258,7 +258,6 @@ int get_pid_cgroup_main (const char *controller,
 	char *str_value;
 	dbus_message_iter_get_basic(&iter, &str_value);
 	*output = strdup(str_value);
-	printf("%s\n", str_value);
 	ret = 0;
 out:
 	close(sv[0]);
@@ -829,23 +828,136 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
  * file being queried (i.e. memory.usage_in_bytes).  @req_cgroup is relative
  * to the caller's cgroup, unless it begins with '/' or '..'.
  */
+int get_value_main (const char *controller, const char *req_cgroup,
+		 const char *key, struct ucred ucred, char **value)
+{
+	char buf[1];
+	DBusMessage *reply, *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1, optval = 1;
+	dbus_uint32_t serial;;
+
+	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+		nih_error("Error creating socketpair: %s", strerror(errno));
+		return -1;
+	}
+	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+
+	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
+			"/org/linuxcontainers/cgmanager",
+			"org.linuxcontainers.cgmanager0_0", "getValueScm");
+
+	dbus_message_iter_init_append(message, &iter);
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+
+	if (!dbus_connection_send(server_conn, message, &serial)) {
+		nih_error("failed to send dbus message");
+		return -1;
+	}
+	dbus_connection_flush(server_conn);
+	if (message) {
+		dbus_message_unref(message);
+		message = NULL;
+	}
+
+	if (read(sv[0], &buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0], ucred)) {
+		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	while (!(reply = dbus_connection_pop_message(server_conn)))
+		dbus_connection_read_write(server_conn, -1);
+	if (dbus_message_get_reply_serial(reply) != serial) {
+		nih_error("wrong serial on reply");
+		goto out;
+	}
+
+	dbus_message_iter_init(reply, &iter);
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
+		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
+		goto out;
+	}
+	char *str_value;
+	dbus_message_iter_get_basic(&iter, &str_value);
+	*value = strdup(str_value);
+	ret = 0;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	if (message)
+		dbus_message_unref(message);
+	if (reply)
+		dbus_message_unref(reply);
+	return ret;
+}
+
 int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 			 const char *controller, const char *req_cgroup,
 			 const char *key, int sockfd, char **value)
 
 {
-	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		"not yet implemented");
-	return -1;
+	struct ucred ucred;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		close(sockfd);
+		return -1;
+	}
+
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	close(sockfd);
+	return get_value_main(controller, req_cgroup, key, ucred, value);
 }
 int cgmanager_get_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 		                 const char *key, char **value)
 
 {
-	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		"not yet implemented");
-	return -1;
+	struct ucred ucred;
+	int fd;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	return get_value_main(controller, req_cgroup, key, ucred, value);
 }
 
 /* 
@@ -857,23 +969,166 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
  *
  * @ok is set to 1 if succeeds, -1 otherwise
  */
+int set_value_main (const char *controller, const char *req_cgroup,
+		 const char *key, const char *value, struct ucred ucred)
+{
+	char buf[1];
+	DBusMessage *reply, *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1, optval = 1;
+	dbus_uint32_t serial;;
+
+	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+		nih_error("Error creating socketpair: %s", strerror(errno));
+		return -1;
+	}
+	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+
+	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
+			"/org/linuxcontainers/cgmanager",
+			"org.linuxcontainers.cgmanager0_0", "setValueScm");
+
+	dbus_message_iter_init_append(message, &iter);
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &value)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+
+	if (!dbus_connection_send(server_conn, message, &serial)) {
+		nih_error("failed to send dbus message");
+		return -1;
+	}
+	dbus_connection_flush(server_conn);
+	if (message) {
+		dbus_message_unref(message);
+		message = NULL;
+	}
+
+	if (read(sv[0], &buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0], ucred)) {
+		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	while (!(reply = dbus_connection_pop_message(server_conn)))
+		dbus_connection_read_write(server_conn, -1);
+	if (dbus_message_get_reply_serial(reply) != serial) {
+		nih_error("wrong serial on reply");
+		goto out;
+	}
+
+	dbus_message_iter_init(reply, &iter);
+	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
+		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
+		goto out;
+	}
+	int t= dbus_message_iter_get_arg_type(&iter);
+	short r;
+	int ok;
+	char *replystr;
+	switch(t) {
+	case DBUS_TYPE_INT16:
+		dbus_message_iter_get_basic(&iter, &r);
+		nih_info("got back an int16, value %d", r);
+		ok = r;
+		break;
+	case DBUS_TYPE_INT32:
+		dbus_message_iter_get_basic(&iter, &ok);
+		nih_info("got back an int32, value %d", ok);
+		break;
+	case DBUS_TYPE_STRING: // uh oh, must've failed
+		dbus_message_iter_get_basic(&iter, &replystr);
+		nih_error("Cgmanager returned error: %s", replystr);
+		goto out;
+	default:
+		nih_error("Got bad reply type: %d", t);
+		goto out;
+	}
+	if (ok == 0)
+		ret = 0;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	if (message)
+		dbus_message_unref(message);
+	if (reply)
+		dbus_message_unref(reply);
+	return ret;
+}
+
 int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *req_cgroup,
-		 const char *key, const char *value, int sockf, int *ok)
+		 const char *key, const char *value, int sockfd, int *ok)
 
 {
-	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		"not yet implemented");
-	return -1;
+	struct ucred ucred;
+
+	*ok = -1;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		close(sockfd);
+		return -1;
+	}
+
+	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
+	close(sockfd);
+	if (set_value_main(controller, req_cgroup, key, value, ucred) == 0)
+		*ok = 0;
+	return 0;
 }
 int cgmanager_set_value (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
-		                 const char *key, const char *value, int *ok)
+		 const char *controller, const char *req_cgroup,
+		 const char *key, const char *value, int *ok)
 
 {
-	nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		"not yet implemented");
-	return -1;
+	struct ucred ucred;
+	int fd;
+	socklen_t len;
+
+	*ok = -1;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (set_value_main(controller, req_cgroup, key, value, ucred) == 0)
+		*ok = 0;
+	return 0;
 }
 
 int cgmanager_ping (void *data, NihDBusMessage *message, const char *controller)
