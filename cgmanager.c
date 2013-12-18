@@ -415,10 +415,12 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 	return 0;
 }
 int cgmanager_create_scm (void *data, NihDBusMessage *message,
-			 const char *controller, char *cgroup, int sockfd)
+		 const char *controller, char *cgroup, int sockfd, int *ok)
 {
 	struct ucred ucred;
+	int ret;
 
+	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -433,15 +435,19 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	close(sockfd);
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  sockfd, ucred.pid, ucred.uid, ucred.gid);
-	return create_main(message, controller, cgroup, ucred);
+	ret = create_main(message, controller, cgroup, ucred);
+	if (ret == 0)
+		*ok = 0;
+	return 0;
 }
 int cgmanager_create (void *data, NihDBusMessage *message,
-				 const char *controller, char *cgroup)
+				 const char *controller, char *cgroup, int *ok)
 {
-	int fd = 0;
+	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
 
+	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -460,7 +466,10 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	return create_main(message, controller, cgroup, ucred);
+	ret = create_main(message, controller, cgroup, ucred);
+	if (ret == 0)
+		*ok = 0;
+	return 0;
 }
 
 /*
