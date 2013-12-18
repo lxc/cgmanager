@@ -336,9 +336,10 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 int create_main (NihDBusMessage *message, const char *controller, char *cgroup, struct ucred ucred)
 {
 	int ret;
-	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], *fnam, *dnam;
+	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], dirpath[MAXPATHLEN];
 	nih_local char *copy = NULL;
 	size_t cgroup_len;
+	char *p, *p2, oldp2;
 
 	if (!cgroup || ! *cgroup)  // nothing to do
 		return 0;
@@ -371,44 +372,59 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 			"Out of memory copying cgroup name");
 		return -1;
 	}
-	fnam = basename(copy);
-	dnam = dirname(copy);
+
 	strcpy(path, rcgpath);
-	if (strcmp(dnam, ".") != 0) {
-		// verify that the real path is below the controller path
-		strncat(path, "/", MAXPATHLEN-1);
-		strncat(path, dnam, MAXPATHLEN-1);
-		if (realpath_escapes(path, rcgpath)) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Invalid path %s", path);
+	strcpy(dirpath, rcgpath);
+	for (p=copy; *p; p = p2) {
+		for (p2=p; *p2 && *p2 != '/'; p2++);
+		oldp2 = *p2;
+		*p2 = '\0';
+		if (strcmp(p, "..") == 0) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+				"Out of memory copying cgroup name");
 			return -1;
 		}
+		strncat(path, "/", MAXPATHLEN-1);
+		strncat(path, p, MAXPATHLEN-1);
+		if (dir_exists(path)) {
+			// TODO - properly use execute perms
+			if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
+				nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					"pid %d (uid %d gid %d) may not look under %s",
+					(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+				return -1;
+			}
+			goto next;
+		}
+		if (!may_access(ucred.pid, ucred.uid, ucred.gid, dirpath, O_RDWR)) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"pid %d (uid %d gid %d) may not create under %s",
+				(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, dirpath);
+			return -1;
+		}
+		ret = mkdir(path, 0755);
+		if (ret < 0) {  // Should we ignore EEXIST?  Ok, but don't chown.
+			if (errno == EEXIST)
+				return 0;
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"failed to create %s", path);
+			return -1;
+		}
+		if (!chown_cgroup_path(path, ucred.uid, ucred.gid, true)) {
+			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Failed to change ownership on %s to %d:%d",
+				path, (int)ucred.uid, (int)ucred.gid);
+			rmdir(path);
+			return -1;
+		}
+next:
+		strncat(dirpath, "/", MAXPATHLEN-1);
+		strncat(dirpath, p, MAXPATHLEN-1);
+		*p2 = oldp2;
+		if (*p2)
+			p2++;
 	}
 
-	// is r allowed to create under the parent dir?
-	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"pid %d (uid %d gid %d) may not create under %s",
-			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
-		return -1;
-	}
-	strncat(path, "/", MAXPATHLEN-1);
-	strncat(path, fnam, MAXPATHLEN-1);
-	ret = mkdir(path, 0755);
-	if (ret < 0) {  // Should we ignore EEXIST?  Ok, but don't chown.
-		if (errno == EEXIST)
-			return 0;
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"failed to create %s", path);
-		return -1;
-	}
-	if (!chown_cgroup_path(path, ucred.uid, ucred.gid, true)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to change ownership on %s to %d:%d",
-			path, (int)ucred.uid, (int)ucred.gid);
-		rmdir(path);
-		return -1;
-	}
 
 	nih_info("Created %s for %d (%d:%d)", path, (int)ucred.pid,
 		 (int)ucred.uid, (int)ucred.gid);
