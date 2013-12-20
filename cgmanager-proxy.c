@@ -897,6 +897,10 @@ int get_value_main (const char *controller, const char *req_cgroup,
 		goto out;
 	}
 
+	if (dbus_message_is_error(reply, DBUS_ERROR_INVALID_ARGS)) {
+		nih_error("Server returned an error");
+		goto out;
+	}
 	dbus_message_iter_init(reply, &iter);
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
 		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
@@ -907,6 +911,9 @@ int get_value_main (const char *controller, const char *req_cgroup,
 	*value = strdup(str_value);
 	ret = 0;
 out:
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error received from server");
 	close(sv[0]);
 	close(sv[1]);
 	if (message)
