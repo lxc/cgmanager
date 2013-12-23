@@ -563,7 +563,11 @@ int chown_cgroup_main (NihDBusMessage *message, const char *controller,
 
 	// go ahead and chown it.
 	if (!chown_cgroup_path(path, v.uid, v.gid, false))
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to change ownership on %s to %d:%d",
+			path, (int)v.uid, (int)v.gid);
 		return -1;
+	}
 
 	*ok = 1;
 	return 0;
