@@ -12,14 +12,22 @@ else
 	uid=1000
 fi
 
-mount -t cgroup -o memory cgroup /sys/fs/cgroup
-myc=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
-rmdir /sys/fs/cgroup/${myc}/zzz/b || true
-rmdir /sys/fs/cgroup/${myc}/zzz || true
-umount /sys/fs/cgroup
+# We can't readily verify if we can't mount cgroups
+cantmount=0
+mount -t cgroup -o memory cgroup /sys/fs/cgroup || cantmount=1
+if [ $cantmount -eq 0 ]; then
+	myc=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
+	rmdir /sys/fs/cgroup/${myc}/zzz/b || true
+	rmdir /sys/fs/cgroup/${myc}/zzz || true
+	umount /sys/fs/cgroup
+fi
 
 dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"zzz" > /dev/null 2>&1
 ./chowncgroup -c memory -n zzz -u $uid -g $gid > /dev/null 2>&1
+if [ $cantmount -eq 1 ]; then
+	echo "Chowned zzz, but cannot verify the result"
+	exit 0
+fi
 mount -t cgroup -o memory cgroup /sys/fs/cgroup
 o1=`stat --format="%u:%g" /sys/fs/cgroup/${myc}/zzz`
 o2=`stat --format="%u:%g" /sys/fs/cgroup/${myc}/zzz/tasks`
