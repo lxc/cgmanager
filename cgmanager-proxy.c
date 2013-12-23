@@ -191,15 +191,18 @@ int get_pid_cgroup_main (const char *controller,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error creating socketpair: %s", strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 
@@ -218,7 +221,8 @@ int get_pid_cgroup_main (const char *controller,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(server_conn);
@@ -228,31 +232,37 @@ int get_pid_cgroup_main (const char *controller,
 	}
 
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], vcred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	while (!(reply = dbus_connection_pop_message(server_conn)))
 		dbus_connection_read_write(server_conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"wrong serial on reply");
 		goto out;
 	}
 
 	dbus_message_iter_init(reply, &iter);
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
-		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
 		goto out;
 	}
 	char *str_value;
@@ -339,15 +349,18 @@ int move_pid_main (const char *controller, char *cgroup,
 
 	*ok = -1;
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error creating socketpair: %s", strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 
@@ -370,7 +383,8 @@ int move_pid_main (const char *controller, char *cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(server_conn);
@@ -380,25 +394,30 @@ int move_pid_main (const char *controller, char *cgroup,
 	}
 
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], vcred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	while (!(reply = dbus_connection_pop_message(server_conn)))
 		dbus_connection_read_write(server_conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"wrong serial on reply");
 		goto out;
 	}
 
@@ -416,10 +435,12 @@ int move_pid_main (const char *controller, char *cgroup,
 		break;
 	case DBUS_TYPE_STRING: // uh oh, must've failed
 		dbus_message_iter_get_basic(&iter, &replystr);
-		nih_error("Cgmanager returned error: %s", replystr);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Cgmanager returned error: %s", replystr);
 		goto out;
 	default:
-		nih_error("Got bad reply type: %d", t);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Got bad reply type: %d", t);
 		goto out;
 	}
 	ret = 0;
@@ -503,15 +524,18 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error creating socketpair: %s", strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 
@@ -534,7 +558,8 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(server_conn);
@@ -544,17 +569,20 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 	}
 
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	while (!(reply = dbus_connection_pop_message(server_conn)))
 		dbus_connection_read_write(server_conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"wrong serial on reply");
 		goto out;
 	}
 
@@ -578,11 +606,16 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 		nih_error("Cgmanager returned error: %s", replystr);
 		goto out;
 	default:
-		nih_error("Got bad reply type: %d", t);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Got bad reply type: %d", t);
 		goto out;
 	}
 	if (ok == 0)
 		ret = 0;
+	else {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"cgmanager reported an error");
+	}
 out:
 	close(sv[0]);
 	close(sv[1]);
@@ -658,15 +691,18 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 
 	*ok = -1;
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error creating socketpair: %s", strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 
@@ -689,7 +725,8 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(server_conn);
@@ -699,25 +736,30 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 	}
 
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], vcred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	while (!(reply = dbus_connection_pop_message(server_conn)))
 		dbus_connection_read_write(server_conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"wrong serial on reply");
 		goto out;
 	}
 
@@ -735,16 +777,20 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 		break;
 	case DBUS_TYPE_STRING: // uh oh, must've failed
 		dbus_message_iter_get_basic(&iter, &replystr);
-		nih_error("Cgmanager returned error: %s", replystr);
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"%s", replystr);
+			"cgmanager returned error: %s", replystr);
 		goto out;
 	default:
-		nih_error("Got bad reply type: %d", t);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Got bad reply type: %d", t);
 		goto out;
 	}
 	if (*ok == 0)
 		ret = 0;
+	else {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"cgmanager reported an error");
+	}
 out:
 	close(sv[0]);
 	close(sv[1]);
@@ -826,15 +872,18 @@ int get_value_main (const char *controller, const char *req_cgroup,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error creating socketpair: %s", strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 
@@ -861,7 +910,8 @@ int get_value_main (const char *controller, const char *req_cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(server_conn);
@@ -871,27 +921,32 @@ int get_value_main (const char *controller, const char *req_cgroup,
 	}
 
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	while (!(reply = dbus_connection_pop_message(server_conn)))
 		dbus_connection_read_write(server_conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"wrong serial on reply");
 		goto out;
 	}
 
 	if (dbus_message_is_error(reply, DBUS_ERROR_INVALID_ARGS)) {
-		nih_error("Server returned an error");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Server returned an error");
 		goto out;
 	}
 	dbus_message_iter_init(reply, &iter);
 	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
-		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
 		goto out;
 	}
 	char *str_value;
@@ -899,9 +954,6 @@ int get_value_main (const char *controller, const char *req_cgroup,
 	*value = strdup(str_value);
 	ret = 0;
 out:
-	if (ret)
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error received from server");
 	close(sv[0]);
 	close(sv[1]);
 	if (message)
@@ -974,15 +1026,18 @@ int set_value_main (const char *controller, const char *req_cgroup,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error creating socketpair: %s", strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"setsockopt: %s", strerror(errno));
 		goto out;
 	}
 
@@ -1013,7 +1068,8 @@ int set_value_main (const char *controller, const char *req_cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"failed to send dbus message");
 		return -1;
 	}
 	dbus_connection_flush(server_conn);
@@ -1023,17 +1079,20 @@ int set_value_main (const char *controller, const char *req_cgroup,
 	}
 
 	if (read(sv[0], &buf, 1) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
 	while (!(reply = dbus_connection_pop_message(server_conn)))
 		dbus_connection_read_write(server_conn, -1);
 	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"wrong serial on reply");
 		goto out;
 	}
 
@@ -1054,14 +1113,20 @@ int set_value_main (const char *controller, const char *req_cgroup,
 		break;
 	case DBUS_TYPE_STRING: // uh oh, must've failed
 		dbus_message_iter_get_basic(&iter, &replystr);
-		nih_error("Cgmanager returned error: %s", replystr);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Cgmanager returned error: %s", replystr);
 		goto out;
 	default:
-		nih_error("Got bad reply type: %d", t);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Got bad reply type: %d", t);
 		goto out;
 	}
 	if (ok == 0)
 		ret = 0;
+	else {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Cgmanager reported an error");
+	}
 out:
 	close(sv[0]);
 	close(sv[1]);
