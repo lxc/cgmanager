@@ -630,6 +630,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 		 const char *controller, char *cgroup, int sockfd, int *ok)
 {
 	struct ucred ucred;
+	int ret;
 
 	*ok = -1;
 	if (message == NULL) {
@@ -641,9 +642,10 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 
 	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
 	close(sockfd);
-	if (create_main(controller, cgroup, ucred) == 0)
+	ret = create_main(controller, cgroup, ucred);
+	if (ret == 0)
 		*ok = 0;
-	return 0;
+	return ret;
 }
 int cgmanager_create (void *data, NihDBusMessage *message,
 		 const char *controller, char *cgroup, int *ok)
@@ -651,6 +653,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	struct ucred ucred;
 	int fd;
 	socklen_t len;
+	int ret;
 
 	*ok = -1;
 	if (message == NULL) {
@@ -667,9 +670,10 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-	if (create_main(controller, cgroup, ucred) == 0)
+	ret = create_main(controller, cgroup, ucred);
+	if (ret == 0)
 		*ok = 0;
-	return 0;
+	return ret;
 }
 
 /*
