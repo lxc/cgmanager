@@ -453,7 +453,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 		  sockfd, ucred.pid, ucred.uid, ucred.gid);
 	ret = create_main(message, controller, cgroup, ucred);
 	if (ret == 0)
-		*ok = 0;
+		*ok = 1;
 	return ret;
 }
 int cgmanager_create (void *data, NihDBusMessage *message,
@@ -484,7 +484,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	ret = create_main(message, controller, cgroup, ucred);
 	if (ret == 0)
-		*ok = 0;
+		*ok = 1;
 	return ret;
 }
 

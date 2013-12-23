@@ -611,7 +611,7 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 			"Got bad reply type: %d", t);
 		goto out;
 	}
-	if (ok == 0)
+	if (ok == 1)
 		ret = 0;
 	else {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -790,7 +790,7 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 			"Got bad reply type: %d", t);
 		goto out;
 	}
-	if (*ok == 0)
+	if (*ok == 1)
 		ret = 0;
 	else {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -1126,7 +1126,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 			"Got bad reply type: %d", t);
 		goto out;
 	}
-	if (ok == 0)
+	if (ok == 1)
 		ret = 0;
 	else {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
