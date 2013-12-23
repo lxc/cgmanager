@@ -403,10 +403,6 @@ int move_pid_main (const char *controller, char *cgroup,
 	}
 
 	dbus_message_iter_init(reply, &iter);
-	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
-		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
-		goto out;
-	}
 	int t= dbus_message_iter_get_arg_type(&iter);
 	short r;
 	char *replystr;
