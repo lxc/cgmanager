@@ -15,10 +15,11 @@ fi
 dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"zzz" > /dev/null 2>&1
 ./chowncgroup -c memory -n zzz -u $uid -g $gid > /dev/null 2>&1
 mount -t cgroup -o memory cgroup /sys/fs/cgroup
-o1=`stat --format="%u:%g" /sys/fs/cgroup/zzz`
-o2=`stat --format="%u:%g" /sys/fs/cgroup/zzz/tasks`
-o3=`stat --format="%u:%g" /sys/fs/cgroup/zzz/cgroup.procs`
-o4=`stat --format="%u:%g" /sys/fs/cgroup/zzz/memory.limit_in_bytes`
+myc=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
+o1=`stat --format="%u:%g" /sys/fs/cgroup/${myc}/zzz`
+o2=`stat --format="%u:%g" /sys/fs/cgroup/${myc}/zzz/tasks`
+o3=`stat --format="%u:%g" /sys/fs/cgroup/${myc}/zzz/cgroup.procs`
+o4=`stat --format="%u:%g" /sys/fs/cgroup/${myc}/zzz/memory.limit_in_bytes`
 umount /sys/fs/cgroup
 if [ "$o1" != "$uid:$gid" ]; then
 	exit 1
