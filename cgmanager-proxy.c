@@ -603,7 +603,8 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 		break;
 	case DBUS_TYPE_STRING: // uh oh, must've failed
 		dbus_message_iter_get_basic(&iter, &replystr);
-		nih_error("Cgmanager returned error: %s", replystr);
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Cgmanager returned error: %s", replystr);
 		goto out;
 	default:
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
