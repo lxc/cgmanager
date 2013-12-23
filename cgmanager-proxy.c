@@ -1148,6 +1148,7 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 
 {
 	struct ucred ucred;
+	int ret;
 
 	*ok = -1;
 	if (message == NULL) {
@@ -1159,9 +1160,10 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 
 	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
 	close(sockfd);
-	if (set_value_main(controller, req_cgroup, key, value, ucred) == 0)
+	ret = set_value_main(controller, req_cgroup, key, value, ucred);
+	if (ret == 0)
 		*ok = 0;
-	return 0;
+	return ret;
 }
 int cgmanager_set_value (void *data, NihDBusMessage *message,
 		 const char *controller, const char *req_cgroup,
@@ -1171,6 +1173,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	struct ucred ucred;
 	int fd;
 	socklen_t len;
+	int ret;
 
 	*ok = -1;
 	if (message == NULL) {
@@ -1187,9 +1190,10 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-	if (set_value_main(controller, req_cgroup, key, value, ucred) == 0)
+	ret = set_value_main(controller, req_cgroup, key, value, ucred);
+	if (ret == 0)
 		*ok = 0;
-	return 0;
+	return ret;
 }
 
 int cgmanager_ping (void *data, NihDBusMessage *message, const char *controller)
