@@ -16,10 +16,14 @@ if [ $cantmount -eq 0 ]; then
 	prev=`cat /sys/fs/cgroup/${myc}/zzz/b/memory.limit_in_bytes`
 	umount /sys/fs/cgroup
 else
-	prev=`dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getValue string:'memory' string:'zzz/b' string:'memory.usage_in_bytes'`
+	prev=`dbus-send --print-reply=literal --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getValue string:'memory' string:'zzz/b' string:'memory.usage_in_bytes' | awk '{ print $1}'`
 fi
 
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.setValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' string:'99999' > /dev/null 2>&1
+new=99999
+if [ "$prev" = "102400" ]; then
+	new=999999
+fi
+sudo -u \#$uid dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.setValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' string:"$new" > /dev/null 2>&1
 if [ $? -ne 0 ]; then
 	echo "test 13: failed to set limit_in_bytes"
 	exit 1
@@ -30,9 +34,9 @@ if [ $cantmount -eq 0 ]; then
 	after=`cat /sys/fs/cgroup/${myc}/zzz/b/memory.limit_in_bytes`
 	umount /sys/fs/cgroup
 else
-	after=`dbus-send --print-reply --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getValue string:'memory' string:'zzz/b' string:'memory.usage_in_bytes'`
+	after=`dbus-send --print-reply=literal --address=unix:path=/tmp/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getValue string:'memory' string:'zzz/b' string:'memory.usage_in_bytes' | awk '{ print $1}'`
 fi
-if [ $prev = $after ]; then
+if [ "$prev" = "$after" ]; then
 	echo "test 13: old limit was $prev, new is $after"
 	exit 1
 fi
