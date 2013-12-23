@@ -454,7 +454,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	ret = create_main(message, controller, cgroup, ucred);
 	if (ret == 0)
 		*ok = 0;
-	return 0;
+	return ret;
 }
 int cgmanager_create (void *data, NihDBusMessage *message,
 				 const char *controller, char *cgroup, int *ok)
@@ -485,7 +485,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	ret = create_main(message, controller, cgroup, ucred);
 	if (ret == 0)
 		*ok = 0;
-	return 0;
+	return ret;
 }
 
 /*
