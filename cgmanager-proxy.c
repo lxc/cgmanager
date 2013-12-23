@@ -185,7 +185,7 @@ int get_pid_cgroup_main (const char *controller,
 		struct ucred ucred, struct ucred vcred, char **output)
 {
 	char buf[1];
-	DBusMessage *reply, *message;
+	DBusMessage *reply = NULL, *message = NULL;
 	DBusMessageIter iter;
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
@@ -342,7 +342,7 @@ int move_pid_main (const char *controller, char *cgroup,
 			struct ucred ucred, struct ucred vcred, int *ok)
 {
 	char buf[1];
-	DBusMessage *reply, *message;
+	DBusMessage *reply = NULL, *message = NULL;
 	DBusMessageIter iter;
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
@@ -518,7 +518,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 int create_main (const char *controller, char *cgroup, struct ucred ucred)
 {
 	char buf[1];
-	DBusMessage *reply, *message;
+	DBusMessage *reply = NULL, *message = NULL;
 	DBusMessageIter iter;
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
@@ -589,7 +589,7 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 	dbus_message_iter_init(reply, &iter);
 	int t= dbus_message_iter_get_arg_type(&iter);
 	short r;
-	int ok;
+	int ok = -1;
 	char *replystr;
 	switch(t) {
 	case DBUS_TYPE_INT16:
@@ -689,7 +689,7 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 	struct ucred ucred, struct ucred vcred, int *ok)
 {
 	char buf[1];
-	DBusMessage *reply, *message;
+	DBusMessage *reply = NULL, *message = NULL;
 	DBusMessageIter iter;
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
@@ -871,7 +871,7 @@ int get_value_main (const char *controller, const char *req_cgroup,
 		 const char *key, struct ucred ucred, char **value)
 {
 	char buf[1];
-	DBusMessage *reply, *message;
+	DBusMessage *reply = NULL, *message = NULL;
 	DBusMessageIter iter;
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
@@ -1025,7 +1025,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 		 const char *key, const char *value, struct ucred ucred)
 {
 	char buf[1];
-	DBusMessage *reply, *message;
+	DBusMessage *reply = NULL, *message = NULL;
 	DBusMessageIter iter;
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
@@ -1104,7 +1104,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 	dbus_message_iter_init(reply, &iter);
 	int t= dbus_message_iter_get_arg_type(&iter);
 	short r;
-	int ok;
+	int ok = -1;
 	char *replystr;
 	switch(t) {
 	case DBUS_TYPE_INT16:
