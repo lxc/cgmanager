@@ -1,15 +1,15 @@
 CC = gcc
-CFLAGS = -Wall -ggdb -D_GNU_SOURCE
+CFLAGS = -Wall -ggdb -D_GNU_SOURCE -fPIC
 CFLAGS += $(shell pkg-config --cflags dbus-1)
 LDFLAGS = $(shell pkg-config --libs dbus-1 libnih libnih-dbus)
 
-all: cgmanager client movepid getpidcgroup chowncgroup cgproxy
+all: cgmanager client movepid getpidcgroup chowncgroup cgproxy cgmanager-client.so
 
 clean:
 	rm -f \
 		org.linuxcontainers.cgmanager.h org.linuxcontainers.cgmanager.c \
 		cgmanager-client.c cgmanager-client.h \
-		getpidcgroup movepid cgmanager chowncgroup cgproxy *.o
+		getpidcgroup movepid cgmanager chowncgroup cgproxy *.o *.so
 
 install:
 	cp cgproxy $(DESTDIR)/usr/bin
@@ -43,6 +43,9 @@ client: cgmanager-client.o
 
 cgmanager-client.o: cgmanager-client.h cgmanager-client.c
 		$(CC) $(CFLAGS) -c -I. cgmanager-client.c $(LDFLAGS)
+
+cgmanager-client.so: cgmanager-client.o
+		$(CC) -shared cgmanager-client.o -o cgmanager-client.so $(CFLAGS) $(LDFLAGS)
 
 cgmanager-client.h:
 	nih-dbus-tool \
