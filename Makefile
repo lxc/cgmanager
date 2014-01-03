@@ -11,6 +11,13 @@ clean:
 		cgmanager-client.c cgmanager-client.h \
 		getpidcgroup movepid cgmanager chowncgroup cgproxy *.o
 
+install:
+	cp cgproxy $(DESTDIR)/usr/bin
+	cp cgmanager $(DESTDIR)/usr/bin
+	cp chowncgroup $(DESTDIR)/usr/bin/cg_chown
+	cp getpidcgroup $(DESTDIR)/usr/bin/cg_getcgroup
+	cp movepid $(DESTDIR)/usr/bin/cg_movepid
+
 org.linuxcontainers.cgmanager.h:
 	nih-dbus-tool --package=cgmanager --mode=object --prefix=cgmanager --default-interface=org.linuxcontainers.cgmanager0_0 org.linuxcontainers.cgmanager.xml
 
