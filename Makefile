@@ -12,6 +12,7 @@ clean:
 		getpidcgroup movepid cgmanager chowncgroup cgproxy *.o *.so
 
 install:
+	mkdir -p $(DESTDIR)/usr/bin
 	cp cgproxy $(DESTDIR)/usr/bin
 	cp cgmanager $(DESTDIR)/usr/bin
 	cp chowncgroup $(DESTDIR)/usr/bin/cg_chown
