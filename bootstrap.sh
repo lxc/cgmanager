@@ -26,6 +26,7 @@ set -e
 
 test -d autom4te.cache && rm -rf autom4te.cache
 aclocal
+libtoolize
 autoheader
 autoconf
 automake --add-missing --copy
