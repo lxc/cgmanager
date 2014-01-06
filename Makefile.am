@@ -13,6 +13,8 @@ AM_LDFLAGS = $(DBUS_LIBS) $(NIH_LIBS) $(NIH_DBUS_LIBS)
 client_files_OUTPUTS = cgmanager-client.c cgmanager-client.h
 manager_files_OUTPUTS = org.linuxcontainers.cgmanager.c org.linuxcontainers.cgmanager.h
 
+BUILT_SOURCES = $(manager_files_OUTPUTS) $(client_files_OUTPUTS)
+
 CLEANFILES = $(manager_files_OUTPUTS) \
 	$(client_files_OUTPUTS) getpidcgroup movepid cgmanager chowncgroup cgproxy *.o *.so
 
