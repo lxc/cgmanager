@@ -56,12 +56,8 @@ movepid_SOURCES = movepid.c
 libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \
 	org.linuxcontainers.cgmanager.xml
-
 libcgmanager_la_CFLAGS = -fPIC -DPIC $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
-
-libcgmanager_la_LDFLAGS = \
-	-shared -module -E \
+libcgmanager_la_LDFLAGS = -E \
 	-version-info $(LIBCGMANAGER_VERSION)
-
 libcgmanager_la_LIBADD = \
-	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS) -ldl
+	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
