@@ -21,7 +21,7 @@ CLEANFILES = $(manager_files_OUTPUTS) \
 bin_PROGRAMS = cgmanager cgproxy movepid getpidcgroup chowncgroup
 bin_SCRIPTS = runtests.sh
 
-lib_LTLIBRARIES = libcgmanager_client.la
+lib_LTLIBRARIES = libcgmanager.la
 
 $(manager_files_OUTPUTS): org.linuxcontainers.cgmanager.xml
 	$(AM_V_GEN)$(NIH_DBUS_TOOL) \
@@ -53,15 +53,15 @@ getpidcgroup_SOURCES = getpidcgroup.c
 chowncgroup_SOURCES = chowncgroup.c
 movepid_SOURCES = movepid.c
 
-libcgmanager_client_la_SOURCES = \
+libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \
 	org.linuxcontainers.cgmanager.xml
 
-libcgmanager_client_la_CFLAGS = -fPIC -DPIC $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
+libcgmanager_la_CFLAGS = -fPIC -DPIC $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
 
-libcgmanager_client_la_LDFLAGS = \
+libcgmanager_la_LDFLAGS = \
 	-shared -module -E \
 	-version-info $(LIBCGMANAGER_VERSION)
 
-libcgmanager_client_la_LIBADD = \
+libcgmanager_la_LIBADD = \
 	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS) -ldl
