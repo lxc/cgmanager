@@ -1196,7 +1196,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	return ret;
 }
 
-int cgmanager_ping (void *data, NihDBusMessage *message, const char *controller)
+int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 {
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,

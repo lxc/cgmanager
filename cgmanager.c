@@ -68,7 +68,7 @@ unsigned long mypidns;
 bool setns_user_supported = false;
 unsigned long myuserns;
 
-int cgmanager_ping (void *data, NihDBusMessage *message, const char *controller)
+int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 {
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,

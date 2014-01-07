@@ -28,7 +28,7 @@
     <!-- Example function -->
 
     <method name="ping">
-      <arg name="controller" type="i" direction="in" />
+      <arg name="junk" type="i" direction="in" />
     </method>
     <method name="getPidCgroupScm">
       <arg name="controller" type="s" direction="in" />
