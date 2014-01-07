@@ -919,6 +919,35 @@ static NihOption options[] = {
 	NIH_OPTION_LAST
 };
 
+/*
+ * We may decide to make the socket path customizable.  For now
+ * just assume it is in /sys/fs/cgroup/ which has some special
+ * consequences
+ */
+static bool setup_cgroup_dir(void)
+{
+	int ret;
+	if (!dir_exists("/sys/fs/cgroup")) {
+		nih_debug("/sys/fs/cgroup does not exist");
+		return false;
+	}
+	/* try to create a file there */
+	ret = creat("/sys/fs/cgroup/cgmanager", O_RDWR);
+	if (ret >= 0) {
+		close(ret);
+		unlink("/sys/fs/cgroup/cgmanager");
+		return true;
+	}
+	ret = mount("cgroup", "/sys/fs/cgroup", "tmpfs", 0, "size=10000");
+	if (ret) {
+		nih_debug("Failed to mount tmpfs on /sys/fs/cgroup: %s",
+			strerror(errno));
+		return false;
+	}
+	nih_debug("Mounted tmpfs onto /sys/fs/cgroup");
+	return true;
+}
+
 int
 main (int   argc,
       char *argv[])
@@ -937,8 +966,13 @@ main (int   argc,
 	if (! args)
 		exit (1);
 
+	if (!setup_cgroup_dir()) {
+		nih_fatal("Failed to set up cgmanager socket");
+		exit(1);
+	}
+
 	/* Setup the DBus server */
-	server = nih_dbus_server ("unix:path=/tmp/cgmanager", client_connect,
+	server = nih_dbus_server ("unix:path=/sys/fs/cgroup/cgmanager", client_connect,
 	                          client_disconnect);
 	nih_assert (server != NULL);
 

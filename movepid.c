@@ -207,7 +207,7 @@ main (int   argc,
 		exit(1);
 	}
 
-	conn = nih_dbus_connect("unix:path=/tmp/cgmanager", NULL);
+	conn = nih_dbus_connect("unix:path=/sys/fs/cgroup/cgmanager", NULL);
 	nih_assert (conn != NULL);
 
 	send_dummy_msg(conn);

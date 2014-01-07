@@ -57,8 +57,8 @@
 #define PACKAGE_VERSION "0.0"
 #define PACKAGE_BUGREPORT ""
 
-#define UPPERFILE "/tmp/cgmanager"
-#define LOWERFILE "/tmp/cgmanager.lower"
+#define UPPERFILE "/sys/fs/cgroup/cgmanager"
+#define LOWERFILE "/sys/fs/cgroup/cgmanager.lower"
 #define UPPERSOCK "unix:path=" UPPERFILE
 #define LOWERSOCK "unix:path=" LOWERFILE
 
@@ -69,11 +69,11 @@ int setup_proxy(void)
 	bool exists_upper = false, exists_lower = false;
 
 	/*
-	 * If /tmp/cgmanager.lower exists,
-	 *    if /tmp/cgmanager exists, then exit (proxy already running)
+	 * If /sys/fs/cgroup/cgmanager.lower exists,
+	 *    if /sys/fs/cgroup/cgmanager exists, then exit (proxy already running)
 	 *    start up, connect to .lower
 	 * else
-	 *    if /tmp/cgmanager exists, move it to /tmp/cgmanager.lower
+	 *    if /sys/fs/cgroup/cgmanager exists, move it to /sys/fs/cgroup/cgmanager.lower
 	 *    start up and connect to .lower
 	 */
 	server_conn = nih_dbus_connect(UPPERSOCK, NULL);
@@ -94,7 +94,7 @@ int setup_proxy(void)
 		// we've got the sock we need, all set.
 		return 0;
 	if (exists_upper) {
-		//move /tmp/cgmanager to /tmp/cgmanager.lower
+		//move /sys/fs/cgroup/cgmanager to /sys/fs/cgroup/cgmanager.lower
 		if (creat(LOWERFILE, 0755) < 0 && errno != EEXIST) {
 			nih_error("failed to create lower sock");
 			return -1;
