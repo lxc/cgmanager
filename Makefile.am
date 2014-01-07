@@ -18,7 +18,8 @@ BUILT_SOURCES = $(manager_files_OUTPUTS) $(client_files_OUTPUTS)
 CLEANFILES = $(manager_files_OUTPUTS) \
 	$(client_files_OUTPUTS) getpidcgroup movepid cgmanager chowncgroup cgproxy *.o *.so
 
-bin_PROGRAMS = cgmanager cgproxy movepid getpidcgroup chowncgroup
+sbin_PROGRAMS = cgmanager cgproxy
+bin_PROGRAMS = movepid getpidcgroup chowncgroup
 bin_SCRIPTS = runtests.sh
 
 lib_LTLIBRARIES = libcgmanager.la
