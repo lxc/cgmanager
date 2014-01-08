@@ -1,0 +1,10 @@
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+libdir=@libdir@
+includedir=@includedir@
+
+Name: libcgmanager
+Description: cgroup manager library
+Version: @LIBCGMANAGER_VERSION_DOTTED@
+Libs: -L${libdir} -lcgmanager
+Cflags: -I${includedir}

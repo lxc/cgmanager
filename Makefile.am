@@ -15,14 +15,27 @@ manager_files_OUTPUTS = org.linuxcontainers.cgmanager.c org.linuxcontainers.cgma
 
 BUILT_SOURCES = $(manager_files_OUTPUTS) $(client_files_OUTPUTS)
 
-CLEANFILES = $(manager_files_OUTPUTS) \
-	$(client_files_OUTPUTS) getpidcgroup movepid cgmanager chowncgroup cgproxy *.o *.so
+CLEANFILES = \
+	$(manager_files_OUTPUTS) \
+	$(client_files_OUTPUTS) \
+	getpidcgroup movepid cgmanager chowncgroup cgproxy \
+	*.o *.so \
+	libcgmanager.pc.in
 
 sbin_PROGRAMS = cgmanager cgproxy
 bin_PROGRAMS = movepid getpidcgroup chowncgroup
 bin_SCRIPTS = runtests.sh
 
 lib_LTLIBRARIES = libcgmanager.la
+
+libcgmanager.pc: libcgmanager.pc.in
+	sed -e 's|[@]LIBCGMANAGER_VERSION_DOTTED[@]|$(LIBCGMANAGER_VERSION_DOTTED)|g' \
+		$< > $@
+
+EXTRA_DIST = libcgmanager.pc.in.in 
+
+pkgconfigdir = $(prefix)/lib/pkgconfig
+pkgconfig_DATA = libcgmanager.pc
 
 $(manager_files_OUTPUTS): org.linuxcontainers.cgmanager.xml
 	$(AM_V_GEN)$(NIH_DBUS_TOOL) \
