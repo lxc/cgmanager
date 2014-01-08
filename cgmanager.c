@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include <libgen.h>
 #include <unistd.h>
+#include <sys/mount.h>
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -80,37 +81,34 @@ int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 }
 
 /* getPidCgroup */
-int get_pid_cgroup_main (NihDBusMessage *message, const char *controller,
+int get_pid_cgroup_main (const void *parent, const char *controller,
 			 int target_pid, struct ucred c, char **output)
 {
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(c.pid, controller, "", rcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requestor cgroup");
+		nih_error("Could not determine the requestor cgroup");
 		return -1;
 	}
 
 	// Get v's cgroup in vcgpath
 	if (!compute_pid_cgroup(target_pid, controller, "", vcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the victim cgroup");
+		nih_error("Could not determine the victim cgroup");
 		return -1;
 	}
 
 	// Make sure v's cgroup is under r's
 	int rlen = strlen(rcgpath);
 	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"v (%d)'s cgroup is not below r (%d)'s",
+		nih_error("v (%d)'s cgroup is not below r (%d)'s",
 			(int)target_pid, (int)c.pid);
 		return -1;
 	}
 	if (strlen(vcgpath) == rlen)
-		*output = nih_strdup(message, "/");
+		*output = nih_strdup(parent, "/");
 	else
-		*output = nih_strdup(message, vcgpath + rlen + 1);
+		*output = nih_strdup(parent, vcgpath + rlen + 1);
 
 	if (! *output)
 		nih_return_no_memory_error(-1);
@@ -118,30 +116,109 @@ int get_pid_cgroup_main (NihDBusMessage *message, const char *controller,
 	return 0;
 }
 
+struct scm_sock_data {
+	char *controller;
+	char *cgroup;
+	char *key;
+	char *value;
+	int step;
+	struct ucred rcred;
+	int fd;
+};
+
+static void get_pid_scm_reader (struct scm_sock_data *data,
+			NihIo *io, const char *buf, size_t len)
+{
+	const char *controller = data->controller;
+	char *output = NULL;
+	struct ucred ucred;
+	pid_t target_pid;
+
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
+	}
+
+	if (data->step == 0) {
+		char b[1];
+		b[0] = '1';
+		// We need to fetch a second ucred
+		memcpy(&data->rcred, &ucred, sizeof(struct ucred));
+		data->step = 1;
+		if (write(data->fd, b, 1) != 1) {
+			nih_error("failed to read ucred");
+			nih_io_shutdown(io);
+			return;
+		}
+		return;
+	}
+	// we've read the second ucred, now we can proceed
+	target_pid = ucred.pid;
+	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
+	nih_info (_("getPidCgroupScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+	nih_info (_("Victim is pid=%d"), target_pid);
+
+	get_pid_cgroup_main(data, controller, target_pid,
+				   ucred, &output);
+	write(data->fd, output, strlen(output));
+	/* send output over sockfd and free it */
+out:
+	nih_io_shutdown(io);
+}
+
+static void
+scm_sock_close (struct scm_sock_data *data, NihIo *io)
+{
+	nih_assert (data);
+	nih_assert (io);
+	close (data->fd);
+	nih_free (data);
+	nih_free (io);
+}
 /*
  * This is one of the dbus callbacks.
  * Caller requests the cgroup of @pid in a given @controller
  */
 int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
-			const char *controller, int sockfd, char **output)
+			const char *controller, int sockfd)
 {
-	struct ucred ucred;
-	pid_t target_pid;
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
 
-	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  sockfd, ucred.pid, ucred.uid, ucred.gid);
-	target_pid = get_scm_pid(sockfd);
-	close(sockfd);
-
-	if (target_pid == -1) {
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not retrieve pid from socket");
+			     "Failed to set passcred: %s", strerror(errno));
+		return -1;
+	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->step = 0;
+	d->fd = sockfd;
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)get_pid_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
 
-	return get_pid_cgroup_main(message, controller, target_pid,
-				   ucred, output);
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 /* getPidCgroup */
@@ -152,7 +229,7 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 			const char *controller, int plain_pid, char **output)
 {
-	int fd = 0;
+	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
 
@@ -171,7 +248,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("getPidCgroup: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!is_same_pidns((int)ucred.pid)) {
@@ -179,8 +256,14 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 				"getPidCgroup called from non-init namespace");
 		return -1;
 	}
-	return get_pid_cgroup_main(message, controller, plain_pid, ucred,
+	ret = get_pid_cgroup_main(message, controller, plain_pid, ucred,
 				   output);
+	if (ret) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"invalid request");
+		return -1;
+	}
+	return 0;
 }
 
 /* movePid */
@@ -189,7 +272,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  * Caller requests moving a @pid to a particular cgroup identified
  * by the name (@cgroup) and controller type (@controller).
  */
-int move_pid_main (NihDBusMessage *message, const char *controller, char *cgroup,
+int move_pid_main (const char *controller, char *cgroup,
 		struct ucred r, int target_pid,  int *ok)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
@@ -197,69 +280,58 @@ int move_pid_main (NihDBusMessage *message, const char *controller, char *cgroup
 
 	// verify that ucred.pid may move target_pid
 	if (!may_move_pid(r.pid, r.uid, target_pid)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					     "%d may not move %d", (int)r.pid,
-					     (int)r.pid);
+		nih_error("%d may not move %d", (int)r.pid, (int)r.pid);
 		return -1;
 	}
 
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Bad requested cgroup path: %s", cgroup);
+		nih_error("Bad requested cgroup path: %s", cgroup);
 		return -1;
 	}
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requested cgroup");
+		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
 	/* rcgpath + / + cgroup + /tasks + \0 */
 	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+8) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Path name too long");
+		nih_error("Path name too long");
 		return -1;
 	}
 	strcpy(path, rcgpath);
 	strncat(path, "/", MAXPATHLEN-1);
 	strncat(path, cgroup, MAXPATHLEN-1);
 	if (realpath_escapes(path, rcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Invalid path %s", path);
+		nih_error("Invalid path %s", path);
 		return -1;
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"pid %d (uid %d gid %d) may not write under %s",
+		nih_error("pid %d (uid %d gid %d) may not write under %s",
 			(int)r.pid, (int)r.uid, (int)r.gid, path);
 		return -1;
 	}
 	// is r allowed to write to tasks file?
 	strncat(path, "/tasks", MAXPATHLEN-1);
 	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"pid %d (uid %d gid %d) may not write under %s",
+		nih_error("pid %d (uid %d gid %d) may not write under %s",
 			(int)r.pid, (int)r.uid, (int)r.gid, path);
 		return -1;
 	}
 	f = fopen(path, "w");
 	if (!f) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to open %s", path);
+		nih_error("Failed to open %s", path);
 		return -1;
 	}
 	if (fprintf(f, "%d\n", target_pid) < 0) {
 		fclose(f);
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to open %s", path);
+		nih_error("Failed to open %s", path);
 		return -1;
 	}
 	if (fclose(f) != 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to write %d to %s", (int)target_pid, path);
+		nih_error("Failed to write %d to %s", (int)target_pid, path);
 		return -1;
 	}
 	nih_info("%d moved to %s:%s by %d's request", (int)target_pid,
@@ -268,39 +340,91 @@ int move_pid_main (NihDBusMessage *message, const char *controller, char *cgroup
 	return 0;
 }
 
-int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup,
-			int sockfd, int *ok)
+void move_pid_scm_reader (struct scm_sock_data *data,
+		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred ucred;
 	pid_t target_pid;
+	int ok = -1;
+	char b[1];
 
-	*ok = -1;
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		close(sockfd);
-		return -1;
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
 	}
 
-	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
-	target_pid = get_scm_pid(sockfd);
-	close(sockfd);
+	if (data->step == 0) {
+		b[0] = '1';
+		// We need to fetch a second ucred
+		memcpy(&data->rcred, &ucred, sizeof(struct ucred));
+		data->step = 1;
+		if (write(data->fd, b, 1) != 1) {
+			nih_error("failed to read ucred");
+			nih_io_shutdown(io);
+			return;
+		}
+		return;
+	}
+	// we've read the second ucred, now we can proceed
+	target_pid = ucred.pid;
+	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
+	nih_info (_("movePidScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+	nih_info (_("Victim is pid=%d"), target_pid);
 
-	if (target_pid == -1) {
+	move_pid_main(data->controller, data->cgroup, ucred, target_pid, &ok);
+	*b = ok == 1 ? '1' : '0';
+	write(data->fd, b, 1);
+out:
+	nih_io_shutdown(io);
+}
+int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
+			const char *controller, char *cgroup,
+			int sockfd)
+{
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not get target pid from socket");
+			     "Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, cgroup);
+	d->step = 0;
+	d->fd = sockfd;
 
-	return move_pid_main(message, controller, cgroup, ucred, target_pid, ok);
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)move_pid_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int plain_pid,
 			int *ok)
 {
-	int fd = 0;
+	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
 
@@ -321,10 +445,14 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("movePid: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	return move_pid_main(message, controller, cgroup, ucred, plain_pid, ok);
+	ret = move_pid_main(controller, cgroup, ucred, plain_pid, ok);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid request");
+	return ret;
 }
 
 /* 
@@ -333,7 +461,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int create_main (NihDBusMessage *message, const char *controller, char *cgroup, struct ucred ucred)
+int create_main (const char *controller, char *cgroup, struct ucred ucred)
 {
 	int ret;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], dirpath[MAXPATHLEN];
@@ -345,8 +473,7 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 		return 0;
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Bad requested cgroup path: %s", cgroup);
+		nih_error("Bad requested cgroup path: %s", cgroup);
 		return -1;
 	}
 
@@ -354,22 +481,19 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requested cgroup");
+		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
 
 	cgroup_len = strlen(cgroup);
 
 	if (strlen(rcgpath) + cgroup_len > MAXPATHLEN) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Path name too long");
+		nih_error("Path name too long");
 		return -1;
 	}
 	copy = nih_strndup(NULL, cgroup, cgroup_len);
 	if (!copy) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory copying cgroup name");
+		nih_error("Out of memory copying cgroup name");
 		return -1;
 	}
 
@@ -380,8 +504,7 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 		oldp2 = *p2;
 		*p2 = '\0';
 		if (strcmp(p, "..") == 0) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-				"Out of memory copying cgroup name");
+			nih_error("Out of memory copying cgroup name");
 			return -1;
 		}
 		strncat(path, "/", MAXPATHLEN-1);
@@ -389,16 +512,14 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 		if (dir_exists(path)) {
 			// TODO - properly use execute perms
 			if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-				nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					"pid %d (uid %d gid %d) may not look under %s",
+				nih_error("pid %d (uid %d gid %d) may not look under %s",
 					(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
 				return -1;
 			}
 			goto next;
 		}
 		if (!may_access(ucred.pid, ucred.uid, ucred.gid, dirpath, O_RDWR)) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"pid %d (uid %d gid %d) may not create under %s",
+			nih_error("pid %d (uid %d gid %d) may not create under %s",
 				(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, dirpath);
 			return -1;
 		}
@@ -406,13 +527,11 @@ int create_main (NihDBusMessage *message, const char *controller, char *cgroup, 
 		if (ret < 0) {  // Should we ignore EEXIST?  Ok, but don't chown.
 			if (errno == EEXIST)
 				return 0;
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"failed to create %s", path);
+			nih_error("failed to create %s", path);
 			return -1;
 		}
 		if (!chown_cgroup_path(path, ucred.uid, ucred.gid, true)) {
-			nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to change ownership on %s to %d:%d",
+			nih_error("Failed to change ownership on %s to %d:%d",
 				path, (int)ucred.uid, (int)ucred.gid);
 			rmdir(path);
 			return -1;
@@ -430,31 +549,65 @@ next:
 		 (int)ucred.uid, (int)ucred.gid);
 	return 0;
 }
-int cgmanager_create_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int sockfd, int *ok)
+
+void create_scm_reader (struct scm_sock_data *data,
+		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred ucred;
+	char b[1];
 	int ret;
 
-	*ok = -1;
-	if (message == NULL) {
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
+	}
+	nih_info (_("CreateScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+
+	ret = create_main(data->controller, data->cgroup, ucred);
+	*b = ret == 0 ? '1' : '0';
+	write(data->fd, b, 1);
+out:
+	nih_io_shutdown(io);
+}
+int cgmanager_create_scm (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		close(sockfd);
+			     "Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, cgroup);
+	d->fd = sockfd;
 
-	/*
-	 * to send these scm credentials, caller must have had privilege
-	 */
-	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
-	close(sockfd);
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  sockfd, ucred.pid, ucred.uid, ucred.gid);
-	ret = create_main(message, controller, cgroup, ucred);
-	if (ret == 0)
-		*ok = 1;
-	return ret;
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)create_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 int cgmanager_create (void *data, NihDBusMessage *message,
 				 const char *controller, char *cgroup, int *ok)
@@ -479,11 +632,14 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Create: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	ret = create_main(message, controller, cgroup, ucred);
-	if (ret == 0)
+	ret = create_main(controller, cgroup, ucred);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid request");
+	else
 		*ok = 1;
 	return ret;
 }
@@ -500,7 +656,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  *
  * On success, ok will be sent with value 1.  On failure, -1.
  */
-int chown_cgroup_main (NihDBusMessage *message, const char *controller,
+int chown_cgroup_main (const char *controller,
 		char *cgroup, struct ucred r, struct ucred v, int *ok)
 {
 	char rcgpath[MAXPATHLEN];
@@ -511,60 +667,51 @@ int chown_cgroup_main (NihDBusMessage *message, const char *controller,
 	/* If caller is not root in his userns, then he can't chown, as
 	 * that requires privilege over two uids */
 	if (hostuid_to_ns(r.uid, r.pid) != 0) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Chown requested by non-root uid %d", r.uid);
+		nih_error("Chown requested by non-root uid %d", r.uid);
 		return -1;
 	}
 
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
 		// We could try to be accomodating, but let's not fool around right now
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Bad requested cgroup path: %s", cgroup);
+		nih_error("Bad requested cgroup path: %s", cgroup);
 		return -1;
 	}
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requested cgroup");
+		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
 	/* rcgpath + / + cgroup + \0 */
 	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+2) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Path name too long");
+		nih_error("Path name too long");
 		return -1;
 	}
 	path = nih_sprintf(NULL, "%s/%s", rcgpath, cgroup);
 	if (!path) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory calculating pathname");
+		nih_error("Out of memory calculating pathname");
 		return -1;
 	}
 	if (realpath_escapes(path, rcgpath)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Invalid path %s", path);
+		nih_error("Invalid path %s", path);
 		return -1;
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"pid %d (uid %d gid %d) may not write under %s",
+		nih_error("pid %d (uid %d gid %d) may not write under %s",
 			(int)r.pid, (int)r.uid, (int)r.gid, path);
 		return -1;
 	}
 
 	// does r have privilege over the cgroup dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Pid %d may not chown %s\n", (int)r.pid, path);
+		nih_error("Pid %d may not chown %s\n", (int)r.pid, path);
 		return -1;
 	}
 
 	// go ahead and chown it.
 	if (!chown_cgroup_path(path, v.uid, v.gid, false)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to change ownership on %s to %d:%d",
+		nih_error("Failed to change ownership on %s to %d:%d",
 			path, (int)v.uid, (int)v.gid);
 		return -1;
 	}
@@ -573,42 +720,88 @@ int chown_cgroup_main (NihDBusMessage *message, const char *controller,
 	return 0;
 }
 
+void chown_cgroup_scm_reader (struct scm_sock_data *data,
+		NihIo *io, const char *buf, size_t len)
+{
+	struct ucred vcred;
+	int ok = -1;
+	char b[1];
+
+	if (!get_nih_io_creds(io, &vcred)) {
+		nih_error("failed to read ucred");
+		goto out;
+	}
+
+	if (data->step == 0) {
+		b[0] = '1';
+		// We need to fetch a second ucred
+		memcpy(&data->rcred, &vcred, sizeof(struct ucred));
+		data->step = 1;
+		if (write(data->fd, b, 1) != 1) {
+			nih_error("failed to read ucred");
+			nih_io_shutdown(io);
+			return;
+		}
+		return;
+	}
+	// we've read the second ucred, now we can proceed
+	nih_info (_("chownCgroupScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
+	nih_info (_("Victim is (uid=%d, gid=%d)"), vcred.uid, vcred.gid);
+
+	chown_cgroup_main(data->controller, data->cgroup, data->rcred, vcred, &ok);
+	*b = ok == 1 ? '1' : '0';
+	write(data->fd, b, 1);
+out:
+	nih_io_shutdown(io);
+}
 int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int sockfd,
 			int *ok)
 {
-	int fd = 0;
-	struct ucred ucred, vcred;
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
 
-	*ok = -1;
-	if (message == NULL) {
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
-		close(sockfd);
+			     "Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
-
-	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
-	get_scm_creds(sockfd, &vcred.uid, &vcred.gid, &vcred.pid);
-	close(sockfd);
-
-	if (vcred.pid == -1) {
-		nih_dbus_error_raise_printf(DBUS_ERROR_INVALID_ARGS,
-			"Could not calculate desired uid and gid");
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
 		return -1;
 	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, cgroup);
+	d->step = 0;
+	d->fd = sockfd;
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
-
-	return chown_cgroup_main(message, controller, cgroup, ucred, vcred, ok);
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader) chown_cgroup_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int uid, int gid,
 			int *ok)
 {
-	int fd = 0;
+	int fd = 0, ret;
 	struct ucred ucred, vcred;
 	socklen_t len;
 
@@ -628,7 +821,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("chownCgroup: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!is_same_pidns((int)ucred.pid)) {
@@ -646,7 +839,11 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	vcred.uid = uid;
 	vcred.gid = gid;
 
-	return chown_cgroup_main(message, controller, cgroup, ucred, vcred, ok);
+	ret = chown_cgroup_main(controller, cgroup, ucred, vcred, ok);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid request");
+	return ret;
 }
 
 /* 
@@ -659,28 +856,25 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
  * XXX Should '/' be disallowed, only '..' allowed?  Otherwise callers can't
  * pretend to be the cgroup root which is annoying in itself
  */
-int get_value_main (NihDBusMessage *message, const char *controller, const char *req_cgroup,
+int get_value_main (void *parent, const char *controller, const char *req_cgroup,
 		                 const char *key, struct ucred ucred, char **value)
 {
 	char path[MAXPATHLEN];
 
 	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requested cgroup");
+		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* append the filename */
 	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"filename too long for cgroup %s key %s", path, key);
+		nih_error("filename too long for cgroup %s key %s", path, key);
 		return -1;
 	}
 
@@ -689,44 +883,83 @@ int get_value_main (NihDBusMessage *message, const char *controller, const char 
 
 	/* Check access rights to the file itself */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* read and return the value */
-	*value = file_read_string(message, path);
+	*value = file_read_string(parent, path);
 	if (!*value) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to read value from %s", path);
+		nih_error("Failed to read value from %s", path);
 		return -1;
 	}
 
 	nih_info("Sending to client: %s", *value);
 	return 0;
 }
-int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
-		                 const char *key, int sockfd, char **value)
+static void get_value_scm_reader (struct scm_sock_data *data,
+			NihIo *io, const char *buf, size_t len)
 {
+	char *output = NULL;
 	struct ucred ucred;
 
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Message was NULL");
-		close(sockfd);
-		return -1;
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
 	}
 
-	/*
-	 * to send these scm credentials, caller must have had privilege
-	 */
-	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
-	close(sockfd);
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  sockfd, ucred.pid, ucred.uid, ucred.gid);
+	// we've read the second ucred, now we can proceed
+	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
+	nih_info (_("getValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
-	return get_value_main(message, controller, req_cgroup, key, ucred, value);
+	get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output);
+	write(data->fd, output, strlen(output));
+	/* send output over sockfd and free it */
+out:
+	nih_io_shutdown(io);
+}
+int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
+				 const char *controller, const char *req_cgroup,
+		                 const char *key, int sockfd)
+{
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			     "Failed to set passcred: %s", strerror(errno));
+		return -1;
+	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, req_cgroup);
+	d->key = nih_strdup(d, key);
+	d->step = 0;
+	d->fd = sockfd;
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)get_value_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
 
 }
 int cgmanager_get_value (void *data, NihDBusMessage *message,
@@ -734,7 +967,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 		                 const char *key, char **value)
 
 {
-	int fd = 0;
+	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
 
@@ -753,10 +986,14 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("getValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	return get_value_main(message, controller, req_cgroup, key, ucred, value);
+	ret = get_value_main(message, controller, req_cgroup, key, ucred, value);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid request");
+	return ret;
 }
 
 /* 
@@ -768,7 +1005,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
  *
  * @ok is set to 1 if succeeds, -1 otherwise
  */
-int set_value_main (NihDBusMessage *message, const char *controller, const char *req_cgroup,
+int set_value_main (const char *controller, const char *req_cgroup,
 		                 const char *key, const char *value, struct ucred ucred, int *ok)
 
 {
@@ -777,22 +1014,19 @@ int set_value_main (NihDBusMessage *message, const char *controller, const char 
 	*ok = -1;
 
 	if (!compute_pid_cgroup(ucred.pid, controller, req_cgroup, path)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Could not determine the requested cgroup");
+		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* append the filename */
 	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"filename too long for cgroup %s key %s", path, key);
+		nih_error("filename too long for cgroup %s key %s", path, key);
 		return -1;
 	}
 
@@ -801,53 +1035,89 @@ int set_value_main (NihDBusMessage *message, const char *controller, const char 
 
 	/* Check access rights to the file itself */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
 		return -1;
 	}
 
 	/* read and return the value */
 	if (!set_value(path, value)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to set value %s to %s", path, value);
+		nih_error("Failed to set value %s to %s", path, value);
 		return -1;
 	}
 
 	*ok = 1;
 	return 0;
 }
-int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
-		                 const char *key, const char *value, int sockfd, int *ok)
-
+void set_value_scm_reader (struct scm_sock_data *data,
+		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred ucred;
+	int ok = -1;
+	char b[1];
 
-	*ok = -1;
-
-	if (message == NULL) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Message was NULL");
-		close(sockfd);
-		return -1;
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
 	}
 
-	/*
-	 * to send these scm credentials, caller must have had privilege
-	 */
-	get_scm_creds(sockfd, &ucred.uid, &ucred.gid, &ucred.pid);
-	close(sockfd);
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
-		  sockfd, ucred.pid, ucred.uid, ucred.gid);
+	nih_info (_("setValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
-	return set_value_main(message, controller, req_cgroup, key, value, ucred, ok);
+	set_value_main(data->controller, data->cgroup, data->key, data->value, ucred, &ok);
+	*b = ok == 1 ? '1' : '0';
+	write(data->fd, b, 1);
+out:
+	nih_io_shutdown(io);
+}
+int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
+				 const char *controller, const char *req_cgroup,
+		                 const char *key, const char *value, int sockfd)
+{
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			     "Failed to set passcred: %s", strerror(errno));
+		return -1;
+	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, req_cgroup);
+	d->key = nih_strdup(d, key);
+	d->value = nih_strdup(d, value);
+	d->step = 0;
+	d->fd = sockfd;
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)set_value_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 int cgmanager_set_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 		                 const char *key, const char *value, int *ok)
 
 {
-	int fd = 0;
+	int fd = 0, ret;
 	struct ucred ucred;
 	socklen_t len;
 
@@ -868,10 +1138,14 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("setValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	return set_value_main(message, controller, req_cgroup, key, value, ucred, ok);
+	ret = set_value_main(controller, req_cgroup, key, value, ucred, ok);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid request");
+	return ret;
 }
 
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)
@@ -929,6 +1203,10 @@ static bool setup_cgroup_dir(void)
 	int ret;
 	if (!dir_exists("/sys/fs/cgroup")) {
 		nih_debug("/sys/fs/cgroup does not exist");
+		return false;
+	}
+	if (file_exists("/sys/fs/cgroup/cgmanager")) {
+		nih_error("cgmanager socket already exists");
 		return false;
 	}
 	/* try to create a file there */

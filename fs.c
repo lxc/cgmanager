@@ -650,6 +650,14 @@ bool realpath_escapes(char *path, char *safety)
 	return false;
 }
 
+bool file_exists(const char *path)
+{
+	struct stat sb;
+	if (stat(path, &sb) < 0)
+		return false;
+	return true;
+}
+
 bool dir_exists(const char *path)
 {
 	struct stat sb;

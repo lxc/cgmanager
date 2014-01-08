@@ -55,84 +55,27 @@
 extern bool setns_pid_supported, setns_user_supported;
 extern unsigned long mypidns, myuserns;
 
-/*
- * Get a pid passed in a SCM_CREDENTIAL over a unix socket
- * @sock: the socket fd.
- * Credentials are invalid of *p == 1.
- */
-void get_scm_creds(int sock, uid_t *u, gid_t *g, pid_t *p)
+bool get_nih_io_creds(NihIo *io, struct ucred *ucred)
 {
-        struct msghdr msg = { 0 };
-        struct iovec iov;
-        struct cmsghdr *cmsg;
-	struct ucred cred;
-        char cmsgbuf[CMSG_SPACE(sizeof(cred))];
-        char buf[1];
-	int ret, tries=0;
-	int optval = 1;
-
-	cred.pid = -1;
-	cred.uid = -1;
-	cred.gid = -1;
-
-	if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("Failed to set passcred: %s", strerror(errno));
-		goto out;
+	NihIoMessage *msg = nih_io_read_message(NULL, io);
+	if (!msg) {
+		nih_error("failed reading msg for ucred");
+		return false;
 	}
-	buf[0] = '1';
-	if (write(sock, buf, 1) != 1) {
-		nih_error("Failed to start write on scm fd: %s", strerror(errno));
-		goto out;
+	struct cmsghdr *cmsg = msg->control[0];
+	if (!cmsg) nih_error("cmsg null");
+	if (cmsg->cmsg_level != SOL_SOCKET) nih_error("level %d sock %d", cmsg->cmsg_level, SOL_SOCKET);
+	if (!cmsg || cmsg->cmsg_level != SOL_SOCKET ||
+			cmsg->cmsg_len != CMSG_LEN (sizeof(*ucred)) ||
+			cmsg->cmsg_type != SCM_CREDENTIALS) {
+		nih_error("non-scm control message");
+		return false;
 	}
-
-        msg.msg_name = NULL;
-        msg.msg_namelen = 0;
-        msg.msg_control = cmsgbuf;
-        msg.msg_controllen = sizeof(cmsgbuf);
-
-        iov.iov_base = buf;
-        iov.iov_len = sizeof(buf);
-        msg.msg_iov = &iov;
-        msg.msg_iovlen = 1;
-
-	// retry logic is not ideal, especially as we are not
-	// threaded.  Sleep at most 1 second waiting for the client
-	// to send us the scm_cred
-again:
-	ret = recvmsg(sock, &msg, 0);
-	if (ret < 0) {
-		if (tries++ == 0 && errno == EAGAIN) {
-			nih_info("got EAGAIN for scm_cred");
-			sleep(1);
-			goto again;
-		}
-		nih_error("Failed to receive scm_cred: %s",
-			  strerror(errno));
-		goto out;
-	}
-
-        cmsg = CMSG_FIRSTHDR(&msg);
-
-        if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)) &&
-            cmsg->cmsg_level == SOL_SOCKET &&
-            cmsg->cmsg_type == SCM_CREDENTIALS) {
-		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
-        }
-out:
-	*u = cred.uid;
-	*g = cred.gid;
-	*p = cred.pid;
-        return;
-}
-
-pid_t get_scm_pid(int sock)
-{
-	pid_t p;
-	uid_t u;
-	gid_t g;
-
-	get_scm_creds(sock, &u, &g, &p);
-	return p;
+	memcpy(ucred, CMSG_DATA(cmsg), sizeof(*ucred));
+	if (ucred->pid == -1)
+		return false;
+	nih_info("got creds pid %d uid %d", ucred->pid, ucred->uid);
+	return true;
 }
 
 int send_pid(int sock, int pid)

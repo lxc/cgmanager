@@ -1,4 +1,4 @@
-/* movepid
+/* chowncgroup
  *
  * Copyright © 2013 Serge Hallyn
  * Author: Serge Hallyn <serge.hallyn@ubuntu.com>
@@ -179,7 +179,7 @@ main (int   argc,
 {
 	char **             args;
 	DBusConnection *    conn;
-	int optval = 1, exitval = 1, ok;
+	int optval = 1, exitval = 1;
 	DBusMessage *message = NULL, *reply = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
@@ -269,48 +269,10 @@ main (int   argc,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
+	int ret = read(sv[0], buf, 1);
 	close(sv[0]);
 	close(sv[1]);
-
-	/* Get a reply */
-	DBusError error;
-	dbus_error_init(&error);
-	while (!(reply = dbus_connection_pop_message(conn)))
-		dbus_connection_read_write(conn, -1);
-	if (dbus_error_is_set(&error)) {
-		nih_error("Error: %s: %s\n", error.name, error.message);
-		goto out;
-	}
-	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
-		goto out;
-	}
-	if (!dbus_message_iter_init(reply, &iter)) {
-		nih_error("Got no reply");
-		goto out;
-	}
-	int t= dbus_message_iter_get_arg_type(&iter);
-	short r;
-	char *replystr;
-	switch(t) {
-	case DBUS_TYPE_INT16:
-		dbus_message_iter_get_basic(&iter, &r);
-		ok = r;
-		break;
-	case DBUS_TYPE_INT32:
-		dbus_message_iter_get_basic(&iter, &ok);
-		break;
-	case DBUS_TYPE_STRING: // uh oh, must've failed
-		dbus_message_iter_get_basic(&iter, &replystr);
-		nih_error("Cgmanager returned error: %s", replystr);
-		goto out;
-	default:
-		nih_error("Got bad reply type: %d", t);
-		goto out;
-	}
-	if (ok != 1)
-		nih_error("Cgmanager returned error");
-	else
+	if (ret == 1 && *buf == '1')
 		exitval = 0;
 
 out:

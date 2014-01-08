@@ -33,8 +33,8 @@
     <method name="getPidCgroupScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <arg name="output" type="s" direction="out" />
       <!-- Pid is passed as a scm_cred over sockfd -->
+      <!-- Result is printed over same sockfd -->
     </method>
     <method name="getPidCgroup">
       <arg name="controller" type="s" direction="in" />
@@ -46,7 +46,7 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <arg name="ok" type="i" direction="out" />
+      <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
     <method name="Create">
       <arg name="controller" type="s" direction="in" />
@@ -57,8 +57,8 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <arg name="ok" type="i" direction="out" />
       <!-- uid+gid are passed as scm_cred over sockfd-->
+      <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
     <method name="chownCgroup">
       <arg name="controller" type="s" direction="in" />
@@ -72,8 +72,8 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <arg name="ok" type="i" direction="out" />
       <!-- Pid is passed as a scm_cred over sockfd -->
+      <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
     <method name="movePid">
       <arg name="controller" type="s" direction="in" />
@@ -87,7 +87,7 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <arg name="value" type="s" direction="out" />
+      <!-- Result is printed over sockfd -->
     </method>
     <method name="getValue">
       <arg name="controller" type="s" direction="in" />
@@ -101,7 +101,7 @@
       <arg name="key" type="s" direction="in" />
       <arg name="value" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <arg name="ok" type="i" direction="out" />
+      <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
     <method name="setValue">
       <arg name="controller" type="s" direction="in" />

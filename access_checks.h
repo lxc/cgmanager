@@ -24,8 +24,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-void get_scm_creds(int sock, uid_t *u, gid_t *g, pid_t *p);
-pid_t get_scm_pid(int sock);
+bool get_nih_io_creds(NihIo *io, struct ucred *ucred);
 bool is_same_pidns(int pid);
 bool is_same_userns(int pid);
 bool may_move_pid(pid_t r, uid_t r_uid, pid_t v);

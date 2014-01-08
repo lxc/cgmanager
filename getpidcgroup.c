@@ -245,24 +245,14 @@ main (int   argc,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
+	char output[MAXPATHLEN];
+	int ret;
+	memset(output, 0, MAXPATHLEN);
+	ret = read(sv[0], output, MAXPATHLEN);
 	close(sv[0]);
 	close(sv[1]);
 
-	while (!(reply = dbus_connection_pop_message(conn)))
-		dbus_connection_read_write(conn, -1);
-	if (dbus_message_get_reply_serial(reply) != serial) {
-		nih_error("wrong serial on reply");
-		goto out;
-	}
-
-	dbus_message_iter_init(reply, &iter);
-	if (dbus_message_iter_get_arg_type(&iter) != DBUS_TYPE_STRING) {
-		nih_error("Got bad reply type: %d", dbus_message_iter_get_arg_type(&iter));
-		goto out;
-	}
-	char *str_value;
-	dbus_message_iter_get_basic(&iter, &str_value);
-	printf("%s\n", str_value);
+	printf("%s\n", output);
 	exitval = 0;
 
 out:
