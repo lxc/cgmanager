@@ -79,5 +79,5 @@ install-exec-local:
 	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests
 	cd tests; \
 	for f in *.sh; do \
-	install -c -m 644 $$f $(DESTDIR)/usr/share/cgmanager/tests; \
+	install -c -m 755 $$f $(DESTDIR)/usr/share/cgmanager/tests; \
 	done
