@@ -16,7 +16,7 @@ else
 fi
 echo "Note: real uid is $uid gid is $gid user is $SUDO_USER"
 
-stop cgroup-lite || true
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.ping int32:0 > /dev/null 2>&1 || { echo "cgmanager is not running"; exit 1; }
 
 # mount memory cgroup and remove our test directories
 mount -t cgroup -o memory cgroup /sys/fs/cgroup
@@ -32,8 +32,8 @@ bname=`dirname "${BASH_SOURCE[0]}"`
 cd $bname
 DIR=`pwd`
 count=1
-for t in $DIR/tests/test*.sh; do
-	f="./tests/$(basename $t)"
+for t in $DIR/test*.sh; do
+	f="./$(basename $t)"
 	$f || { echo "Test $count failed."; exit 1; }
 	count=$((count+1))
 done
@@ -50,8 +50,8 @@ fi
 
 echo "Running userns tests"
 count=1
-for t in $DIR/tests/usernstest*.sh; do
-	f="./tests/$(basename $t)"
+for t in $DIR/usernstest*.sh; do
+	f="./$(basename $t)"
 	$f || { echo "Userns test $count failed."; exit 1; }
 	count=$((count+1))
 done

@@ -24,7 +24,6 @@ CLEANFILES = \
 
 sbin_PROGRAMS = cgmanager cgproxy
 bin_PROGRAMS = movepid getpidcgroup chowncgroup
-bin_SCRIPTS = runtests.sh
 
 lib_LTLIBRARIES = libcgmanager.la
 
@@ -75,3 +74,10 @@ libcgmanager_la_LDFLAGS = -E \
 	-version-info $(LIBCGMANAGER_VERSION)
 libcgmanager_la_LIBADD = \
 	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
+
+install-exec-local:
+	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests
+	cd tests; \
+	for f in *.sh; do \
+	install -c -m 644 $$f $(DESTDIR)/usr/share/cgmanager/tests; \
+	done
