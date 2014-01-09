@@ -23,7 +23,7 @@ if [ $cantmount -eq 0 ]; then
 fi
 
 dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"zzz" > /dev/null 2>&1
-./chowncgroup -c memory -n zzz -u $uid -g $gid > /dev/null 2>&1
+chowncgroup -c memory -n zzz -u $uid -g $gid > /dev/null 2>&1
 if [ $cantmount -eq 1 ]; then
 	echo "Chowned zzz, but cannot verify the result"
 	exit 0
