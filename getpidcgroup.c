@@ -49,6 +49,8 @@
 
 #include <sys/socket.h>
 
+#include "cgmanager.h"
+
 #define PACKAGE_NAME "cgmanager"
 #define PACKAGE_VERSION "0.0"
 #define PACKAGE_BUGREPORT ""
@@ -246,14 +248,14 @@ main (int   argc,
 		goto out;
 	}
 	char output[MAXPATHLEN];
-	int ret;
 	memset(output, 0, MAXPATHLEN);
-	ret = read(sv[0], output, MAXPATHLEN);
+	if (read(sv[0], output, MAXPATHLEN) <= 0) {
+		printf("%s\n", output);
+		exitval = 0;
+	} else
+		nih_error("Server returned an error");
 	close(sv[0]);
 	close(sv[1]);
-
-	printf("%s\n", output);
-	exitval = 0;
 
 out:
 	if (message)
