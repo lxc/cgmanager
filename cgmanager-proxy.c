@@ -299,7 +299,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	if (!get_pid_cgroup_main(data, controller, data->rcred, vcred, &output))
 		write(data->fd, output, strlen(output));
 	else
-		write(data->fd, &ucred, 0);  // kick the client
+		write(data->fd, &vcred, 0);  // kick the client
 out:
 	nih_io_shutdown(io);
 }
