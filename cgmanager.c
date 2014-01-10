@@ -159,10 +159,8 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 	nih_info (_("Victim is pid=%d"), target_pid);
 
-	get_pid_cgroup_main(data, controller, target_pid,
-				   ucred, &output);
-	write(data->fd, output, strlen(output));
-	/* send output over sockfd and free it */
+	if (!get_pid_cgroup_main(data, controller, target_pid, ucred, &output))
+		write(data->fd, output, strlen(output));
 out:
 	nih_io_shutdown(io);
 }
@@ -913,8 +911,8 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 	nih_info (_("getValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
-	get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output);
-	write(data->fd, output, strlen(output));
+	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
+		write(data->fd, output, strlen(output));
 	/* send output over sockfd and free it */
 out:
 	nih_io_shutdown(io);
