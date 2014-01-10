@@ -216,7 +216,7 @@ main (int   argc,
 	if (uid == -1 || gid == -1)
 		usage(argv[0]);
 
-	conn = nih_dbus_connect("unix:path=/sys/fs/cgroup/cgmanager", NULL);
+	conn = nih_dbus_connect(CGMANAGER_DBUS_PATH, NULL);
 	nih_assert (conn != NULL);
 
 	send_dummy_msg(conn);

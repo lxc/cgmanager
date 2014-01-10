@@ -48,6 +48,7 @@
 #include <nih-dbus/dbus_error.h>
 
 #include <sys/socket.h>
+#include "cgmanager.h"
 
 #define PACKAGE_NAME "cgmanager"
 #define PACKAGE_VERSION "0.0"
@@ -207,7 +208,7 @@ main (int   argc,
 		exit(1);
 	}
 
-	conn = nih_dbus_connect("unix:path=/sys/fs/cgroup/cgmanager", NULL);
+	conn = nih_dbus_connect(CGMANAGER_DBUS_PATH, NULL);
 	nih_assert (conn != NULL);
 
 	send_dummy_msg(conn);
