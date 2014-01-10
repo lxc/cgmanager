@@ -906,8 +906,6 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 
-	// we've read the second ucred, now we can proceed
-	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
 	nih_info (_("getValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
