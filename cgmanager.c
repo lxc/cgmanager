@@ -134,6 +134,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	char *output = NULL;
 	struct ucred ucred;
 	pid_t target_pid;
+	int ret;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -161,9 +162,11 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	nih_info (_("Victim is pid=%d"), target_pid);
 
 	if (!get_pid_cgroup_main(data, controller, target_pid, ucred, &output))
-		write(data->fd, output, strlen(output));
+		ret = write(data->fd, output, strlen(output));
 	else
-		write(data->fd, &ucred, 0);  // kick the client
+		ret = write(data->fd, &ucred, 0);  // kick the client
+	if (ret < 0)
+		nih_info("getPidCgroupScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -375,7 +378,8 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 
 	move_pid_main(data->controller, data->cgroup, ucred, target_pid, &ok);
 	*b = ok == 1 ? '1' : '0';
-	write(data->fd, b, 1);
+	if (write(data->fd, b, 1) < 0)
+		nih_error("movePidScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -567,7 +571,8 @@ void create_scm_reader (struct scm_sock_data *data,
 
 	ret = create_main(data->controller, data->cgroup, ucred);
 	*b = ret == 0 ? '1' : '0';
-	write(data->fd, b, 1);
+	if (write(data->fd, b, 1) < 0)
+		nih_error("createScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -752,7 +757,8 @@ void chown_cgroup_scm_reader (struct scm_sock_data *data,
 
 	chown_cgroup_main(data->controller, data->cgroup, data->rcred, vcred, &ok);
 	*b = ok == 1 ? '1' : '0';
-	write(data->fd, b, 1);
+	if (write(data->fd, b, 1) < 0)
+		nih_error("chownCgroupScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -903,6 +909,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 {
 	char *output = NULL;
 	struct ucred ucred;
+	int ret;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -913,9 +920,11 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
-		write(data->fd, output, strlen(output));
+		ret = write(data->fd, output, strlen(output));
 	else
-		write(data->fd, &ucred, 0);  // kick the client
+		ret = write(data->fd, &ucred, 0);  // kick the client
+	if (ret < 0)
+		nih_error("getValueScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -1065,7 +1074,8 @@ void set_value_scm_reader (struct scm_sock_data *data,
 
 	set_value_main(data->controller, data->cgroup, data->key, data->value, ucred, &ok);
 	*b = ok == 1 ? '1' : '0';
-	write(data->fd, b, 1);
+	if (write(data->fd, b, 1) < 0)
+		nih_error("setValueScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
