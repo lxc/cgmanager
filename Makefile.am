@@ -55,12 +55,12 @@ $(client_files_OUTPUTS): org.linuxcontainers.cgmanager.xml
 cgmanager_SOURCES = cgmanager.c \
 	$(manager_files_OUTPUTS) \
 	access_checks.h access_checks.c \
-	fs.c fs.h
+	fs.c fs.h cgmanager.h
 
 cgproxy_SOURCES = cgmanager-proxy.c \
 	$(manager_files_OUTPUTS) \
 	access_checks.c access_checks.h \
-	fs.c fs.h
+	fs.c fs.h cgmanager.h
 
 getpidcgroup_SOURCES = getpidcgroup.c
 chowncgroup_SOURCES = chowncgroup.c

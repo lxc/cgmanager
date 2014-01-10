@@ -47,6 +47,7 @@
 
 #include <sys/socket.h>
 
+#include "cgmanager.h"
 #include "fs.h"
 #include "access_checks.h"
 
@@ -1192,6 +1193,15 @@ static NihOption options[] = {
 	NIH_OPTION_LAST
 };
 
+static inline int mkdir_cgmanager_dir(void)
+{
+	if (mkdir(CGMANAGER_DIR, 0755) == -1 && errno != EEXIST) {
+		nih_error("Could not create %s", CGMANAGER_DIR);
+		return false;
+	}
+	return true;
+}
+
 /*
  * We may decide to make the socket path customizable.  For now
  * just assume it is in /sys/fs/cgroup/ which has some special
@@ -1200,29 +1210,30 @@ static NihOption options[] = {
 static bool setup_cgroup_dir(void)
 {
 	int ret;
-	if (!dir_exists("/sys/fs/cgroup")) {
-		nih_debug("/sys/fs/cgroup does not exist");
+	if (!dir_exists(CGDIR)) {
+		nih_debug(CGDIR " does not exist");
 		return false;
 	}
-	if (file_exists("/sys/fs/cgroup/cgmanager")) {
+	if (file_exists(CGMANAGER_SOCK)) {
 		nih_error("cgmanager socket already exists");
 		return false;
 	}
-	/* try to create a file there */
-	ret = creat("/sys/fs/cgroup/cgmanager", O_RDWR);
+	/* Check that /sys/fs/cgroup is writeable, else mount a tmpfs */
+	unlink(CGPROBE);
+	ret = creat(CGPROBE, O_RDWR);
 	if (ret >= 0) {
 		close(ret);
-		unlink("/sys/fs/cgroup/cgmanager");
-		return true;
+		unlink(CGPROBE);
+		return mkdir_cgmanager_dir();
 	}
-	ret = mount("cgroup", "/sys/fs/cgroup", "tmpfs", 0, "size=10000");
+	ret = mount("cgroup", CGDIR, "tmpfs", 0, "size=10000");
 	if (ret) {
-		nih_debug("Failed to mount tmpfs on /sys/fs/cgroup: %s",
-			strerror(errno));
+		nih_debug("Failed to mount tmpfs on %s: %s",
+			CGDIR, strerror(errno));
 		return false;
 	}
-	nih_debug("Mounted tmpfs onto /sys/fs/cgroup");
-	return true;
+	nih_debug("Mounted tmpfs onto %s", CGDIR);
+	return mkdir_cgmanager_dir();
 }
 
 int
@@ -1249,7 +1260,7 @@ main (int   argc,
 	}
 
 	/* Setup the DBus server */
-	server = nih_dbus_server ("unix:path=/sys/fs/cgroup/cgmanager", client_connect,
+	server = nih_dbus_server (CGMANAGER_DBUS_PATH, client_connect,
 	                          client_disconnect);
 	nih_assert (server != NULL);
 

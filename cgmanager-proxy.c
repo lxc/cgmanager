@@ -48,6 +48,7 @@
 
 #include <sys/socket.h>
 
+#include "cgmanager.h"
 #include "fs.h"
 #include "access_checks.h"
 
@@ -56,11 +57,6 @@
 #define PACKAGE_NAME "cgmanager"
 #define PACKAGE_VERSION "0.0"
 #define PACKAGE_BUGREPORT ""
-
-#define UPPERFILE "/sys/fs/cgroup/cgmanager"
-#define LOWERFILE "/sys/fs/cgroup/cgmanager.lower"
-#define UPPERSOCK "unix:path=" UPPERFILE
-#define LOWERSOCK "unix:path=" LOWERFILE
 
 DBusConnection *server_conn;
 
@@ -76,12 +72,12 @@ int setup_proxy(void)
 	 *    if /sys/fs/cgroup/cgmanager exists, move it to /sys/fs/cgroup/cgmanager.lower
 	 *    start up and connect to .lower
 	 */
-	server_conn = nih_dbus_connect(UPPERSOCK, NULL);
+	server_conn = nih_dbus_connect(CGMANAGER_DBUS_PATH, NULL);
 	if (server_conn) {
 		exists_upper = true;
 		dbus_connection_unref (server_conn);
 	}
-	server_conn = nih_dbus_connect(LOWERSOCK, NULL);
+	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
 	if (server_conn) {
 		exists_lower = true;
 	}
@@ -95,20 +91,16 @@ int setup_proxy(void)
 		return 0;
 	if (exists_upper) {
 		//move /sys/fs/cgroup/cgmanager to /sys/fs/cgroup/cgmanager.lower
-		if (creat(LOWERFILE, 0755) < 0 && errno != EEXIST) {
+		if (mkdir(CGPROXY_DIR, 0755) < 0 && errno != EEXIST) {
 			nih_error("failed to create lower sock");
 			return -1;
 		}
-		if (mount(UPPERFILE, LOWERFILE, "none", MS_MOVE, 0) < 0) {
+		if (mount(CGMANAGER_DIR, CGPROXY_DIR, "none", MS_MOVE, 0) < 0) {
 			nih_error("unable to rename the socket");
 			return -1;
 		}
-		if (unlink(UPPERFILE) < 0) {
-			nih_error("unable to remove the old file");
-			return -1;
-		}
 	}
-	server_conn = nih_dbus_connect(LOWERSOCK, NULL);
+	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
 	return 0;
 }
 
@@ -1411,7 +1403,7 @@ main (int   argc,
 	}
 
 	/* Setup the DBus server */
-	server = nih_dbus_server ( UPPERSOCK, client_connect,
+	server = nih_dbus_server ( CGMANAGER_DBUS_PATH, client_connect,
 	                          client_disconnect);
 	nih_assert (server != NULL);
 
