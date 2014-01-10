@@ -233,7 +233,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	}
 	char s[MAXPATHLEN];
 	memset(s, 0, MAXPATHLEN);
-	if (read(sv[0], output, MAXPATHLEN) < 0)
+	if (read(sv[0], output, MAXPATHLEN) <= 0)
 		nih_error("Error reading result from cgmanager");
 	else {
 		*output = nih_strdup(parent, s);
@@ -1031,8 +1031,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 	}
 	char output[MAXPATHLEN];
 	memset(output, 0, MAXPATHLEN);
-	ret = read(sv[0], output, MAXPATHLEN);
-	if (ret < 0)
+	if (read(sv[0], output, MAXPATHLEN) <= 0)
 		nih_error("Bad string from cgmanager");
 	else {
 		*value = nih_strdup(parent, output);
