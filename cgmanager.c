@@ -161,6 +161,8 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 
 	if (!get_pid_cgroup_main(data, controller, target_pid, ucred, &output))
 		write(data->fd, output, strlen(output));
+	else
+		write(data->fd, &ucred, 0);  // kick the client
 out:
 	nih_io_shutdown(io);
 }
@@ -911,7 +913,8 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
 		write(data->fd, output, strlen(output));
-	/* send output over sockfd and free it */
+	else
+		write(data->fd, &ucred, 0);  // kick the client
 out:
 	nih_io_shutdown(io);
 }
