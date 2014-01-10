@@ -10,7 +10,7 @@ else
 	uid=1000
 fi
 
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"zzz/b" > /dev/null 2>&1
+sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"zzz/b" > /dev/null 2>&1
 if [ $? -ne 0 ]; then
 	exit 1
 fi
