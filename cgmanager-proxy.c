@@ -215,7 +215,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
 		nih_error("failed to send dbus message");
-		return -1;
+		goto out;
 	}
 	dbus_connection_flush(server_conn);
 	if (message) {
@@ -441,7 +441,7 @@ int move_pid_main (const char *controller, char *cgroup,
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
 		nih_error("failed to send dbus message");
-		return -1;
+		goto out;
 	}
 	dbus_connection_flush(server_conn);
 	if (message) {
@@ -640,7 +640,7 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
 		nih_error("failed to send dbus message");
-		return -1;
+		goto out;
 	}
 	dbus_connection_flush(server_conn);
 	if (message) {
@@ -808,7 +808,7 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
 		nih_error("failed to send dbus message");
-		return -1;
+		goto out;
 	}
 	dbus_connection_flush(server_conn);
 	if (message) {
@@ -1014,7 +1014,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
 		nih_error("failed to send dbus message");
-		return -1;
+		goto out;
 	}
 	dbus_connection_flush(server_conn);
 	if (message) {
@@ -1203,7 +1203,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
 		nih_error("failed to send dbus message");
-		return -1;
+		goto out;
 	}
 	dbus_connection_flush(server_conn);
 	if (message) {
