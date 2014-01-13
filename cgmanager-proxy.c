@@ -395,7 +395,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  * by the name (@cgroup) and controller type (@controller).
  */
 int move_pid_main (const char *controller, char *cgroup,
-			struct ucred ucred, struct ucred vcred, int *ok)
+			struct ucred ucred, struct ucred vcred)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -403,7 +403,6 @@ int move_pid_main (const char *controller, char *cgroup,
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
 
-	*ok = -1;
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
 		nih_error("Error creating socketpair: %s", strerror(errno));
 		return -1;
@@ -474,7 +473,6 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred vcred;
-	int ok = -1;
 	char b[1];
 
 	if (!get_nih_io_creds(io, &vcred)) {
@@ -499,16 +497,16 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
 	nih_info (_("Victim is pid=%d"), vcred.pid);
 
-	move_pid_main(data->controller, data->cgroup, data->rcred, vcred, &ok);
-	*b = ok == 1 ? '1' : '0';
+	*b = '0';
+	if (move_pid_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
+		*b = '1';
 	if (write(data->fd, b, 1) < 0)
 		nih_error("movePidScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
 int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int sockfd,
-			int *ok)
+			const char *controller, char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -548,8 +546,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	return 0;
 }
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int plain_pid,
-			int *ok)
+			const char *controller, char *cgroup, int plain_pid)
 {
 	struct ucred ucred, vcred;
 	int fd, ret;
@@ -581,7 +578,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			"requestor is in a different namespace from cgproxy");
 		return -1;
 	}
-	ret = move_pid_main(controller, cgroup, ucred, vcred, ok);
+	ret = move_pid_main(controller, cgroup, ucred, vcred);
 	if (ret) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
@@ -685,7 +682,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_create_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int sockfd, int *ok)
+		 const char *controller, char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -725,13 +722,12 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_create (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int *ok)
+		 const char *controller, char *cgroup)
 {
 	struct ucred ucred;
 	int fd, ret;
 	socklen_t len;
 
-	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -750,8 +746,6 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
-	else
-		*ok = 0;
 	return ret;
 }
 
@@ -760,11 +754,9 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  * Caller requests chowning a cgroup @name in controller @cgroup to a
  * particular @uid.  The uid must be passed in as an scm_cred so the
  * kernel translates it for us.  @r must be root in its own user ns.
- *
- * On success, ok will be sent with value 1.  On failure, -1.
  */
 int chown_cgroup_main ( const char *controller, char *cgroup,
-	struct ucred ucred, struct ucred vcred, int *ok)
+	struct ucred ucred, struct ucred vcred)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -772,7 +764,6 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 	int sv[2], ret = -1, optval = 1;
 	dbus_uint32_t serial;;
 
-	*ok = -1;
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
 		nih_error("Error creating socketpair: %s", strerror(errno));
 		return -1;
@@ -843,7 +834,6 @@ void chown_cgroup_scm_reader (struct scm_sock_data *data,
 		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred vcred;
-	int ok = -1;
 	char b[1];
 
 	if (!get_nih_io_creds(io, &vcred)) {
@@ -868,16 +858,16 @@ void chown_cgroup_scm_reader (struct scm_sock_data *data,
 		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
 	nih_info (_("Victim is (uid=%d, gid=%d)"), vcred.uid, vcred.gid);
 
-	chown_cgroup_main(data->controller, data->cgroup, data->rcred, vcred, &ok);
-	*b = ok == 1 ? '1' : '0';
+	*b = '0';
+	if (chown_cgroup_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
+		*b = '1';
 	if (write(data->fd, b, 1) < 0)
 		nih_error("chownCgroupScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
 int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int sockfd,
-			int *ok)
+			const char *controller, char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -918,7 +908,7 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 }
 int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 		const char *controller, char *cgroup, int uid,
-		int gid, int *ok)
+		int gid)
 {
 	struct ucred ucred, vcred;
 	int fd, ret;
@@ -951,7 +941,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 			"requestor is in a different namespace from cgproxy");
 		return -1;
 	}
-	ret = chown_cgroup_main(controller, cgroup, ucred, vcred, ok);
+	ret = chown_cgroup_main(controller, cgroup, ucred, vcred);
 	if (ret) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
@@ -1150,8 +1140,6 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
  * @controller is the controller, @req_cgroup the cgroup name, and @key the
  * file being queried (i.e. memory.usage_in_bytes).  @req_cgroup is relative
  * to the caller's cgroup.
- *
- * @ok is set to 1 if succeeds, -1 otherwise
  */
 int set_value_main (const char *controller, const char *req_cgroup,
 		 const char *key, const char *value, struct ucred ucred)
@@ -1296,14 +1284,13 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 }
 int cgmanager_set_value (void *data, NihDBusMessage *message,
 		 const char *controller, const char *req_cgroup,
-		 const char *key, const char *value, int *ok)
+		 const char *key, const char *value)
 
 {
 	struct ucred ucred;
 	int fd, ret;
 	socklen_t len;
 
-	*ok = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -1322,8 +1309,6 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
-	else
-		*ok = 0;
 	return ret;
 }
 

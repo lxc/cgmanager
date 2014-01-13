@@ -51,7 +51,6 @@
     <method name="Create">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
-      <arg name="ok" type="i" direction="out" />
     </method>
     <method name="chownCgroupScm">
       <arg name="controller" type="s" direction="in" />
@@ -65,7 +64,6 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="uid" type="i" direction="in" />
       <arg name="gid" type="i" direction="in" />
-      <arg name="ok" type="i" direction="out" />
       <!-- caller must be in manager's pid and user namespaces -->
     </method>
     <method name="movePidScm">
@@ -79,7 +77,6 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
-      <arg name="ok" type="i" direction="out" />
       <!-- task must be in manager's pidns -->
     </method>
     <method name="getValueScm">
@@ -108,7 +105,6 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
       <arg name="value" type="s" direction="in" />
-      <arg name="ok" type="i" direction="out" />
     </method>
     <!-- still to add: low priority,
 	 Remove
