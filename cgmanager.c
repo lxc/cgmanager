@@ -30,6 +30,7 @@
 #include <libgen.h>
 #include <unistd.h>
 #include <sys/mount.h>
+#include <dirent.h>
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -125,6 +126,7 @@ struct scm_sock_data {
 	int step;
 	struct ucred rcred;
 	int fd;
+	int recursive;
 };
 
 static void get_pid_scm_reader (struct scm_sock_data *data,
@@ -1146,6 +1148,253 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 		                             "invalid request");
 	return ret;
 }
+
+/*
+ * Refuse any '..', and consolidate any '//'
+ */
+static bool normalize_path(char *path)
+{
+	if (strstr(path, ".."))
+		return false;
+	while ((path = strstr(path, "//")) != NULL) {
+		char *p2 = path+1;
+		while (*p2 == '/')
+			p2++;
+		memcpy(path, p2, strlen(p2)+1);
+		path++;
+	}
+	return true;
+}
+
+/*
+ * Recursively delete a cgroup.
+ * Cgroup files can't be deleted, but are cleaned up when you remove the
+ * containing directory.  A directory cannot be removed until all its
+ * children are removed, and can't be removed if any tasks remain.
+ *
+ * We allow any task which may write under /a/b to delete any cgroups
+ * under that, even if, say, it technically is not allowed to remove
+ * /a/b/c/d/.
+ */
+static int recursive_rmdir(char *path)
+{
+	struct dirent dirent, *direntp;
+	DIR *dir;
+	char pathname[MAXPATHLEN];
+	int failed = 0;
+
+	dir = opendir(path);
+	if (!dir) {
+		nih_error("Failed to open dir %s for recursive deletion", path);
+		return -1;
+	}
+
+	while (!readdir_r(dir, &dirent, &direntp)) {
+		struct stat mystat;
+		int rc;
+
+		if (!direntp)
+			break;
+		if (!strcmp(direntp->d_name, ".") ||
+		    !strcmp(direntp->d_name, ".."))
+			continue;
+		rc = snprintf(pathname, MAXPATHLEN, "%s/%s", path, direntp->d_name);
+		if (rc < 0 || rc >= MAXPATHLEN) {
+			failed = 1;
+			continue;
+		}
+		rc = lstat(pathname, &mystat);
+		if (rc) {
+			failed = 1;
+			continue;
+		}
+		if (S_ISDIR(mystat.st_mode)) {
+			if (recursive_rmdir(pathname) < 0)
+				failed = 1;
+		}
+	}
+
+	if (closedir(dir) < 0)
+		failed = 1;
+	if (rmdir(path) < 0)
+		failed = 1;
+
+	return failed ? -1 : 0;
+}
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests creating a new @cgroup name of type @controller.
+ * @name is taken to be relative to the caller's cgroup and may not
+ * start with / or .. .
+ */
+int remove_main (const char *controller, char *cgroup, struct ucred ucred, int recursive, int *existed)
+{
+	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	size_t cgroup_len;
+	nih_local char *working = NULL, *copy = NULL;
+	char *p;
+
+	*existed = 1;
+	if (!cgroup || ! *cgroup)  // nothing to do
+		return 0;
+	if (cgroup[0] == '/' || cgroup[0] == '.') {
+		// We could try to be accomodating, but let's not fool around right now
+		nih_error("Bad requested cgroup path: %s", cgroup);
+		return -1;
+	}
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(ucred.pid, controller, "", rcgpath)) {
+		nih_error("Could not determine the requested cgroup");
+		return -1;
+	}
+
+	cgroup_len = strlen(cgroup);
+
+	if (strlen(rcgpath) + cgroup_len > MAXPATHLEN) {
+		nih_error("Path name too long");
+		return -1;
+	}
+
+	if (!normalize_path(cgroup))
+		return -1;
+
+	working = nih_strdup(NULL, rcgpath);
+	if (!working)
+		return -1;
+	if (!nih_strcat(&working, NULL, "/"))
+		return -1;
+	if (!nih_strcat(&working, NULL, cgroup))
+		return -1;
+	if (!dir_exists(working)) {
+		*existed = 0;
+		return 0;
+	}
+	*existed = 1;
+	// must have write access to the parent dir
+	if (!(copy = nih_strdup(NULL, working)))
+		return -1;
+	if (!(p = strrchr(copy, '/')))
+		return -1;
+	*p = '\0';
+	if (!may_access(ucred.pid, ucred.uid, ucred.gid, copy, O_WRONLY)) {
+		nih_error("pid %d uid %d gid %d may not remove %s",
+			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, copy);
+		return -1;
+	}
+
+	if (!recursive) {
+		if (rmdir(working) < 0) {
+			nih_error("Failed to remove %s: %s", working, strerror(errno));
+			return -1;
+		}
+	} else if (recursive_rmdir(working) < 0)
+			return -1;
+
+	nih_info("Removed %s for %d (%d:%d)", path, (int)ucred.pid,
+		 (int)ucred.uid, (int)ucred.gid);
+	return 0;
+}
+
+void remove_scm_reader (struct scm_sock_data *data,
+		NihIo *io, const char *buf, size_t len)
+{
+	struct ucred ucred;
+	char b[1];
+	int ret;
+	int existed = 0;
+
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
+	}
+	nih_info (_("RemoveScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+
+	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
+	if (ret == 0)
+		*b = existed ? '2' : '1';
+	else
+		*b = '0';
+	if (write(data->fd, b, 1) < 0)
+		nih_error("removeScm: Error writing final result to client");
+out:
+	nih_io_shutdown(io);
+}
+int cgmanager_remove_scm (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int recursive, int sockfd)
+{
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			     "Failed to set passcred: %s", strerror(errno));
+		return -1;
+	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, cgroup);
+	d->fd = sockfd;
+	d->recursive = recursive;
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)remove_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+int cgmanager_remove (void *data, NihDBusMessage *message,
+			 const char *controller, char *cgroup, int recursive, int *existed)
+{
+	int fd = 0, ret;
+	struct ucred ucred;
+	socklen_t len;
+
+	*existed = 0;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Remove: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	ret = remove_main(controller, cgroup, ucred, recursive, existed);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid request");
+	return ret;
+}
+
 
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)
 {

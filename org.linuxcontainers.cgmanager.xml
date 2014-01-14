@@ -46,7 +46,7 @@
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <!-- 1/0 (pass/fail) return value comes over sockfd -->
+      <!-- 2/1/0 (existed/pass/fail) return value comes over sockfd -->
     </method>
     <method name="Create">
       <arg name="controller" type="s" direction="in" />
@@ -106,6 +106,19 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
       <arg name="value" type="s" direction="in" />
+    </method>
+    <method name="RemoveScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="recursive" type="i" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <!-- 2/1/0 (didntexist/pass/fail) return value comes over sockfd -->
+    </method>
+    <method name="Remove">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="recursive" type="i" direction="in" />
+      <arg name="existed" type="i" direction="out" />
     </method>
     <!-- still to add: low priority,
 	 Remove

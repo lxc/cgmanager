@@ -255,6 +255,7 @@ struct scm_sock_data {
 	int step;
 	struct ucred rcred;
 	int fd;
+	int recursive;
 };
 
 static void
@@ -1317,6 +1318,180 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 				"invalid request");
 	return ret;
 }
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests removing @cgroup name of type @controller.
+ * @name is taken to be relative to the caller's cgroup and may not
+ * start with / or .. .
+ */
+int remove_main (const char *controller, char *cgroup, struct ucred ucred, int recursive, int *existed)
+{
+	char buf[1];
+	DBusMessage *message = NULL;
+	DBusMessageIter iter;
+	int sv[2], ret = -1, optval = 1;
+	dbus_uint32_t serial;;
+
+	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+		nih_error("Error creating socketpair: %s", strerror(errno));
+		return -1;
+	}
+	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+
+	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
+			"/org/linuxcontainers/cgmanager",
+			"org.linuxcontainers.cgmanager0_0", "RemoveScm");
+
+	dbus_message_iter_init_append(message, &iter);
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &recursive)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+
+	if (!dbus_connection_send(server_conn, message, &serial)) {
+		nih_error("failed to send dbus message");
+		goto out;
+	}
+	dbus_connection_flush(server_conn);
+	if (message) {
+		dbus_message_unref(message);
+		message = NULL;
+	}
+
+	if (read(sv[0], buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0], ucred)) {
+		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	if (read(sv[0], buf, 1) == 1 && (*buf == '1' || *buf == '2'))
+		ret = 0;
+	*existed = *buf == '2' ? 1 : 0;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	if (message)
+		dbus_message_unref(message);
+	return ret;
+}
+
+void remove_scm_reader (struct scm_sock_data *data,
+		NihIo *io, const char *buf, size_t len)
+{
+	struct ucred ucred;
+	char b[1];
+	int ret;
+	int existed = 0;
+
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
+	}
+	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+
+	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
+	if (ret == 0)
+		*b = existed ? '2' : '1';
+	else
+		*b = '0';
+	if (write(data->fd, b, 1) < 0)
+		nih_error("removeScm: Error writing final result to client");
+out:
+	nih_io_shutdown(io);
+}
+int cgmanager_remove_scm (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int recursive, int sockfd)
+{
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			     "Failed to set passcred: %s", strerror(errno));
+		return -1;
+	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, cgroup);
+	d->fd = sockfd;
+	d->recursive = recursive;
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)remove_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int cgmanager_remove (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int recursive, int *existed)
+{
+	struct ucred ucred;
+	int fd, ret;
+	socklen_t len;
+
+	*existed = 0;
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	ret = remove_main(controller, cgroup, ucred, recursive, existed);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"invalid request");
+	return ret;
+}
+
 
 int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 {
