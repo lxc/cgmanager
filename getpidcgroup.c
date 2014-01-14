@@ -163,7 +163,7 @@ main (int   argc,
 	char **             args;
 	DBusConnection *    conn;
 	int optval = 1, exitval = 1;
-	DBusMessage *message = NULL, *reply = NULL;
+	DBusMessage *message = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
 	int sv[2] = {-1, -1};
@@ -260,8 +260,6 @@ main (int   argc,
 out:
 	if (message)
 		dbus_message_unref(message);
-	if (reply)
-		dbus_message_unref(reply);
 	dbus_connection_unref (conn);
 	exit(exitval);
 }
