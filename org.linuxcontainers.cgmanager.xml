@@ -51,6 +51,7 @@
     <method name="Create">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
+      <arg name="existed" type="i" direction="out" />
     </method>
     <method name="chownCgroupScm">
       <arg name="controller" type="s" direction="in" />
