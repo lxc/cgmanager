@@ -28,10 +28,16 @@ if [ $ok -eq 0 ]; then
 	exit 1
 fi
 
-echo 3
+#echo 3
 # confirm that getpidcgroup works:
-c2=`sudo getpidcgroup -c memory -p $pid`
+#c2=`sudo getpidcgroup -c memory -p $pid`
+#if [ "$c2" != "xxx/b" ]; then
+#	kill -9 $pid
+#	exit 1
+#fi
+c2=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getPidCgroup string:'memory' int32:$pid | awk '{ print $1}'`
 if [ "$c2" != "xxx/b" ]; then
+	echo "got $c2 instead of xxx/b"
 	kill -9 $pid
 	exit 1
 fi
