@@ -255,6 +255,7 @@ struct scm_sock_data {
 	int step;
 	struct ucred rcred;
 	int fd;
+	bool flag;
 };
 
 static void
@@ -593,7 +594,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int create_main (const char *controller, char *cgroup, struct ucred ucred)
+int create_main (const char *controller, char *cgroup, struct ucred ucred, bool exclusive)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -616,7 +617,8 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred)
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "CreateScm");
+			"org.linuxcontainers.cgmanager0_0",
+			exclusive ? "CreateXScm" : "CreateScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -674,15 +676,15 @@ void create_scm_reader (struct scm_sock_data *data,
 	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
-	ret = create_main(data->controller, data->cgroup, ucred);
+	ret = create_main(data->controller, data->cgroup, ucred, data->flag);
 	*b = ret == 0 ? '1' : '0';
 	if (write(data->fd, b, 1) < 0)
 		nih_error("createScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
-int cgmanager_create_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int sockfd)
+int cgmanager_create_scm_general (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int sockfd, bool exclusive)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -703,6 +705,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
 	d->fd = sockfd;
+	d->flag = exclusive;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)create_scm_reader,
@@ -720,9 +723,21 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	}
 	return 0;
 }
+int cgmanager_create_exclusive_scm (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int sockfd)
+{
+	return cgmanager_create_scm_general(data, message, controller,
+			cgroup, sockfd, true);
+}
+int cgmanager_create_scm (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int sockfd)
+{
+	return cgmanager_create_scm_general(data, message, controller,
+			cgroup, sockfd, false);
+}
 
-int cgmanager_create (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup)
+int cgmanager_create_general (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, bool exclusive)
 {
 	struct ucred ucred;
 	int fd, ret;
@@ -742,11 +757,23 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
-	ret = create_main(controller, cgroup, ucred);
+	ret = create_main(controller, cgroup, ucred, exclusive);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
 	return ret;
+}
+int cgmanager_create_exclusive (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup)
+{
+	return cgmanager_create_general(data, message, controller,
+			cgroup, true);
+}
+int cgmanager_create (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup)
+{
+	return cgmanager_create_general(data, message, controller,
+			cgroup, false);
 }
 
 /*
