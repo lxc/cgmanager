@@ -27,6 +27,8 @@ bin_PROGRAMS = movepid getpidcgroup chowncgroup
 
 lib_LTLIBRARIES = libcgmanager.la
 
+include_HEADERS = cgmanager-client.h
+
 libcgmanager.pc: libcgmanager.pc.in
 	sed -e 's|[@]LIBCGMANAGER_VERSION_DOTTED[@]|$(LIBCGMANAGER_VERSION_DOTTED)|g' \
 		$< > $@
