@@ -469,6 +469,47 @@ out:
 }
 
 /*
+ * file_read_pids:
+ *
+ * @parent: parent which will be given a reference to the returned string
+ * (to allow the returned value to be freed automatically when @parent is
+ * freed).
+ * @path: Full path to file to read.
+ *
+ * Read specified file and return the pids it contains.  The file is
+ * expected to contain only a set of newline-separated int32_ts.
+ *
+ * Returns: Number of pids read, which are placed into the newly allocated
+ * pids array (passed in).
+ */
+int file_read_pids(void *parent, const char *path, int32_t **pids)
+{
+	int nrpids = 0, pid;
+	FILE *fin = fopen(path, "r");
+
+	*pids = NULL;
+	if (!fin) {
+		nih_error("Error opening %s: %s", path, strerror(errno));
+		return -1;
+	}
+
+	while (fscanf(fin, "%d", &pid) == 1) {
+		int32_t *tmp;
+		if (!(tmp = nih_realloc(*pids, parent, (nrpids+1)*sizeof(int32_t)))) {
+			if (*pids)
+				nih_free(*pids);
+			pids = NULL;
+			goto out;
+		}
+		*pids = tmp;
+		(*pids)[nrpids++] = (int32_t) pid;
+	}
+out:
+	fclose(fin);
+	return nrpids;
+}
+
+/*
  * get_pid_creds: get the real uid and gid of @pid from
  * /proc/$$/status
  * (XXX should we use euid here?)

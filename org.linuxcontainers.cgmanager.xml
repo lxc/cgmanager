@@ -120,6 +120,17 @@
       <arg name="recursive" type="i" direction="in" />
       <arg name="existed" type="i" direction="out" />
     </method>
+    <method name="getTasksScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <!-- nrtasks + pids as scm creds return value comes over sockfd -->
+    </method>
+    <method name="getTasks">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="output" type="ai" direction="out" />
+    </method>
     <!-- still to add: low priority,
 	 Remove
 	 Prune (remove all empty decendents)

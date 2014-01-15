@@ -117,38 +117,6 @@ unsigned long mypidns;
 bool setns_user_supported = false;
 unsigned long myuserns;
 
-int send_creds(int sock, struct ucred cred)
-{
-	struct msghdr msg = { 0 };
-	struct iovec iov;
-	struct cmsghdr *cmsg;
-	char cmsgbuf[CMSG_SPACE(sizeof(cred))];
-	char buf[1];
-	buf[0] = 'p';
-
-	msg.msg_control = cmsgbuf;
-	msg.msg_controllen = sizeof(cmsgbuf);
-
-	cmsg = CMSG_FIRSTHDR(&msg);
-	cmsg->cmsg_len = CMSG_LEN(sizeof(struct ucred));
-	cmsg->cmsg_level = SOL_SOCKET;
-	cmsg->cmsg_type = SCM_CREDENTIALS;
-	memcpy(CMSG_DATA(cmsg), &cred, sizeof(cred));
-
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-
-	iov.iov_base = buf;
-	iov.iov_len = sizeof(buf);
-	msg.msg_iov = &iov;
-	msg.msg_iovlen = 1;
-
-	if (sendmsg(sock, &msg, 0) < 0) {
-		perror("sendmsg");
-		return -1;
-	}
-	return 0;
-}
 
 void send_dummy_msg(DBusConnection *conn)
 {
@@ -1492,6 +1460,210 @@ int cgmanager_remove (void *data, NihDBusMessage *message,
 	return ret;
 }
 
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests the number of tasks in @cgroup in @controller
+ * returns nrpids, or -1 on error.
+ */
+int get_tasks_main (void *parent, const char *controller, char *cgroup, struct ucred ucred, int32_t **pids)
+{
+	char buf[1];
+	DBusMessage *message = NULL;
+	DBusMessageIter iter;
+	int sv[2], ret = -1, optval = 1;
+	dbus_uint32_t serial;;
+	uid_t u; gid_t g;
+	uint32_t nrpids;
+	pid_t tmp;
+	int i;
+
+	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
+		nih_error("Error creating socketpair: %s", strerror(errno));
+		return -1;
+	}
+	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("setsockopt: %s", strerror(errno));
+		goto out;
+	}
+
+	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
+			"/org/linuxcontainers/cgmanager",
+			"org.linuxcontainers.cgmanager0_0", "getTasksScm");
+
+	dbus_message_iter_init_append(message, &iter);
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+                nih_error_raise_no_memory ();
+                goto out;
+        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+
+	if (!dbus_connection_send(server_conn, message, &serial)) {
+		nih_error("failed to send dbus message");
+		goto out;
+	}
+	dbus_connection_flush(server_conn);
+	if (message) {
+		dbus_message_unref(message);
+		message = NULL;
+	}
+
+	if (read(sv[0], buf, 1) != 1) {
+		nih_error("Error getting reply from server over socketpair");
+		goto out;
+	}
+	if (send_creds(sv[0], ucred)) {
+		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	if (read(sv[0], &nrpids, sizeof(uint32_t)) != sizeof(uint32_t))
+		goto out;
+	if (nrpids == 0) {
+		ret = 0;
+		goto out;
+	}
+
+	*pids = nih_alloc(parent, nrpids * sizeof(uint32_t));
+	for (i=0; i<nrpids; i++) {
+		get_scm_creds_sync(sv[0], &u, &g, &tmp);
+		if (tmp == -1) {
+			nih_error("Failed getting pid from server");
+			goto out;
+		}
+		(*pids)[i] = tmp;
+	}
+	ret = nrpids;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	if (message)
+		dbus_message_unref(message);
+	return ret;
+}
+
+void get_tasks_scm_reader (struct scm_sock_data *data,
+		NihIo *io, const char *buf, size_t len)
+{
+	struct ucred ucred, pcred;;
+	int i, ret;
+	int32_t *pids, nrpids;
+
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		goto out;
+	}
+	nih_info (_("getTasksScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+
+	ret = get_tasks_main(data, data->controller, data->cgroup, ucred, &pids);
+	if (ret < 0) {
+		nih_error("Error getting nrtasks for %s:%s for pid %d",
+			data->controller, data->cgroup, ucred.pid);
+		nih_io_shutdown(io);
+		return;
+	}
+	nrpids = ret;
+	if (write(data->fd, &nrpids, sizeof(int32_t)) != sizeof(int32_t)) {
+		nih_error("get_tasks_scm: Error writing final result to client");
+		goto out;
+	}
+
+	pcred.uid = 0; pcred.gid = 0;
+	for (i=0; i<ret; i++) {
+		pcred.pid = pids[i];
+		if (send_creds(data->fd, pcred)) {
+			nih_error("get_tasks_scm: error writing pids back to client");
+			goto out;
+		}
+	}
+out:
+	nih_io_shutdown(io);
+}
+int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
+		 const char *controller, char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+        char buf[1];
+	int optval = -1;
+
+	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			     "Failed to set passcred: %s", strerror(errno));
+		return -1;
+	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return -1;
+	}
+	memset(d, 0, sizeof(*d));
+	d->controller = nih_strdup(d, controller);
+	d->cgroup = nih_strdup(d, cgroup);
+	d->fd = sockfd;
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+		(NihIoReader)get_tasks_scm_reader,
+		(NihIoCloseHandler) scm_sock_close,
+		 NULL, d)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to queue scm message: %s", strerror(errno));
+		return -1;
+	}
+	buf[0] = '1';
+	if (write(sockfd, buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+int cgmanager_get_tasks (void *data, NihDBusMessage *message,
+			 const char *controller, char *cgroup, int32_t **pids, size_t *nrpids)
+{
+	int fd = 0, ret;
+	struct ucred ucred;
+	socklen_t len;
+	int32_t *tmp;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "Could  not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("getTasks: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+		  fd, ucred.pid, ucred.uid, ucred.gid);
+
+	ret = get_tasks_main(message, controller, cgroup, ucred, &tmp);
+	if (ret >= 0) {
+		*nrpids = ret;
+		*pids = tmp;
+		ret = 0;
+	} else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+		                             "invalid request");
+	return ret;
+}
 
 int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 {

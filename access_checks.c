@@ -78,6 +78,105 @@ bool get_nih_io_creds(NihIo *io, struct ucred *ucred)
 	return true;
 }
 
+int send_creds(int sock, struct ucred cred)
+{
+	struct msghdr msg = { 0 };
+	struct iovec iov;
+	struct cmsghdr *cmsg;
+	char cmsgbuf[CMSG_SPACE(sizeof(cred))];
+	char buf[1];
+	buf[0] = 'p';
+
+	msg.msg_control = cmsgbuf;
+	msg.msg_controllen = sizeof(cmsgbuf);
+
+	cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg->cmsg_len = CMSG_LEN(sizeof(struct ucred));
+	cmsg->cmsg_level = SOL_SOCKET;
+	cmsg->cmsg_type = SCM_CREDENTIALS;
+	memcpy(CMSG_DATA(cmsg), &cred, sizeof(cred));
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
+
+	if (sendmsg(sock, &msg, 0) < 0) {
+		perror("sendmsg");
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * Get a pid passed in a SCM_CREDENTIAL over a unix socket
+ * @sock: the socket fd.
+ * Credentials are invalid of *p == 1.
+ * Note - this is a synchronous version.  We use it only in the proxy to wait
+ * on the server, since there is no sense not hanging in that case.
+ */
+void get_scm_creds_sync(int sock, uid_t *u, gid_t *g, pid_t *p)
+{
+        struct msghdr msg = { 0 };
+        struct iovec iov;
+        struct cmsghdr *cmsg;
+	struct ucred cred;
+        char cmsgbuf[CMSG_SPACE(sizeof(cred))];
+        char buf[1];
+	int ret, tries=0;
+	int optval = 1;
+
+	cred.pid = -1;
+	cred.uid = -1;
+	cred.gid = -1;
+
+	if (setsockopt(sock, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_error("Failed to set passcred: %s", strerror(errno));
+		goto out;
+	}
+	buf[0] = '1';
+	if (write(sock, buf, 1) != 1) {
+		nih_error("Failed to start write on scm fd: %s", strerror(errno));
+		goto out;
+	}
+
+        msg.msg_name = NULL;
+        msg.msg_namelen = 0;
+        msg.msg_control = cmsgbuf;
+        msg.msg_controllen = sizeof(cmsgbuf);
+
+        iov.iov_base = buf;
+        iov.iov_len = sizeof(buf);
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+
+	// retry logic is not ideal, especially as we are not
+	// threaded.  Sleep at most 1 second waiting for the client
+	// to send us the scm_cred
+	ret = recvmsg(sock, &msg, 0);
+	if (ret < 0) {
+		nih_error("Failed to receive scm_cred: %s",
+			  strerror(errno));
+		goto out;
+	}
+
+        cmsg = CMSG_FIRSTHDR(&msg);
+
+        if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)) &&
+            cmsg->cmsg_level == SOL_SOCKET &&
+            cmsg->cmsg_type == SCM_CREDENTIALS) {
+		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
+        }
+out:
+	*u = cred.uid;
+	*g = cred.gid;
+	*p = cred.pid;
+        return;
+}
+
 int send_pid(int sock, int pid)
 {
 	struct msghdr msg = { 0 };
