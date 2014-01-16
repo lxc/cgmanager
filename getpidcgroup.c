@@ -231,12 +231,25 @@ main (int   argc,
 		message = NULL;
 	}
 
+	fd_set rfds;
+	FD_ZERO(&rfds);
+	FD_SET(sv[0], &rfds);
+	if (select(sv[0]+1, &rfds, NULL, NULL, NULL) < 0) {
+		nih_error("Error getting go-ahead from server: %s", strerror(errno));
+		goto out;
+	}
 	if (read(sv[0], &buf, 1) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_pid(sv[0], getpid())) {
 		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	FD_ZERO(&rfds);
+	FD_SET(sv[0], &rfds);
+	if (select(sv[0]+1, &rfds, NULL, NULL, NULL) < 0) {
+		nih_error("Error getting go-ahead from server: %s", strerror(errno));
 		goto out;
 	}
 	if (read(sv[0], &buf, 1) != 1) {
@@ -249,6 +262,12 @@ main (int   argc,
 	}
 	char output[MAXPATHLEN];
 	memset(output, 0, MAXPATHLEN);
+	FD_ZERO(&rfds);
+	FD_SET(sv[0], &rfds);
+	if (select(sv[0]+1, &rfds, NULL, NULL, NULL) < 0) {
+		nih_error("Error getting go-ahead from server: %s", strerror(errno));
+		goto out;
+	}
 	if (read(sv[0], output, MAXPATHLEN) <= 0) {
 		printf("%s\n", output);
 		exitval = 0;

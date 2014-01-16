@@ -170,8 +170,8 @@ main (int   argc,
 {
 	char **             args;
 	DBusConnection *    conn;
-	int optval = 1, exitval = 1;
-	DBusMessage *message = NULL, *reply = NULL;
+	int optval = 1, exitval = 1, ret;
+	DBusMessage *message = NULL;
 	DBusMessageIter iter;
 	dbus_uint32_t serial;;
 	int sv[2] = {-1, -1};
@@ -248,12 +248,25 @@ main (int   argc,
 		message = NULL;
 	}
 
+	fd_set rfds;
+	FD_ZERO(&rfds);
+	FD_SET(sv[0], &rfds);
+	if (select(sv[0]+1, &rfds, NULL, NULL, NULL) < 0) {
+		nih_error("Error getting go-ahead from server: %s", strerror(errno));
+		goto out;
+	}
 	if (read(sv[0], buf, 1) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
 	if (send_pid(sv[0], getpid())) {
 		nih_error("Error sending pid over SCM_CREDENTIAL");
+		goto out;
+	}
+	FD_ZERO(&rfds);
+	FD_SET(sv[0], &rfds);
+	if (select(sv[0]+1, &rfds, NULL, NULL, NULL) < 0) {
+		nih_error("Error getting go-ahead from server: %s", strerror(errno));
 		goto out;
 	}
 	if (read(sv[0], buf, 1) != 1) {
@@ -264,7 +277,13 @@ main (int   argc,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	int ret = read(sv[0], buf, 1);
+	FD_ZERO(&rfds);
+	FD_SET(sv[0], &rfds);
+	if (select(sv[0]+1, &rfds, NULL, NULL, NULL) < 0) {
+		nih_error("Error getting go-ahead from server: %s", strerror(errno));
+		goto out;
+	}
+	ret = read(sv[0], buf, 1);
 	close(sv[0]);
 	close(sv[1]);
 	if (ret == 1 && *buf == '1')
@@ -273,8 +292,6 @@ main (int   argc,
 out:
 	if (message)
 		dbus_message_unref(message);
-	if (reply)
-		dbus_message_unref(reply);
 	dbus_connection_unref (conn);
 
 	exit(exitval);
