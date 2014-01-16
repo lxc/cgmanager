@@ -276,7 +276,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
-			const char *controller, int sockfd, char **output)
+			const char *controller, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
