@@ -13,13 +13,13 @@ if [ $? -ne 0 ]; then
 fi
 echo 2
 # confirm that it was moved
-c=`cat /proc/$pid/cgroup | grep memory | awk -F: '{ print $3 }'`
-myc=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
+c="`cat /proc/$pid/cgroup | grep memory | awk -F: '{ print $3 }'`"
+myc="`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`"
 ok=0
-if [ "$c" == "${myc}/xxx/b" ]; then
+if [ "$c" = "${myc}/xxx/b" ]; then
 	ok=1;
 fi
-if [ "$myc" == "/" -a "$c" == "/xxx/b" ]; then
+if [ "$myc" = "/" -a "$c" = "/xxx/b" ]; then
 	ok=1;
 fi
 if [ $ok -eq 0 ]; then
