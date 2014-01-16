@@ -183,7 +183,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -191,7 +191,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -201,7 +201,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	}
 	char s[MAXPATHLEN];
 	memset(s, 0, MAXPATHLEN);
-	if (read(sv[0], s, MAXPATHLEN) <= 0)
+	if (recv(sv[0], s, MAXPATHLEN, 0) <= 0)
 		nih_error("Error reading result from cgmanager");
 	else {
 		*output = nih_strdup(parent, s);
@@ -413,7 +413,7 @@ int move_pid_main (const char *controller, char *cgroup,
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -421,7 +421,7 @@ int move_pid_main (const char *controller, char *cgroup,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -429,7 +429,7 @@ int move_pid_main (const char *controller, char *cgroup,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) == 1 && *buf == '1')
+	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
@@ -611,7 +611,7 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred, int *
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -619,7 +619,7 @@ int create_main (const char *controller, char *cgroup, struct ucred ucred, int *
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) == 1 && (*buf == '1' || *buf == '2'))
+	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
 	*existed = *buf == '2' ? 1 : 0;
 out:
@@ -780,7 +780,7 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -788,7 +788,7 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -796,7 +796,7 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) == 1 && *buf == '1')
+	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
@@ -986,7 +986,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -996,7 +996,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 	}
 	char output[MAXPATHLEN];
 	memset(output, 0, MAXPATHLEN);
-	if (read(sv[0], output, MAXPATHLEN) <= 0)
+	if (recv(sv[0], output, MAXPATHLEN, 0) <= 0)
 		nih_error("Bad string from cgmanager");
 	else {
 		*value = nih_strdup(parent, output);
@@ -1174,7 +1174,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -1182,7 +1182,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) == 1 && *buf == '1')
+	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
@@ -1346,7 +1346,7 @@ int remove_main (const char *controller, char *cgroup, struct ucred ucred, int r
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -1354,7 +1354,7 @@ int remove_main (const char *controller, char *cgroup, struct ucred ucred, int r
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], buf, 1) == 1 && (*buf == '1' || *buf == '2'))
+	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
 	*existed = *buf == '2' ? 1 : 0;
 out:
@@ -1518,7 +1518,7 @@ int get_tasks_main (void *parent, const char *controller, char *cgroup, struct u
 		message = NULL;
 	}
 
-	if (read(sv[0], buf, 1) != 1) {
+	if (recv(sv[0], buf, 1, 0) != 1) {
 		nih_error("Error getting reply from server over socketpair");
 		goto out;
 	}
@@ -1526,7 +1526,7 @@ int get_tasks_main (void *parent, const char *controller, char *cgroup, struct u
 		nih_error("Error sending pid over SCM_CREDENTIAL");
 		goto out;
 	}
-	if (read(sv[0], &nrpids, sizeof(uint32_t)) != sizeof(uint32_t))
+	if (recv(sv[0], &nrpids, sizeof(uint32_t), 0) != sizeof(uint32_t))
 		goto out;
 	if (nrpids == 0) {
 		ret = 0;
