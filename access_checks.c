@@ -126,7 +126,7 @@ void get_scm_creds_sync(int sock, uid_t *u, gid_t *g, pid_t *p)
 	struct ucred cred;
         char cmsgbuf[CMSG_SPACE(sizeof(cred))];
         char buf[1];
-	int ret, tries=0;
+	int ret;
 	int optval = 1;
 
 	cred.pid = -1;
