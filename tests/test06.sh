@@ -6,7 +6,7 @@ pid=$!
 
 echo 1
 # Try to move another task to xxx/b - should work
-movepid -c memory -n xxx/b -p $pid
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.movePid string:'memory' string:'xxx/b' int32:$pid
 if [ $? -ne 0 ]; then
 	kill -9 $pid
 	exit 1
@@ -28,13 +28,6 @@ if [ $ok -eq 0 ]; then
 	exit 1
 fi
 
-#echo 3
-# confirm that getpidcgroup works:
-#c2=`sudo getpidcgroup -c memory -p $pid`
-#if [ "$c2" != "xxx/b" ]; then
-#	kill -9 $pid
-#	exit 1
-#fi
 c2=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getPidCgroup string:'memory' int32:$pid | awk '{ print $1}'`
 if [ "$c2" != "xxx/b" ]; then
 	echo "got $c2 instead of xxx/b"
@@ -43,7 +36,7 @@ if [ "$c2" != "xxx/b" ]; then
 fi
 
 echo 4
-movepid -c memory -n xxx -p $pid
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.movePid string:'memory' string:'xxx' int32:$pid
 if [ $? -ne 0 ]; then
 	kill -9 $pid
 	exit 1
