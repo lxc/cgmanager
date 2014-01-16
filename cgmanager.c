@@ -1597,6 +1597,18 @@ static inline int mkdir_cgmanager_dir(void)
 	return true;
 }
 
+static bool daemon_running(void)
+{
+	DBusConnection *server_conn;
+
+	server_conn = nih_dbus_connect(CGMANAGER_DBUS_PATH, NULL);
+	if (server_conn) {
+		dbus_connection_unref (server_conn);
+		return true;
+	}
+	return false;
+}
+
 /*
  * We may decide to make the socket path customizable.  For now
  * just assume it is in /sys/fs/cgroup/ which has some special
@@ -1609,9 +1621,15 @@ static bool setup_cgroup_dir(void)
 		nih_debug(CGDIR " does not exist");
 		return false;
 	}
-	if (file_exists(CGMANAGER_SOCK)) {
-		nih_error("cgmanager socket already exists");
+	if (daemon_running()) {
+		nih_error("cgmanager is already running");
 		return false;
+	}
+	if (file_exists(CGMANAGER_SOCK)) {
+		if (unlink(CGMANAGER_SOCK) < 0) {
+			nih_error("failed to delete stale cgmanager socket");
+			return false;
+		}
 	}
 	/* Check that /sys/fs/cgroup is writeable, else mount a tmpfs */
 	unlink(CGPROBE);
