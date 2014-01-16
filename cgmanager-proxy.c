@@ -267,7 +267,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	nih_info (_("Victim is pid=%d"), vcred.pid);
 
 	if (!get_pid_cgroup_main(data, controller, data->rcred, vcred, &output))
-		ret = write(data->fd, output, strlen(output));
+		ret = write(data->fd, output, strlen(output)+1);
 	else
 		ret = write(data->fd, &vcred, 0);  // kick the client
 	if (ret < 0)
@@ -1026,7 +1026,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
-		ret = write(data->fd, output, strlen(output));
+		ret = write(data->fd, output, strlen(output)+1);
 	else
 		ret = write(data->fd, &ucred, 0);  // kick the client
 	if (ret < 0)
