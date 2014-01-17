@@ -286,6 +286,7 @@ uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 	uid_t nsuid, hostuid;
 	unsigned int count;
 	char line[400];
+	int ret;
 
 	sprintf(line, "/proc/%d/uid_map", (int)pid);
 	if ((f = fopen(line, "r")) == NULL) {
@@ -624,9 +625,15 @@ out:
 	return true;
 }
 
+/*
+ * TODO - make this more baroque to allow ranges etc
+ */
+static char *set_value_blacklist[] = { "tasks", "release-agent", "cgroup.procs" };
+static size_t blacklist_len = sizeof(set_value_blacklist)/sizeof(char *);
+
 bool set_value(const char *path, const char *value)
 {
-	int len;
+	int i, len;
 	FILE *f;
 
 	nih_assert (path);
@@ -636,6 +643,18 @@ bool set_value(const char *path, const char *value)
 
 	len = strlen(value);
 
+	for (i = 0; i < blacklist_len; i++) {
+		const char *p = rindex(path, '/');
+		if (p)
+			p++;
+		else
+			p = path;
+nih_info("comparing %s to %s", p, set_value_blacklist[i]);
+		if (strcmp(p, set_value_blacklist[i]) == 0) {
+			nih_error("attempted write to %s", set_value_blacklist[i]);
+			return false;
+		}
+	}
 	if ((f = fopen(path, "w")) == NULL) {
 		nih_error("Error opening %s for writing", path);
 		return false;
