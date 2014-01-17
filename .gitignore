@@ -39,9 +39,6 @@ cgmanager
 cgmanager-client.c
 cgmanager-client.h
 cgproxy
-chowncgroup
-getpidcgroup
-movepid
 
 org.linuxcontainers.cgmanager.c
 org.linuxcontainers.cgmanager.h
