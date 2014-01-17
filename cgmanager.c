@@ -666,7 +666,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  * /b itself, /b/tasks, and /b/procs.  Any other files in /b will not be
  * chown.  UID can then create subdirs of /b, but not raise his limits.
  */
-int chown_cgroup_main (const char *controller,
+int chown_main (const char *controller,
 		char *cgroup, struct ucred r, struct ucred v)
 {
 	char rcgpath[MAXPATHLEN];
@@ -727,7 +727,7 @@ int chown_cgroup_main (const char *controller,
 	return 0;
 }
 
-void chown_cgroup_scm_reader (struct scm_sock_data *data,
+void chown_scm_reader (struct scm_sock_data *data,
 		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred vcred;
@@ -751,19 +751,19 @@ void chown_cgroup_scm_reader (struct scm_sock_data *data,
 		return;
 	}
 	// we've read the second ucred, now we can proceed
-	nih_info (_("chownCgroupScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("ChownScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
 	nih_info (_("Victim is (uid=%d, gid=%d)"), vcred.uid, vcred.gid);
 
 	*b = '0';
-	if (chown_cgroup_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
+	if (chown_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("chownCgroupScm: Error writing final result to client");
+		nih_error("ChownScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
-int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
+int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
@@ -788,7 +788,7 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 	d->fd = sockfd;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) chown_cgroup_scm_reader,
+		(NihIoReader) chown_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 NULL, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -804,7 +804,7 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 	return 0;
 }
 
-int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
+int cgmanager_chown (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int uid, int gid)
 {
 	int fd = 0, ret;
@@ -826,7 +826,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("chownCgroup: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!is_same_pidns((int)ucred.pid)) {
@@ -844,7 +844,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	vcred.uid = uid;
 	vcred.gid = gid;
 
-	ret = chown_cgroup_main(controller, cgroup, ucred, vcred);
+	ret = chown_main(controller, cgroup, ucred, vcred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 		                             "invalid request");

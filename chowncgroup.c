@@ -224,7 +224,7 @@ main (int   argc,
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "chownCgroupScm");
+			"org.linuxcontainers.cgmanager0_0", "ChownScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING,

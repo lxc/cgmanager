@@ -11,7 +11,7 @@ echo "test 13: valid unprivileged setvalue"
 
 # Make sure zzz/b is new so it has a full limit to begin with
 dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:'memory' string:'zzz/b' int32:1 || true
-dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.chownCgroup string:'memory' string:'zzz' int32:$uid int32:0
+dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:'memory' string:'zzz' int32:$uid int32:0
 sudo -u \#$uid dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:'zzz/b'
 
 prev=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' | awk '{ print $1}'`

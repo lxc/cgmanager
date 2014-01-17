@@ -3,7 +3,7 @@
 # Create a new directory and chown it to calling user;  then try to have
 # calling user movepid to the new directory
 
-echo "Test 9 (chownCgroups)"
+echo "Test 9 (Chown)"
 if [ -n "$SUDO_USER" ]; then
 	gid=$SUDO_GID
 	uid=$SUDO_UID
@@ -23,7 +23,7 @@ if [ $cantmount -eq 0 ]; then
 fi
 
 dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"zzz" > /dev/null 2>&1
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.chownCgroup string:'memory' string:"zzz" int32:$uid int32:$gid > /dev/null 2>&1
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:'memory' string:"zzz" int32:$uid int32:$gid > /dev/null 2>&1
 if [ $cantmount -eq 1 ]; then
 	echo "Chowned zzz, but cannot verify the result"
 	exit 0

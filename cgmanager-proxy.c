@@ -745,7 +745,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  * particular @uid.  The uid must be passed in as an scm_cred so the
  * kernel translates it for us.  @r must be root in its own user ns.
  */
-int chown_cgroup_main ( const char *controller, char *cgroup,
+int chown_main ( const char *controller, char *cgroup,
 	struct ucred ucred, struct ucred vcred)
 {
 	char buf[1];
@@ -769,7 +769,7 @@ int chown_cgroup_main ( const char *controller, char *cgroup,
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "chownCgroupScm");
+			"org.linuxcontainers.cgmanager0_0", "ChownScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -820,7 +820,7 @@ out:
 		dbus_message_unref(message);
 	return ret;
 }
-void chown_cgroup_scm_reader (struct scm_sock_data *data,
+void chown_scm_reader (struct scm_sock_data *data,
 		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred vcred;
@@ -849,14 +849,14 @@ void chown_cgroup_scm_reader (struct scm_sock_data *data,
 	nih_info (_("Victim is (uid=%d, gid=%d)"), vcred.uid, vcred.gid);
 
 	*b = '0';
-	if (chown_cgroup_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
+	if (chown_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("chownCgroupScm: Error writing final result to client");
+		nih_error("ChownScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
-int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
+int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 			const char *controller, char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
@@ -881,7 +881,7 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 	d->fd = sockfd;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) chown_cgroup_scm_reader,
+		(NihIoReader) chown_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 NULL, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -896,7 +896,7 @@ int cgmanager_chown_cgroup_scm (void *data, NihDBusMessage *message,
 	}
 	return 0;
 }
-int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
+int cgmanager_chown (void *data, NihDBusMessage *message,
 		const char *controller, char *cgroup, int uid,
 		int gid)
 {
@@ -923,7 +923,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 	vcred.gid = gid;
 	if (!setns_pid_supported || !setns_user_supported) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"kernel too old, use chownCgroupScm");
+			"kernel too old, use ChownScm");
 		return -1;
 	}
 	if (!is_same_pidns(ucred.pid) || !is_same_userns(ucred.pid)) {
@@ -931,7 +931,7 @@ int cgmanager_chown_cgroup (void *data, NihDBusMessage *message,
 			"requestor is in a different namespace from cgproxy");
 		return -1;
 	}
-	ret = chown_cgroup_main(controller, cgroup, ucred, vcred);
+	ret = chown_main(controller, cgroup, ucred, vcred);
 	if (ret) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");

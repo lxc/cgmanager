@@ -53,14 +53,14 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="existed" type="i" direction="out" />
     </method>
-    <method name="chownCgroupScm">
+    <method name="ChownScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
       <!-- uid+gid are passed as scm_cred over sockfd-->
       <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
-    <method name="chownCgroup">
+    <method name="Chown">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="uid" type="i" direction="in" />
