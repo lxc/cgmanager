@@ -378,7 +378,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  * Caller requests moving a @pid to a particular cgroup identified
  * by the name (@cgroup) and controller type (@controller).
  */
-int move_pid_main (const char *controller, char *cgroup,
+int move_pid_main (const char *controller, const char *cgroup,
 			struct ucred ucred, struct ucred vcred)
 {
 	char buf[1];
@@ -489,8 +489,8 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 out:
 	nih_io_shutdown(io);
 }
-int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int sockfd)
+int cgmanager_move_pid_scm (void *data, NihDBusMessage *message, const char *controller,
+			    const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -529,8 +529,8 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	}
 	return 0;
 }
-int cgmanager_move_pid (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int plain_pid)
+int cgmanager_move_pid (void *data, NihDBusMessage *message, const char *controller,
+			const char *cgroup, int plain_pid)
 {
 	struct ucred ucred, vcred;
 	int fd, ret;
@@ -577,7 +577,8 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int create_main (const char *controller, char *cgroup, struct ucred ucred, int32_t *existed)
+int create_main (const char *controller, const char *cgroup, struct ucred ucred,
+		 int32_t *existed)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -671,7 +672,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_create_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int sockfd)
+			  const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -711,7 +712,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_create (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int32_t *existed)
+		 const char *controller, const char *cgroup, int32_t *existed)
 {
 	struct ucred ucred;
 	int fd, ret;
@@ -745,7 +746,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  * particular @uid.  The uid must be passed in as an scm_cred so the
  * kernel translates it for us.  @r must be root in its own user ns.
  */
-int chown_main ( const char *controller, char *cgroup,
+int chown_main ( const char *controller, const char *cgroup,
 	struct ucred ucred, struct ucred vcred)
 {
 	char buf[1];
@@ -857,7 +858,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_chown_scm (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int sockfd)
+			const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -897,7 +898,7 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 	return 0;
 }
 int cgmanager_chown (void *data, NihDBusMessage *message,
-		const char *controller, char *cgroup, int uid,
+		const char *controller, const char *cgroup, int uid,
 		int gid)
 {
 	struct ucred ucred, vcred;
@@ -1308,7 +1309,8 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int remove_main (const char *controller, char *cgroup, struct ucred ucred, int recursive, int32_t *existed)
+int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
+		 int recursive, int32_t *existed)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -1406,7 +1408,8 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_remove_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int recursive, int sockfd)
+		 const char *controller, const char *cgroup, int recursive,
+		 int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -1447,7 +1450,8 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_remove (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int recursive, int32_t *existed)
+		 const char *controller, const char *cgroup, int recursive,
+		 int32_t *existed)
 {
 	struct ucred ucred;
 	int fd, ret;
@@ -1480,7 +1484,8 @@ int cgmanager_remove (void *data, NihDBusMessage *message,
  * Caller requests the number of tasks in @cgroup in @controller
  * returns nrpids, or -1 on error.
  */
-int get_tasks_main (void *parent, const char *controller, char *cgroup, struct ucred ucred, int32_t **pids)
+int get_tasks_main (void *parent, const char *controller, const char *cgroup,
+		    struct ucred ucred, int32_t **pids)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -1605,7 +1610,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int sockfd)
+		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -1644,7 +1649,8 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 	return 0;
 }
 int cgmanager_get_tasks (void *data, NihDBusMessage *message,
-			 const char *controller, char *cgroup, int32_t **pids, size_t *nrpids)
+			 const char *controller, const char *cgroup,
+			 int32_t **pids, size_t *nrpids)
 {
 	int fd = 0, ret;
 	struct ucred ucred;

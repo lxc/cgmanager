@@ -278,7 +278,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  * Caller requests moving a @pid to a particular cgroup identified
  * by the name (@cgroup) and controller type (@controller).
  */
-int move_pid_main (const char *controller, char *cgroup,
+int move_pid_main (const char *controller, const char *cgroup,
 		struct ucred r, int target_pid)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
@@ -385,7 +385,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup,
+			const char *controller, const char *cgroup,
 			int sockfd)
 {
 	struct scm_sock_data *d;
@@ -427,7 +427,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_move_pid (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int plain_pid)
+			const char *controller, const char *cgroup, int plain_pid)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
@@ -465,7 +465,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int create_main (const char *controller, char *cgroup, struct ucred ucred, int32_t *existed)
+int create_main (const char *controller, const char *cgroup, struct ucred ucred, int32_t *existed)
 {
 	int ret;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], dirpath[MAXPATHLEN];
@@ -585,7 +585,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_create_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int sockfd)
+		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -624,7 +624,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	return 0;
 }
 int cgmanager_create (void *data, NihDBusMessage *message,
-			 const char *controller, char *cgroup, int32_t *existed)
+			 const char *controller, const char *cgroup, int32_t *existed)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
@@ -666,8 +666,8 @@ int cgmanager_create (void *data, NihDBusMessage *message,
  * /b itself, /b/tasks, and /b/procs.  Any other files in /b will not be
  * chown.  UID can then create subdirs of /b, but not raise his limits.
  */
-int chown_main (const char *controller,
-		char *cgroup, struct ucred r, struct ucred v)
+int chown_main (const char *controller, const char *cgroup,
+		struct ucred r, struct ucred v)
 {
 	char rcgpath[MAXPATHLEN];
 	nih_local char *path = NULL;
@@ -764,7 +764,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_chown_scm (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int sockfd)
+			const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -805,7 +805,7 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_chown (void *data, NihDBusMessage *message,
-			const char *controller, char *cgroup, int uid, int gid)
+			const char *controller, const char *cgroup, int uid, int gid)
 {
 	int fd = 0, ret;
 	struct ucred ucred, vcred;
@@ -1228,7 +1228,8 @@ static int recursive_rmdir(char *path)
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int remove_main (const char *controller, char *cgroup, struct ucred ucred, int recursive, int32_t *existed)
+int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
+		 int recursive, int32_t *existed)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	size_t cgroup_len;
@@ -1323,7 +1324,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_remove_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int recursive, int sockfd)
+		 const char *controller, const char *cgroup, int recursive, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -1362,8 +1363,8 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 	}
 	return 0;
 }
-int cgmanager_remove (void *data, NihDBusMessage *message,
-			 const char *controller, char *cgroup, int recursive, int32_t *existed)
+int cgmanager_remove (void *data, NihDBusMessage *message, const char *controller,
+			const char *cgroup, int recursive, int32_t *existed)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
@@ -1400,7 +1401,8 @@ int cgmanager_remove (void *data, NihDBusMessage *message,
  * Caller requests the number of tasks in @cgroup in @controller
  * returns nrpids, or -1 on error.
  */
-int get_tasks_main (void *parent, const char *controller, char *cgroup, struct ucred ucred, int32_t **pids)
+int get_tasks_main (void *parent, const char *controller, const char *cgroup,
+			struct ucred ucred, int32_t **pids)
 {
 	char path[MAXPATHLEN];
 	const char *key = "tasks";
@@ -1468,7 +1470,7 @@ out:
 	nih_io_shutdown(io);
 }
 int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int sockfd)
+		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
         char buf[1];
@@ -1506,8 +1508,8 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 	}
 	return 0;
 }
-int cgmanager_get_tasks (void *data, NihDBusMessage *message,
-			 const char *controller, char *cgroup, int32_t **pids, size_t *nrpids)
+int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *controller,
+			const char *cgroup, int32_t **pids, size_t *nrpids)
 {
 	int fd = 0, ret;
 	struct ucred ucred;
