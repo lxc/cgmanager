@@ -63,9 +63,12 @@ bool get_nih_io_creds(NihIo *io, struct ucred *ucred)
 		return false;
 	}
 	struct cmsghdr *cmsg = msg->control[0];
-	if (!cmsg) nih_error("cmsg null");
+	if (!cmsg) {
+		nih_error("cmsg null");
+		return false;
+	}
 	if (cmsg->cmsg_level != SOL_SOCKET) nih_error("level %d sock %d", cmsg->cmsg_level, SOL_SOCKET);
-	if (!cmsg || cmsg->cmsg_level != SOL_SOCKET ||
+	if (cmsg->cmsg_level != SOL_SOCKET ||
 			cmsg->cmsg_len != CMSG_LEN (sizeof(*ucred)) ||
 			cmsg->cmsg_type != SCM_CREDENTIALS) {
 		nih_error("non-scm control message");

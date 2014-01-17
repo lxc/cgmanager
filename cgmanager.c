@@ -150,7 +150,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 		memcpy(&data->rcred, &ucred, sizeof(struct ucred));
 		data->step = 1;
 		if (write(data->fd, b, 1) != 1) {
-			nih_error("failed to read ucred");
+			nih_error("failed to write ucred");
 			nih_io_shutdown(io);
 			return;
 		}
