@@ -283,7 +283,8 @@ found:
 uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 {
 	FILE *f;
-	int ret, nsuid, hostuid, count;
+	uid_t nsuid, hostuid;
+	unsigned int count;
 	char line[400];
 
 	sprintf(line, "/proc/%d/uid_map", (int)pid);
@@ -291,10 +292,25 @@ uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 		return -1;
 	}
 	while (fgets(line, 400, f)) {
-		ret = sscanf(line, "%d %d %d\n", &nsuid, &hostuid, &count);
+		ret = sscanf(line, "%u %u %u\n", &nsuid, &hostuid, &count);
 		if (ret != 3)
 			continue;
+		if (hostuid + count < hostuid || nsuid + count < nsuid) {
+			/*
+			 * uids wrapped around - unexpected as this is a procfile,
+			 * so just bail.
+			 */
+			nih_error("pid wrapparound at entry %u %u %u in %s",
+				nsuid, hostuid, count, line);
+			break;
+		}
 		if (hostuid <= uid && hostuid+count > uid) {
+			/*
+			 * now since hostuid <= uid < hostuid+count, and
+			 * hostuid+count and nsuid+count do not wrap around,
+			 * we know that nsuid+(uid-hostuid) which must be
+			 * less that nsuid+(count) must not wrap around
+			 */
 			fclose(f);
 			return (uid - hostuid) + nsuid;
 		}
