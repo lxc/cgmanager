@@ -1233,7 +1233,7 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	size_t cgroup_len;
-	nih_local char *working = NULL, *copy = NULL;
+	nih_local char *working = NULL, *copy = NULL, *wcgroup = NULL;
 	char *p;
 
 	*existed = 1;
@@ -1258,16 +1258,25 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 		return -1;
 	}
 
-	if (!normalize_path(cgroup))
+	if (!(wcgroup = nih_strdup(NULL, cgroup))) {
+		nih_error("Out of memory");
+		return -1;
+	}
+	if (!normalize_path(wcgroup))
 		return -1;
 
-	working = nih_strdup(NULL, rcgpath);
-	if (!working)
+	if (!(working = nih_strdup(NULL, rcgpath))) {
+		nih_error("Out of memory");
 		return -1;
-	if (!nih_strcat(&working, NULL, "/"))
+	}
+	if (!nih_strcat(&working, NULL, "/")) {
+		nih_error("Out of memory");
 		return -1;
-	if (!nih_strcat(&working, NULL, cgroup))
+	}
+	if (!nih_strcat(&working, NULL, wcgroup)) {
+		nih_error("Out of memory");
 		return -1;
+	}
 	if (!dir_exists(working)) {
 		*existed = 0;
 		return 0;
