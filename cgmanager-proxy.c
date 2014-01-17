@@ -60,6 +60,20 @@
 
 DBusConnection *server_conn;
 
+bool master_running(void)
+{
+	NihError *err;
+
+	server_conn = nih_dbus_connect(CGMANAGER_DBUS_PATH, NULL);
+	if (server_conn) {
+		dbus_connection_unref (server_conn);
+		return true;
+	}
+	err = nih_error_get();
+	nih_free(err);
+	return false;
+}
+
 int setup_proxy(void)
 {
 	bool exists_upper = false, exists_lower = false;
@@ -111,6 +125,7 @@ int setup_proxy(void)
  * in the foreground.
  **/
 static int daemonise = FALSE;
+static int checkmaster = FALSE;
 
 bool setns_pid_supported = false;
 unsigned long mypidns;
@@ -1717,6 +1732,8 @@ client_disconnect (DBusConnection *conn)
 static NihOption options[] = {
 	{ 0, "daemon", N_("Detach and run in the background"),
 	  NULL, NULL, &daemonise, NULL },
+	{ 0, "check-master", N_("Check whether cgmanager is running"),
+	  NULL, NULL, &checkmaster, NULL },
 
 	NIH_OPTION_LAST
 };
@@ -1744,6 +1761,16 @@ main (int   argc,
 	if (! args)
 		exit (1);
 
+	/*
+	 * If we are called with checkmaster, then only check whether
+	 * cgmanager is running.  This is used by the init script to
+	 * determine whether to run cgmanager or cgproxy
+	 */
+	if (checkmaster) {
+		if (master_running())
+			exit(0);
+		exit(1);
+	}
 	if (setup_proxy() < 0) {
 		nih_fatal ("Failed to set up as proxy");
 		exit(1);
