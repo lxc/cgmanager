@@ -27,16 +27,16 @@
   <interface name="org.linuxcontainers.cgmanager0_0">
     <!-- Example function -->
 
-    <method name="ping">
+    <method name="Ping">
       <arg name="junk" type="i" direction="in" />
     </method>
-    <method name="getPidCgroupScm">
+    <method name="GetPidCgroupScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
       <!-- Pid is passed as a scm_cred over sockfd -->
       <!-- Result is printed over same sockfd -->
     </method>
-    <method name="getPidCgroup">
+    <method name="GetPidCgroup">
       <arg name="controller" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <arg name="output" type="s" direction="out" />
@@ -67,33 +67,33 @@
       <arg name="gid" type="i" direction="in" />
       <!-- caller must be in manager's pid and user namespaces -->
     </method>
-    <method name="movePidScm">
+    <method name="MovePidScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
       <!-- Pid is passed as a scm_cred over sockfd -->
       <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
-    <method name="movePid">
+    <method name="MovePid">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="pid" type="i" direction="in" />
       <!-- task must be in manager's pidns -->
     </method>
-    <method name="getValueScm">
+    <method name="GetValueScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
       <!-- Result is printed over sockfd -->
     </method>
-    <method name="getValue">
+    <method name="GetValue">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
       <arg name="value" type="s" direction="out" />
     </method>
-    <method name="setValueScm">
+    <method name="SetValueScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
@@ -101,7 +101,7 @@
       <arg name="sockfd" type="h" direction="in" />
       <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
-    <method name="setValue">
+    <method name="SetValue">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="key" type="s" direction="in" />
@@ -120,13 +120,13 @@
       <arg name="recursive" type="i" direction="in" />
       <arg name="existed" type="i" direction="out" />
     </method>
-    <method name="getTasksScm">
+    <method name="GetTasksScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
       <!-- nrtasks + pids as scm creds return value comes over sockfd -->
     </method>
-    <method name="getTasks">
+    <method name="GetTasks">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
       <arg name="output" type="ai" direction="out" />

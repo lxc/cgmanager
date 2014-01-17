@@ -3,7 +3,7 @@
 # Try to move myself task to xxx/b - should work
 # (useless though since movepid, not its caller, will be moved)
 echo "Test 8 (movepid self)"
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.movePid string:'memory' string:'xxx/b' int32:$$
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:'memory' string:'xxx/b' int32:$$
 if [ $? -ne 0 ]; then
 	exit 1
 fi

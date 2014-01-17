@@ -82,7 +82,7 @@ int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 	return 0;
 }
 
-/* getPidCgroup */
+/* GetPidCgroup */
 int get_pid_cgroup_main (const void *parent, const char *controller,
 			 int target_pid, struct ucred c, char **output)
 {
@@ -159,7 +159,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	// we've read the second ucred, now we can proceed
 	target_pid = ucred.pid;
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
-	nih_info (_("getPidCgroupScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetPidCgroupScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 	nih_info (_("Victim is pid=%d"), target_pid);
 
@@ -168,7 +168,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	else
 		ret = write(data->fd, &ucred, 0);  // kick the client
 	if (ret < 0)
-		nih_info("getPidCgroupScm: Error writing final result to client");
+		nih_info("GetPidCgroupScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -227,7 +227,7 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 	return 0;
 }
 
-/* getPidCgroup */
+/* GetPidCgroup */
 /*
  * This is one of the dbus callbacks.
  * Caller requests the cgroup of @pid in a given @controller
@@ -254,12 +254,12 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("getPidCgroup: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetPidCgroup: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!is_same_pidns((int)ucred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"getPidCgroup called from non-init namespace");
+				"GetPidCgroup called from non-init namespace");
 		return -1;
 	}
 	ret = get_pid_cgroup_main(message, controller, plain_pid, ucred,
@@ -272,7 +272,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	return 0;
 }
 
-/* movePid */
+/* MovePid */
 /*
  * This is one of the dbus callbacks.
  * Caller requests moving a @pid to a particular cgroup identified
@@ -372,7 +372,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	// we've read the second ucred, now we can proceed
 	target_pid = ucred.pid;
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
-	nih_info (_("movePidScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("MovePidScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 	nih_info (_("Victim is pid=%d"), target_pid);
 
@@ -380,7 +380,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	if (move_pid_main(data->controller, data->cgroup, ucred, target_pid) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("movePidScm: Error writing final result to client");
+		nih_error("MovePidScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -449,7 +449,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("movePid: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = move_pid_main(controller, cgroup, ucred, plain_pid);
@@ -914,7 +914,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 
-	nih_info (_("getValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
@@ -922,7 +922,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 	else
 		ret = write(data->fd, &ucred, 0);  // kick the client
 	if (ret < 0)
-		nih_error("getValueScm: Error writing final result to client");
+		nih_error("GetValueScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -993,7 +993,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("getValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_value_main(message, controller, req_cgroup, key, ucred, value);
@@ -1061,14 +1061,14 @@ void set_value_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 
-	nih_info (_("setValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("SetValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	*b = '0';
 	if (set_value_main(data->controller, data->cgroup, data->key, data->value, ucred) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("setValueScm: Error writing final result to client");
+		nih_error("SetValueScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -1139,7 +1139,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("setValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("SetValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = set_value_main(controller, req_cgroup, key, value, ucred);
@@ -1441,7 +1441,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("getTasksScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(data, data->controller, data->cgroup, ucred, &pids);
@@ -1529,7 +1529,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("getTasks: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(message, controller, cgroup, ucred, &tmp);

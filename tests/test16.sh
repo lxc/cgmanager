@@ -17,7 +17,7 @@ dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/soc
 # Now $uid can create under zzz/b, but should NOT be able to change limits in zzz/b itself
 
 new=99999
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.setValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' string:"$new" > /dev/null 2>&1
+sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.SetValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' string:"$new" > /dev/null 2>&1
 if [ $? -eq 0 ]; then
 	echo "test 16: should have failed to set limit_in_bytes!"
 	exit 1

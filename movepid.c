@@ -215,7 +215,7 @@ main (int   argc,
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "movePidScm");
+			"org.linuxcontainers.cgmanager0_0", "MovePidScm");
 
 	if (!message) {
 		nih_error("Failed to create a message");

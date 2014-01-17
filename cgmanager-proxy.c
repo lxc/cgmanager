@@ -140,7 +140,7 @@ void send_dummy_msg(DBusConnection *conn)
 	int a;
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "ping");
+			"org.linuxcontainers.cgmanager0_0", "Ping");
 	dbus_message_set_no_reply(message, TRUE);
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &a)) {
@@ -176,7 +176,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "getPidCgroupScm");
+			"org.linuxcontainers.cgmanager0_0", "GetPidCgroupScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -286,7 +286,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	else
 		ret = write(data->fd, &vcred, 0);  // kick the client
 	if (ret < 0)
-		nih_error("getPidCgroupScm: Error writing final result to client");
+		nih_error("GetPidCgroupScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -356,7 +356,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	vcred.uid = 0; vcred.gid = 0; // cgmanager ignores these
 	if (!setns_pid_supported) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"kernel too old, use getPidCgroupScm");
+			"kernel too old, use GetPidCgroupScm");
 		return -1;
 	}
 	if (!is_same_pidns(ucred.pid)) {
@@ -402,7 +402,7 @@ int move_pid_main (const char *controller, char *cgroup,
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "movePidScm");
+			"org.linuxcontainers.cgmanager0_0", "MovePidScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -485,7 +485,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	if (move_pid_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("movePidScm: Error writing final result to client");
+		nih_error("MovePidScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -554,7 +554,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	vcred.uid = 0; vcred.gid = 0; // cgmanager ignores these
 	if (!setns_pid_supported) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"kernel too old, use movePidScm");
+			"kernel too old, use MovePidScm");
 		return -1;
 	}
 	if (!is_same_pidns(ucred.pid)) {
@@ -971,7 +971,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "getValueScm");
+			"org.linuxcontainers.cgmanager0_0", "GetValueScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -1045,7 +1045,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 	else
 		ret = write(data->fd, &ucred, 0);  // kick the client
 	if (ret < 0)
-		nih_error("getValueScm: Error writing final result to client");
+		nih_error("GetValueScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -1155,7 +1155,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "setValueScm");
+			"org.linuxcontainers.cgmanager0_0", "SetValueScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -1225,7 +1225,7 @@ void set_value_scm_reader (struct scm_sock_data *data,
 	ret = set_value_main(data->controller, data->cgroup, data->key, data->value, ucred);
 	*b = ret == 0 ? '1' : '0';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("setValueScm: Error writing final result to client");
+		nih_error("SetValueScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -1507,7 +1507,7 @@ int get_tasks_main (void *parent, const char *controller, char *cgroup, struct u
 
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "getTasksScm");
+			"org.linuxcontainers.cgmanager0_0", "GetTasksScm");
 
 	dbus_message_iter_init_append(message, &iter);
         if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -1577,7 +1577,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("getTasksScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(data, data->controller, data->cgroup, ucred, &pids);
@@ -1666,7 +1666,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("getTasks: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(message, controller, cgroup, ucred, &tmp);

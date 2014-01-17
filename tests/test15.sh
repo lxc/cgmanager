@@ -8,9 +8,9 @@ dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type
 sleep 200 &
 pid=$!
 
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.movePid string:'memory' string:"xxx/c" int32:$pid > /dev/null 2>&1
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:'memory' string:"xxx/c" int32:$pid > /dev/null 2>&1
 
-result=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getTasks string:'memory' string:"xxx/c" | awk '/int32/ { print $2 }'`
+result=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetTasks string:'memory' string:"xxx/c" | awk '/int32/ { print $2 }'`
 
 if [ "$result" != "$pid" ]; then
 	echo "result is $result not $pid"

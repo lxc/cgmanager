@@ -14,19 +14,19 @@ dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/soc
 dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:'memory' string:'zzz' int32:$uid int32:0
 sudo -u \#$uid dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:'zzz/b'
 
-prev=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' | awk '{ print $1}'`
+prev=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' | awk '{ print $1}'`
 
 new=99999
 if [ "$prev" = "102400" ]; then
 	new=999999
 fi
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.setValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' string:"$new" > /dev/null 2>&1
+sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.SetValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' string:"$new" > /dev/null 2>&1
 if [ $? -ne 0 ]; then
 	echo "test 13: failed to set limit_in_bytes"
 	exit 1
 fi
 
-after="`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.getValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' | awk '{ print $1 }'`"
+after="`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetValue string:'memory' string:'zzz/b' string:'memory.limit_in_bytes' | awk '{ print $1 }'`"
 if [ "$prev" = "$after" ]; then
 	echo "test 13: old limit was $prev, new is $after"
 	exit 1
