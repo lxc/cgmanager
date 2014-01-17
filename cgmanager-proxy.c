@@ -577,7 +577,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int create_main (const char *controller, char *cgroup, struct ucred ucred, int *existed)
+int create_main (const char *controller, char *cgroup, struct ucred ucred, int32_t *existed)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -651,7 +651,7 @@ void create_scm_reader (struct scm_sock_data *data,
 	struct ucred ucred;
 	char b[1];
 	int ret;
-	int existed = 0;
+	int32_t existed = 0;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -711,7 +711,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_create (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int *existed)
+		 const char *controller, char *cgroup, int32_t *existed)
 {
 	struct ucred ucred;
 	int fd, ret;
@@ -1308,7 +1308,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int remove_main (const char *controller, char *cgroup, struct ucred ucred, int recursive, int *existed)
+int remove_main (const char *controller, char *cgroup, struct ucred ucred, int recursive, int32_t *existed)
 {
 	char buf[1];
 	DBusMessage *message = NULL;
@@ -1386,7 +1386,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 	struct ucred ucred;
 	char b[1];
 	int ret;
-	int existed = 0;
+	int32_t existed = 0;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -1447,7 +1447,7 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 }
 
 int cgmanager_remove (void *data, NihDBusMessage *message,
-		 const char *controller, char *cgroup, int recursive, int *existed)
+		 const char *controller, char *cgroup, int recursive, int32_t *existed)
 {
 	struct ucred ucred;
 	int fd, ret;
