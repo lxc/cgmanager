@@ -13,7 +13,7 @@ fi
 sleep 200 &
 pid=$!
 
-sudo -u \#$uid movepid -c memory -n xxx/b -p $pid > /dev/null 2>&1
+sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:'memory' string:'xxx/b' int32:$pid
 if [ $? -eq 0 ]; then
 	echo "Failed test 7 - uid $uid could move root-owned sleep"
 	exit 1

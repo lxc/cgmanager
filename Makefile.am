@@ -18,12 +18,11 @@ BUILT_SOURCES = $(manager_files_OUTPUTS) $(client_files_OUTPUTS)
 CLEANFILES = \
 	$(manager_files_OUTPUTS) \
 	$(client_files_OUTPUTS) \
-	getpidcgroup movepid cgmanager chowncgroup cgproxy \
+	cgmanager cgproxy \
 	*.o *.so \
 	libcgmanager.pc.in
 
 sbin_PROGRAMS = cgmanager cgproxy
-bin_PROGRAMS = movepid getpidcgroup chowncgroup
 
 lib_LTLIBRARIES = libcgmanager.la
 
@@ -63,10 +62,6 @@ cgproxy_SOURCES = cgmanager-proxy.c \
 	$(manager_files_OUTPUTS) \
 	access_checks.c access_checks.h \
 	fs.c fs.h cgmanager.h
-
-getpidcgroup_SOURCES = getpidcgroup.c
-chowncgroup_SOURCES = chowncgroup.c
-movepid_SOURCES = movepid.c
 
 libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \
