@@ -216,7 +216,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	}
 	char s[MAXPATHLEN];
 	memset(s, 0, MAXPATHLEN);
-	if (recv(sv[0], s, MAXPATHLEN, 0) <= 0)
+	if (recv(sv[0], s, MAXPATHLEN-1, 0) <= 0)
 		nih_error("Error reading result from cgmanager");
 	else {
 		*output = nih_strdup(parent, s);
