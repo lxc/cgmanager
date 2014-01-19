@@ -504,7 +504,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 	strcpy(path, rcgpath);
 	strcpy(dirpath, rcgpath);
 	for (p=copy; *p; p = p2) {
-		*existed = 0;
+		*existed = -1;
 		for (p2=p; *p2 && *p2 != '/'; p2++);
 		oldp2 = *p2;
 		*p2 = '\0';
@@ -544,7 +544,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 			rmdir(path);
 			return -1;
 		}
-		*existed = 0;
+		*existed = -1;
 next:
 		strncat(dirpath, "/", MAXPATHLEN-1);
 		strncat(dirpath, p, MAXPATHLEN-1);
@@ -565,7 +565,7 @@ void create_scm_reader (struct scm_sock_data *data,
 	struct ucred ucred;
 	char b[1];
 	int ret;
-	int32_t existed = 0;
+	int32_t existed = -1;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -576,7 +576,7 @@ void create_scm_reader (struct scm_sock_data *data,
 
 	ret = create_main(data->controller, data->cgroup, ucred, &existed);
 	if (ret == 0)
-		*b = existed ? '2' : '1';
+		*b = existed == 1 ? '2' : '1';
 	else
 		*b = '0';
 	if (write(data->fd, b, 1) < 0)
@@ -630,7 +630,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	struct ucred ucred;
 	socklen_t len;
 
-	*existed = 0;
+	*existed = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -653,6 +653,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 		                             "invalid request");
+nih_info("%s: returning %d; existed is %d", __func__, ret, *existed);
 	return ret;
 }
 
@@ -1278,7 +1279,7 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 		return -1;
 	}
 	if (!dir_exists(working)) {
-		*existed = 0;
+		*existed = -1;
 		return 0;
 	}
 	*existed = 1;
@@ -1313,7 +1314,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 	struct ucred ucred;
 	char b[1];
 	int ret;
-	int32_t existed = 0;
+	int32_t existed = -1;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -1324,7 +1325,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 
 	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
 	if (ret == 0)
-		*b = existed ? '2' : '1';
+		*b = existed == 1 ? '2' : '1';
 	else
 		*b = '0';
 	if (write(data->fd, b, 1) < 0)
@@ -1379,7 +1380,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 	struct ucred ucred;
 	socklen_t len;
 
-	*existed = 0;
+	*existed = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");

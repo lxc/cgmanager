@@ -637,7 +637,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 	}
 	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
-	*existed = *buf == '2' ? 1 : 0;
+	*existed = *buf == '2' ? 1 : -1;
 out:
 	close(sv[0]);
 	close(sv[1]);
@@ -652,7 +652,7 @@ void create_scm_reader (struct scm_sock_data *data,
 	struct ucred ucred;
 	char b[1];
 	int ret;
-	int32_t existed = 0;
+	int32_t existed = -1;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -663,7 +663,7 @@ void create_scm_reader (struct scm_sock_data *data,
 
 	ret = create_main(data->controller, data->cgroup, ucred, &existed);
 	if (ret == 0)
-		*b = existed ? '2' : '1';
+		*b = existed == 1 ? '2' : '1';
 	else
 		*b = '0';
 	if (write(data->fd, b, 1) < 0)
@@ -718,7 +718,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	int fd, ret;
 	socklen_t len;
 
-	*existed = 0;
+	*existed = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -1373,7 +1373,7 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 	}
 	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
-	*existed = *buf == '2' ? 1 : 0;
+	*existed = *buf == '2' ? 1 : -1;
 out:
 	close(sv[0]);
 	close(sv[1]);
@@ -1388,7 +1388,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 	struct ucred ucred;
 	char b[1];
 	int ret;
-	int32_t existed = 0;
+	int32_t existed = -1;
 
 	if (!get_nih_io_creds(io, &ucred)) {
 		nih_error("failed to read ucred");
@@ -1399,7 +1399,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 
 	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
 	if (ret == 0)
-		*b = existed ? '2' : '1';
+		*b = existed == 1 ? '2' : '1';
 	else
 		*b = '0';
 	if (write(data->fd, b, 1) < 0)
@@ -1457,7 +1457,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message,
 	int fd, ret;
 	socklen_t len;
 
-	*existed = 0;
+	*existed = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
