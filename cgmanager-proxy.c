@@ -54,9 +54,7 @@
 
 #include "org.linuxcontainers.cgmanager.h"
 
-#define PACKAGE_NAME "cgmanager"
-#define PACKAGE_VERSION "0.0"
-#define PACKAGE_BUGREPORT ""
+#include "config.h"
 
 DBusConnection *server_conn;
 
