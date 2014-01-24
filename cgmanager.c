@@ -1609,12 +1609,15 @@ static inline int mkdir_cgmanager_dir(void)
 static bool daemon_running(void)
 {
 	DBusConnection *server_conn;
+	NihError *err;
 
 	server_conn = nih_dbus_connect(CGMANAGER_DBUS_PATH, NULL);
 	if (server_conn) {
 		dbus_connection_unref (server_conn);
 		return true;
 	}
+	err = nih_error_get();
+	nih_free(err);
 	return false;
 }
 
