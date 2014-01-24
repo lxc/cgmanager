@@ -160,7 +160,7 @@ int setup_cgroup_mounts(void)
 
 		if (line[0] == '#')
 			continue;
-		p = index(line, '\t');
+		p = strchr(line, '\t');
 		if (!p)
 			continue;
 		*p = '\0';
@@ -252,9 +252,9 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 	while (getline(&line, &len, f) != -1) {
 		char *c1, *c2;
 		char *token, *saveptr = NULL;
-		if ((c1 = index(line, ':')) == NULL)
+		if ((c1 = strchr(line, ':')) == NULL)
 			continue;
-		if ((c2 = index(++c1, ':')) == NULL)
+		if ((c2 = strchr(++c1, ':')) == NULL)
 			continue;
 		*c2 = '\0';
 		for (; (token = strtok_r(c1, ",", &saveptr)); c1 = NULL) {
@@ -644,7 +644,7 @@ bool set_value(const char *path, const char *value)
 	len = strlen(value);
 
 	for (i = 0; i < blacklist_len; i++) {
-		const char *p = rindex(path, '/');
+		const char *p = strrchr(path, '/');
 		if (p)
 			p++;
 		else
