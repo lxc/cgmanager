@@ -25,7 +25,7 @@ rmdir /sys/fs/cgroup/xxx/b || true
 rmdir /sys/fs/cgroup/zzz/b || true
 rmdir /sys/fs/cgroup/zzz || true
 mkdir /sys/fs/cgroup/xxx
-chown -R 1000 /sys/fs/cgroup/xxx
+chown -R $uid /sys/fs/cgroup/xxx
 umount /sys/fs/cgroup
 
 bname=`dirname "${BASH_SOURCE[0]}"`
