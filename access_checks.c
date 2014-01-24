@@ -257,7 +257,7 @@ bool is_same_userns(int pid)
  */
 bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
 {
-	uid_t v_uid;
+	uid_t v_uid, tmpuid;
 	gid_t v_gid;
 
 	if (r == v)
@@ -267,7 +267,8 @@ bool may_move_pid(pid_t r, uid_t r_uid, pid_t v)
 	get_pid_creds(v, &v_uid, &v_gid);
 	if (r_uid == v_uid)
 		return true;
-	if (hostuid_to_ns(r_uid, r) == 0 && hostuid_to_ns(v_uid, r) != -1)
+	if (hostuid_to_ns(r_uid, r, &tmpuid) && tmpuid == 0
+			&& hostuid_to_ns(v_uid, r, &tmpuid))
 		return true;
 	return false;
 }

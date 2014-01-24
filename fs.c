@@ -280,7 +280,7 @@ found:
  * Given host @uid, return the uid to which it maps in
  * @pid's user namespace, or -1 if none.
  */
-uid_t hostuid_to_ns(uid_t uid, pid_t pid)
+bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer)
 {
 	FILE *f;
 	uid_t nsuid, hostuid;
@@ -290,7 +290,7 @@ uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 
 	sprintf(line, "/proc/%d/uid_map", (int)pid);
 	if ((f = fopen(line, "r")) == NULL) {
-		return -1;
+		return false;
 	}
 	while (fgets(line, 400, f)) {
 		ret = sscanf(line, "%u %u %u\n", &nsuid, &hostuid, &count);
@@ -313,11 +313,12 @@ uid_t hostuid_to_ns(uid_t uid, pid_t pid)
 			 * less that nsuid+(count) must not wrap around
 			 */
 			fclose(f);
-			return (uid - hostuid) + nsuid;
+			*answer = (uid - hostuid) + nsuid;
+			return true;
 		}
 	}
 	fclose(f);
-	return -1;
+	return false;
 }
 
 /*
@@ -333,6 +334,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 {
 	struct stat sb;
 	int ret;
+	uid_t nsruid, nsvuid, tmpuid;
 
 	ret = stat(path, &sb);
 	if (ret < 0) {
@@ -342,6 +344,15 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 
 	/* TODO - we should check capability set as well */
 	if (uid == 0)
+		return true;
+
+	/*
+	 * If st_uid is mapped into uid's ns, and uid is root there,
+	 * then that suffices
+	 */
+	if (hostuid_to_ns(sb.st_uid, pid, &nsvuid) &&
+			hostuid_to_ns(uid, pid, &nsruid) &&
+			nsruid == 0)
 		return true;
 
 	if (uid == sb.st_uid) {
@@ -360,7 +371,8 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 		if (mode == O_WRONLY && sb.st_mode & S_IWGRP)
 			return true;
 	}
-	if (hostuid_to_ns(uid, pid) == 0 && hostuid_to_ns(sb.st_uid, pid) != -1)
+	if (hostuid_to_ns(uid, pid, &tmpuid) && tmpuid == 0
+			&& hostuid_to_ns(sb.st_uid, pid, &tmpuid))
 		return true;
 
 	if (mode == O_RDONLY && sb.st_mode & S_IROTH)

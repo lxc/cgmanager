@@ -32,7 +32,7 @@ char *file_read_string(void *parent, const char *path);
 int file_read_pids(void *parent, const char *path, int32_t **pids);
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid);
 const char *get_controller_path(const char *controller);
-uid_t hostuid_to_ns(uid_t uid, pid_t pid);
+bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer);
 bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children);
 bool set_value(const char *path, const char *value);
 unsigned long read_pid_ns_link(int pid);

@@ -695,10 +695,11 @@ int chown_main (const char *controller, const char *cgroup,
 {
 	char rcgpath[MAXPATHLEN];
 	nih_local char *path = NULL;
+	uid_t uid;
 
 	/* If caller is not root in his userns, then he can't chown, as
 	 * that requires privilege over two uids */
-	if (hostuid_to_ns(r.uid, r.pid) != 0) {
+	if (!hostuid_to_ns(r.uid, r.pid, &uid)|| uid  != 0) {
 		nih_error("Chown requested by non-root uid %d", r.uid);
 		return -1;
 	}
