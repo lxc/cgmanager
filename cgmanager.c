@@ -116,6 +116,7 @@ int get_pid_cgroup_main (const void *parent, const char *controller,
 }
 
 struct scm_sock_data {
+	int type;
 	char *controller;
 	char *cgroup;
 	char *key;
@@ -125,6 +126,28 @@ struct scm_sock_data {
 	int fd;
 	int recursive;
 };
+
+enum req_type {
+	REQ_TYPE_GET_PID,
+	REQ_TYPE_MOVE_PID,
+	REQ_TYPE_CREATE,
+	REQ_TYPE_CHOWN,
+	REQ_TYPE_GET_VALUE,
+	REQ_TYPE_SET_VALUE,
+	REQ_TYPE_REMOVE,
+	REQ_TYPE_GET_TASKS,
+};
+
+static void
+scm_sock_error_handler (void  *data,
+		NihIo *io)
+{
+	struct scm_sock_data *d = data;
+	NihError *error = nih_error_get ();
+	nih_error("got an error, type %d", d->type);
+	nih_error("error %s", strerror(error->number));
+	nih_free(error);
+}
 
 static void get_pid_scm_reader (struct scm_sock_data *data,
 			NihIo *io, const char *buf, size_t len)
@@ -205,11 +228,12 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 	d->controller = nih_strdup(d, controller);
 	d->step = 0;
 	d->fd = sockfd;
+	d->type = REQ_TYPE_GET_PID;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)get_pid_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
@@ -405,11 +429,12 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	d->cgroup = nih_strdup(d, cgroup);
 	d->step = 0;
 	d->fd = sockfd;
+	d->type = REQ_TYPE_MOVE_PID;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)move_pid_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
@@ -603,11 +628,12 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
 	d->fd = sockfd;
+	d->type = REQ_TYPE_CREATE;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)create_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
@@ -784,11 +810,12 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 	d->cgroup = nih_strdup(d, cgroup);
 	d->step = 0;
 	d->fd = sockfd;
+	d->type = REQ_TYPE_CHOWN;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) chown_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
@@ -949,11 +976,12 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 	d->key = nih_strdup(d, key);
 	d->step = 0;
 	d->fd = sockfd;
+	d->type = REQ_TYPE_GET_VALUE;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)get_value_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
@@ -1096,11 +1124,12 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 	d->value = nih_strdup(d, value);
 	d->step = 0;
 	d->fd = sockfd;
+	d->type = REQ_TYPE_SET_VALUE;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)set_value_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
@@ -1353,11 +1382,12 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 	d->cgroup = nih_strdup(d, cgroup);
 	d->fd = sockfd;
 	d->recursive = recursive;
+	d->type = REQ_TYPE_REMOVE;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)remove_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
@@ -1498,11 +1528,12 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
 	d->fd = sockfd;
+	d->type = REQ_TYPE_GET_TASKS;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)get_tasks_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
-		 NULL, d)) {
+		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
