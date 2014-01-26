@@ -550,7 +550,8 @@ out:
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 {
 	char line[400];
-	int u, g;
+	uid_t u;
+	gid_t g;
 	FILE *f;
 
 	*uid = -1;
@@ -562,19 +563,19 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 	}
 	while (fgets(line, 400, f)) {
 		if (strncmp(line, "Uid:", 4) == 0) {
-			if (sscanf(line+4, "%d", &u) != 1) {
-				nih_error("bad uid line for pid %d", (int)pid);
+			if (sscanf(line+4, "%u", &u) != 1) {
+				nih_error("bad uid line for pid %u", pid);
 				fclose(f);
 				return;
 			}
-			*uid = (uid_t)u;
+			*uid = u;
 		} else if (strncmp(line, "Gid:", 4) == 0) {
-			if (sscanf(line+4, "%d", &g) != 1) {
-				nih_error("bad gid line for pid %d", (int)pid);
+			if (sscanf(line+4, "%u", &g) != 1) {
+				nih_error("bad gid line for pid %u", pid);
 				fclose(f);
 				return;
 			}
-			*gid = (uid_t)g;
+			*gid = g;
 		}
 	}
 	fclose(f);
