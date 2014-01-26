@@ -701,11 +701,12 @@ unsigned long read_pid_ns_link(int pid)
 	struct stat sb;
 	char path[100];
 	ret = snprintf(path, 100, "/proc/%d/ns/pid", pid);
-	if (ret < 0 || ret >= 100)
-		return false;
+	if (ret < 0 || ret >= 100) {
+		nih_fatal("Error reading pid ns link");
+		exit(1);
+	}
 	ret = stat(path, &sb);
 	return sb.st_ino;
-	return true;
 }
 
 /*
@@ -718,11 +719,12 @@ unsigned long read_user_ns_link(int pid)
 	struct stat sb;
 	char path[100];
 	ret = snprintf(path, 100, "/proc/%d/ns/user", pid);
-	if (ret < 0 || ret >= 100)
-		return false;
+	if (ret < 0 || ret >= 100) {
+		nih_fatal("Error reading user ns link");
+		exit(1);
+	}
 	ret = stat(path, &sb);
 	return sb.st_ino;
-	return true;
 }
 
 bool realpath_escapes(char *path, char *safety)
