@@ -511,7 +511,7 @@ out:
  */
 int file_read_pids(void *parent, const char *path, int32_t **pids)
 {
-	int nrpids = 0, pid;
+	int nrpids = 0, alloced_pids = 0, pid;
 	FILE *fin = fopen(path, "r");
 
 	*pids = NULL;
@@ -521,14 +521,20 @@ int file_read_pids(void *parent, const char *path, int32_t **pids)
 	}
 
 	while (fscanf(fin, "%d", &pid) == 1) {
-		int32_t *tmp;
-		if (!(tmp = nih_realloc(*pids, parent, (nrpids+1)*sizeof(int32_t)))) {
-			if (*pids)
-				nih_free(*pids);
-			pids = NULL;
-			goto out;
+		if (nrpids + 1 >= alloced_pids) {
+			int32_t *tmp;
+			alloced_pids += 256;
+			tmp = nih_realloc(*pids, parent,
+					  alloced_pids*sizeof(int32_t));
+			if (!tmp) {
+				if (*pids)
+					nih_free(*pids);
+				pids = NULL;
+				nih_error("Out of memory getting pid list");
+				goto out;
+			}
+			*pids = tmp;
 		}
-		*pids = tmp;
 		(*pids)[nrpids++] = (int32_t) pid;
 	}
 out:
