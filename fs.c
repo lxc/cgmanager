@@ -334,7 +334,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 {
 	struct stat sb;
 	int ret;
-	uid_t nsruid, nsvuid, tmpuid;
+	uid_t nsruid, nsvuid;
 
 	ret = stat(path, &sb);
 	if (ret < 0) {
@@ -347,12 +347,11 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 		return true;
 
 	/*
-	 * If st_uid is mapped into uid's ns, and uid is root there,
-	 * then that suffices
+	 * If victim is mapped into requestor's uid namespace, and
+	 * requestor is root there, then that suffices.
 	 */
 	if (hostuid_to_ns(sb.st_uid, pid, &nsvuid) &&
-			hostuid_to_ns(uid, pid, &nsruid) &&
-			nsruid == 0)
+			hostuid_to_ns(uid, pid, &nsruid) && nsruid == 0)
 		return true;
 
 	if (uid == sb.st_uid) {
@@ -362,6 +361,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 			return true;
 		if (mode == O_WRONLY && sb.st_mode & S_IWUSR)
 			return true;
+		return false;
 	}
 	if (gid == sb.st_gid) {
 		if (mode == O_RDONLY && sb.st_mode & S_IRGRP)
@@ -370,10 +370,8 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 			return true;
 		if (mode == O_WRONLY && sb.st_mode & S_IWGRP)
 			return true;
+		return false;
 	}
-	if (hostuid_to_ns(uid, pid, &tmpuid) && tmpuid == 0
-			&& hostuid_to_ns(sb.st_uid, pid, &tmpuid))
-		return true;
 
 	if (mode == O_RDONLY && sb.st_mode & S_IROTH)
 		return true;
