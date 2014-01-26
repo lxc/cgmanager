@@ -434,7 +434,7 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 	/* Make sure client isn't passing us a bunch of bogus '../'s to
 	 * try to read host files */
 	if (!realpath(fullpath, path)) {
-		nih_error("Invalid path %s", fullpath);
+		nih_error("Invalid path %s (%s)", fullpath, strerror(errno));
 		return false;
 	}
 	if (strncmp(path, cont_path, strlen(cont_path)) != 0) {
