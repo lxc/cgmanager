@@ -594,16 +594,14 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children)
 {
 	int len, ret;
-	nih_local char *fpath = NULL;
 
 	nih_assert (path);
-
 	len = strlen(path);
-
 	if (chown(path, uid, gid) < 0)
 		return false;
 
 	if (all_children) {
+		// chown all the files in the directory
 		struct dirent dirent, *direntp;
 		char fpath[MAXPATHLEN];
 		DIR *d;
@@ -628,6 +626,8 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		}
 		closedir(d);
 	} else {
+		// chown only the tasks and procs files
+		nih_local char *fpath = NULL;
 		fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
 		if (!fpath)
 			return true;
