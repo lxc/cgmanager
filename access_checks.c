@@ -77,7 +77,7 @@ bool get_nih_io_creds(NihIo *io, struct ucred *ucred)
 	memcpy(ucred, CMSG_DATA(cmsg), sizeof(*ucred));
 	if (ucred->pid == -1)
 		return false;
-	nih_info("got creds pid %d uid %d", ucred->pid, ucred->uid);
+	nih_info("got creds pid %d (%u:%u)", ucred->pid, ucred->uid, ucred->gid);
 	return true;
 }
 

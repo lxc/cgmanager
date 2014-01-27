@@ -275,7 +275,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 		}
 		return;
 	}
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
 	nih_info (_("Victim is pid=%d"), vcred.pid);
 
@@ -475,7 +475,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 		return;
 	}
 	// we've read the second ucred, now we can proceed
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
 	nih_info (_("Victim is pid=%d"), vcred.pid);
 
@@ -656,7 +656,7 @@ void create_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = create_main(data->controller, data->cgroup, ucred, &existed);
@@ -843,9 +843,9 @@ void chown_scm_reader (struct scm_sock_data *data,
 		return;
 	}
 	// we've read the second ucred, now we can proceed
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
-	nih_info (_("Victim is (uid=%d, gid=%d)"), vcred.uid, vcred.gid);
+	nih_info (_("Victim is (uid=%u, gid=%u)"), vcred.uid, vcred.gid);
 
 	*b = '0';
 	if (chown_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
@@ -1036,7 +1036,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
@@ -1218,7 +1218,7 @@ void set_value_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = set_value_main(data->controller, data->cgroup, data->key, data->value, ucred);
@@ -1392,7 +1392,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
@@ -1580,7 +1580,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(data, data->controller, data->cgroup, ucred, &pids);
@@ -1670,7 +1670,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(message, controller, cgroup, ucred, &tmp);

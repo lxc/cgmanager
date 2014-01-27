@@ -244,9 +244,9 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 	char *line = NULL, *cgroup = NULL;
 	size_t len = 0;
 
-	sprintf(path, "/proc/%d/cgroup", (int) pid);
+	sprintf(path, "/proc/%d/cgroup", pid);
 	if ((f = fopen(path, "r")) == NULL) {
-		nih_error("could not open cgroup file for %d", (int) pid);
+		nih_error("could not open cgroup file for %d", pid);
 		return NULL;
 	}
 	while (getline(&line, &len, f) != -1) {
@@ -288,7 +288,7 @@ bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer)
 	char line[400];
 	int ret;
 
-	sprintf(line, "/proc/%d/uid_map", (int)pid);
+	sprintf(line, "/proc/%d/uid_map", pid);
 	if ((f = fopen(line, "r")) == NULL) {
 		return false;
 	}
@@ -438,7 +438,7 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
 		return false;
 	}
 	if (strncmp(path, cont_path, strlen(cont_path)) != 0) {
-		nih_error("invalid cgroup path '%s' for pid %d", cgroup, (int)pid);
+		nih_error("invalid cgroup path '%s' for pid %d", cgroup, pid);
 		return false;
 	}
 
@@ -556,7 +556,7 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
 
 	*uid = -1;
 	*gid = -1;
-	sprintf(line, "/proc/%d/status", (int)pid);
+	sprintf(line, "/proc/%d/status", pid);
 	if ((f = fopen(line, "r")) == NULL) {
 		nih_error("Error opening %s: %s", line, strerror(errno));
 		return;
@@ -621,8 +621,8 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 			if (ret < 0 || ret >= MAXPATHLEN-len)
 				continue;
 			if (chown(fpath, uid, gid) < 0)
-				nih_info("Failed to chown file %s to %d:%d",
-					fpath, (int)uid, (int)gid);
+				nih_info("Failed to chown file %s to %u:%u",
+					fpath, uid, gid);
 		}
 		closedir(d);
 	} else {

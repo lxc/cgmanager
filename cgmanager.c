@@ -101,7 +101,7 @@ int get_pid_cgroup_main (const void *parent, const char *controller,
 	int rlen = strlen(rcgpath);
 	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
 		nih_error("v (%d)'s cgroup is not below r (%d)'s",
-			(int)target_pid, (int)c.pid);
+			target_pid, c.pid);
 		return -1;
 	}
 	if (strlen(vcgpath) == rlen)
@@ -179,7 +179,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	// we've read the second ucred, now we can proceed
 	target_pid = ucred.pid;
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
-	nih_info (_("GetPidCgroupScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetPidCgroupScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 	nih_info (_("Victim is pid=%d"), target_pid);
 
@@ -275,10 +275,10 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("GetPidCgroup: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetPidCgroup: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	if (!is_same_pidns((int)ucred.pid)) {
+	if (!is_same_pidns(ucred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"GetPidCgroup called from non-init namespace");
 		return -1;
@@ -336,15 +336,15 @@ int move_pid_main (const char *controller, const char *cgroup,
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("pid %d (uid %d gid %d) may not write under %s",
-			(int)r.pid, (int)r.uid, (int)r.gid, path);
+		nih_error("pid %d (uid %u gid %u) may not write under %s",
+			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 	// is r allowed to write to tasks file?
 	strncat(path, "/tasks", MAXPATHLEN-1);
 	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
-		nih_error("pid %d (uid %d gid %d) may not write under %s",
-			(int)r.pid, (int)r.uid, (int)r.gid, path);
+		nih_error("pid %d (uid %u gid %u) may not write under %s",
+			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 	f = fopen(path, "w");
@@ -358,11 +358,11 @@ int move_pid_main (const char *controller, const char *cgroup,
 		return -1;
 	}
 	if (fclose(f) != 0) {
-		nih_error("Failed to write %d to %s", (int)target_pid, path);
+		nih_error("Failed to write %d to %s", target_pid, path);
 		return -1;
 	}
-	nih_info("%d moved to %s:%s by %d's request", (int)target_pid,
-		controller, cgroup, (int)r.pid);
+	nih_info("%d moved to %s:%s by %d's request", target_pid,
+		controller, cgroup, r.pid);
 	return 0;
 }
 
@@ -393,7 +393,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	// we've read the second ucred, now we can proceed
 	target_pid = ucred.pid;
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
-	nih_info (_("MovePidScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("MovePidScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 	nih_info (_("Victim is pid=%d"), target_pid);
 
@@ -471,7 +471,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = move_pid_main(controller, cgroup, ucred, plain_pid);
@@ -540,15 +540,15 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 			*existed = 1;
 			// TODO - properly use execute perms
 			if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-				nih_error("pid %d (uid %d gid %d) may not look under %s",
-					(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, path);
+				nih_error("pid %d (uid %u gid %u) may not look under %s",
+					ucred.pid, ucred.uid, ucred.gid, path);
 				return -1;
 			}
 			goto next;
 		}
 		if (!may_access(ucred.pid, ucred.uid, ucred.gid, dirpath, O_RDWR)) {
-			nih_error("pid %d (uid %d gid %d) may not create under %s",
-				(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, dirpath);
+			nih_error("pid %d (uid %u gid %u) may not create under %s",
+				ucred.pid, ucred.uid, ucred.gid, dirpath);
 			return -1;
 		}
 		ret = mkdir(path, 0755);
@@ -561,8 +561,8 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 			return -1;
 		}
 		if (!chown_cgroup_path(path, ucred.uid, ucred.gid, true)) {
-			nih_error("Failed to change ownership on %s to %d:%d",
-				path, (int)ucred.uid, (int)ucred.gid);
+			nih_error("Failed to change ownership on %s to %u:%u",
+				path, ucred.uid, ucred.gid);
 			rmdir(path);
 			return -1;
 		}
@@ -576,8 +576,8 @@ next:
 	}
 
 
-	nih_info("Created %s for %d (%d:%d)", path, (int)ucred.pid,
-		 (int)ucred.uid, (int)ucred.gid);
+	nih_info("Created %s for %d (%u:%u)", path, ucred.pid,
+		 ucred.uid, ucred.gid);
 	return 0;
 }
 
@@ -593,7 +593,7 @@ void create_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("CreateScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("CreateScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = create_main(data->controller, data->cgroup, ucred, &existed);
@@ -669,7 +669,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Create: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Create: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = create_main(controller, cgroup, ucred, existed);
@@ -700,7 +700,7 @@ int chown_main (const char *controller, const char *cgroup,
 	/* If caller is not root in his userns, then he can't chown, as
 	 * that requires privilege over two uids */
 	if (!hostuid_to_ns(r.uid, r.pid, &uid)|| uid  != 0) {
-		nih_error("Chown requested by non-root uid %d", r.uid);
+		nih_error("Chown requested by non-root uid %u", r.uid);
 		return -1;
 	}
 
@@ -731,21 +731,21 @@ int chown_main (const char *controller, const char *cgroup,
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("pid %d (uid %d gid %d) may not write under %s",
-			(int)r.pid, (int)r.uid, (int)r.gid, path);
+		nih_error("pid %d (uid %u gid %u) may not write under %s",
+			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 
 	// does r have privilege over the cgroup dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
-		nih_error("Pid %d may not chown %s\n", (int)r.pid, path);
+		nih_error("Pid %d may not chown %s\n", r.pid, path);
 		return -1;
 	}
 
 	// go ahead and chown it.
 	if (!chown_cgroup_path(path, v.uid, v.gid, false)) {
-		nih_error("Failed to change ownership on %s to %d:%d",
-			path, (int)v.uid, (int)v.gid);
+		nih_error("Failed to change ownership on %s to %u:%u",
+			path, v.uid, v.gid);
 		return -1;
 	}
 
@@ -776,9 +776,9 @@ void chown_scm_reader (struct scm_sock_data *data,
 		return;
 	}
 	// we've read the second ucred, now we can proceed
-	nih_info (_("ChownScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("ChownScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
-	nih_info (_("Victim is (uid=%d, gid=%d)"), vcred.uid, vcred.gid);
+	nih_info (_("Victim is (uid=%u, gid=%u)"), vcred.uid, vcred.gid);
 
 	*b = '0';
 	if (chown_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
@@ -852,15 +852,15 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
-	if (!is_same_pidns((int)ucred.pid)) {
+	if (!is_same_pidns(ucred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"chown called from non-init pid namespace");
 		return -1;
 	}
-	if (!is_same_userns((int)ucred.pid)) {
+	if (!is_same_userns(ucred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"chown called from non-init user namespace");
 		return -1;
@@ -899,7 +899,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", ucred.pid, path);
 		return -1;
 	}
 
@@ -914,7 +914,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 
 	/* Check access rights to the file itself */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", ucred.pid, path);
 		return -1;
 	}
 
@@ -940,7 +940,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 
-	nih_info (_("GetValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetValueScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
@@ -1020,7 +1020,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("GetValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetValue: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_value_main(message, controller, req_cgroup, key, ucred, value);
@@ -1050,7 +1050,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", ucred.pid, path);
 		return -1;
 	}
 
@@ -1065,7 +1065,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 
 	/* Check access rights to the file itself */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDWR)) {
-		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", ucred.pid, path);
 		return -1;
 	}
 
@@ -1088,7 +1088,7 @@ void set_value_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 
-	nih_info (_("SetValueScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("SetValueScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	*b = '0';
@@ -1167,7 +1167,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("SetValue: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("SetValue: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = set_value_main(controller, req_cgroup, key, value, ucred);
@@ -1317,8 +1317,8 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 		return -1;
 	*p = '\0';
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, copy, O_WRONLY)) {
-		nih_error("pid %d uid %d gid %d may not remove %s",
-			(int)ucred.pid, (int)ucred.uid, (int)ucred.gid, copy);
+		nih_error("pid %d (%u:%u) may not remove %s",
+			ucred.pid, ucred.uid, ucred.gid, copy);
 		return -1;
 	}
 
@@ -1330,8 +1330,8 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 	} else if (recursive_rmdir(working) < 0)
 			return -1;
 
-	nih_info("Removed %s for %d (%d:%d)", path, (int)ucred.pid,
-		 (int)ucred.uid, (int)ucred.gid);
+	nih_info("Removed %s for %d (%u:%u)", path, ucred.pid,
+		 ucred.uid, ucred.gid);
 	return 0;
 }
 
@@ -1347,7 +1347,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("RemoveScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("RemoveScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
@@ -1424,7 +1424,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("Remove: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("Remove: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = remove_main(controller, cgroup, ucred, recursive, existed);
@@ -1454,7 +1454,7 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(ucred.pid, ucred.uid, ucred.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", (int)ucred.pid, path);
+		nih_error("Pid %d may not access %s\n", ucred.pid, path);
 		return -1;
 	}
 
@@ -1481,7 +1481,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 		nih_error("failed to read ucred");
 		goto out;
 	}
-	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(data, data->controller, data->cgroup, ucred, &pids);
@@ -1570,7 +1570,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 	len = sizeof(struct ucred);
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
-	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%d, gid=%d)"),
+	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 		  fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(message, controller, cgroup, ucred, &tmp);
