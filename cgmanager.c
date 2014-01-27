@@ -307,7 +307,7 @@ int move_pid_main (const char *controller, const char *cgroup,
 
 	// verify that ucred.pid may move target_pid
 	if (!may_move_pid(r.pid, r.uid, target_pid)) {
-		nih_error("%d may not move %d", (int)r.pid, (int)r.pid);
+		nih_error("%d may not move %d", r.pid, target_pid);
 		return -1;
 	}
 
