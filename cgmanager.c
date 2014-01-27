@@ -323,7 +323,7 @@ int move_pid_main (const char *controller, const char *cgroup,
 		return -1;
 	}
 	/* rcgpath + / + cgroup + /tasks + \0 */
-	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+8) {
+	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN - 8) {
 		nih_error("Path name too long");
 		return -1;
 	}
