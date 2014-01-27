@@ -180,14 +180,14 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
 	nih_info (_("GetPidCgroupScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			data->fd, ucred.pid, ucred.uid, ucred.gid);
-	nih_info (_("Victim is pid=%d"), target_pid);
+	nih_info (_("GetPidCgroupScm: Victim is pid=%d"), target_pid);
 
 	if (!get_pid_cgroup_main(data, controller, target_pid, ucred, &output))
 		ret = write(data->fd, output, strlen(output)+1);
 	else
 		ret = write(data->fd, &ucred, 0);  // kick the client
 	if (ret < 0)
-		nih_info("GetPidCgroupScm: Error writing final result to client");
+		nih_error("GetPidCgroupScm: Error writing final result to client");
 out:
 	nih_io_shutdown(io);
 }
@@ -360,7 +360,7 @@ int move_pid_main (const char *controller, const char *cgroup,
 		nih_error("Failed to write %d to %s", target_pid, path);
 		return -1;
 	}
-	nih_info("%d moved to %s:%s by %d's request", target_pid,
+	nih_info(_("%d moved to %s:%s by %d's request"), target_pid,
 		controller, cgroup, r.pid);
 	return 0;
 }
@@ -394,7 +394,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
 	nih_info (_("MovePidScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			data->fd, ucred.pid, ucred.uid, ucred.gid);
-	nih_info (_("Victim is pid=%d"), target_pid);
+	nih_info (_("MovePidScm: Victim is pid=%d"), target_pid);
 
 	*b = '0';
 	if (move_pid_main(data->controller, data->cgroup, ucred, target_pid) == 0)
@@ -454,7 +454,6 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	struct ucred ucred;
 	socklen_t len;
 
-	nih_info("%s called, plain_pid is %d", __func__, plain_pid);
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"message was null");
@@ -575,7 +574,7 @@ next:
 	}
 
 
-	nih_info("Created %s for %d (%u:%u)", path, ucred.pid,
+	nih_info(_("Created %s for %d (%u:%u)"), path, ucred.pid,
 		 ucred.uid, ucred.gid);
 	return 0;
 }
@@ -675,7 +674,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
-	nih_info("%s: returning %d; existed is %d", __func__, ret, *existed);
+	nih_info(_("%s: returning %d; existed is %d"), __func__, ret, *existed);
 	return ret;
 }
 
@@ -777,7 +776,7 @@ void chown_scm_reader (struct scm_sock_data *data,
 	// we've read the second ucred, now we can proceed
 	nih_info (_("ChownScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
-	nih_info (_("Victim is (uid=%u, gid=%u)"), vcred.uid, vcred.gid);
+	nih_info (_("ChownScm: Victim is (uid=%u, gid=%u)"), vcred.uid, vcred.gid);
 
 	*b = '0';
 	if (chown_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
@@ -924,7 +923,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 		return -1;
 	}
 
-	nih_info("Sending to client: %s", *value);
+	nih_info(_("Sending to client: %s"), *value);
 	return 0;
 }
 static void get_value_scm_reader (struct scm_sock_data *data,
@@ -1329,7 +1328,7 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 	} else if (recursive_rmdir(working) < 0)
 			return -1;
 
-	nih_info("Removed %s for %d (%u:%u)", path, ucred.pid,
+	nih_info(_("Removed %s for %d (%u:%u)"), path, ucred.pid,
 		 ucred.uid, ucred.gid);
 	return 0;
 }

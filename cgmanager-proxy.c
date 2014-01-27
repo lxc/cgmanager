@@ -95,7 +95,7 @@ int setup_proxy(void)
 	}
 	if (exists_upper && exists_lower) {
 		dbus_connection_unref (server_conn);
-		nih_error("proxy already running");
+		nih_fatal("proxy already running");
 		return -1;  // proxy already running
 	}
 	if (exists_lower)
@@ -104,11 +104,11 @@ int setup_proxy(void)
 	if (exists_upper) {
 		//move /sys/fs/cgroup/cgmanager to /sys/fs/cgroup/cgmanager.lower
 		if (mkdir(CGPROXY_DIR, 0755) < 0 && errno != EEXIST) {
-			nih_error("failed to create lower sock");
+			nih_fatal("failed to create lower sock");
 			return -1;
 		}
 		if (mount(CGMANAGER_DIR, CGPROXY_DIR, "none", MS_MOVE, 0) < 0) {
-			nih_error("unable to rename the socket");
+			nih_fatal("unable to rename the socket");
 			return -1;
 		}
 	}
@@ -160,15 +160,18 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s",
+			__func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 
@@ -187,7 +190,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -197,25 +200,30 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair",
+			  __func__);
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL",
+			__func__);
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair",
+			__func__);
 		goto out;
 	}
 	if (send_creds(sv[0], vcred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL",
+			__func__);
 		goto out;
 	}
 	char s[MAXPATHLEN];
 	memset(s, 0, MAXPATHLEN);
 	if (recv(sv[0], s, MAXPATHLEN-1, 0) <= 0)
-		nih_error("Error reading result from cgmanager");
+		nih_error("%s: Error reading result from cgmanager",
+			__func__);
 	else {
 		*output = nih_strdup(parent, s);
 		ret = 0;
@@ -258,7 +266,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	int ret;
 
 	if (!get_nih_io_creds(io, &vcred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 
@@ -269,7 +277,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 		memcpy(&data->rcred, &vcred, sizeof(struct ucred));
 		data->step = 1;
 		if (write(data->fd, b, 1) != 1) {
-			nih_error("failed to read ucred");
+			nih_error("%s: failed to read ucred", __func__);
 			nih_io_shutdown(io);
 			return;
 		}
@@ -386,15 +394,18 @@ int move_pid_main (const char *controller, const char *cgroup,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s",
+			__func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 
@@ -417,7 +428,7 @@ int move_pid_main (const char *controller, const char *cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -427,19 +438,23 @@ int move_pid_main (const char *controller, const char *cgroup,
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], vcred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
@@ -458,7 +473,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	char b[1];
 
 	if (!get_nih_io_creds(io, &vcred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 
@@ -468,7 +483,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 		memcpy(&data->rcred, &vcred, sizeof(struct ucred));
 		data->step = 1;
 		if (write(data->fd, b, 1) != 1) {
-			nih_error("failed to read ucred");
+			nih_error("%s: failed to read ucred", __func__);
 			nih_io_shutdown(io);
 			return;
 		}
@@ -483,7 +498,8 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	if (move_pid_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("MovePidScm: Error writing final result to client");
+		nih_error("MovePidScm: Error writing final result to client: %s",
+			strerror(errno));
 out:
 	nih_io_shutdown(io);
 }
@@ -585,15 +601,16 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s",
+			__func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 
@@ -616,7 +633,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -626,11 +643,13 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
@@ -653,7 +672,7 @@ void create_scm_reader (struct scm_sock_data *data,
 	int32_t existed = -1;
 
 	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
@@ -665,7 +684,8 @@ void create_scm_reader (struct scm_sock_data *data,
 	else
 		*b = '0';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("createScm: Error writing final result to client");
+		nih_error("createScm: Error writing final result to client: %s",
+			strerror(errno));
 out:
 	nih_io_shutdown(io);
 }
@@ -754,15 +774,16 @@ int chown_main ( const char *controller, const char *cgroup,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s",
+			__func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 
@@ -785,7 +806,7 @@ int chown_main ( const char *controller, const char *cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -795,19 +816,23 @@ int chown_main ( const char *controller, const char *cgroup,
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], vcred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
@@ -826,7 +851,7 @@ void chown_scm_reader (struct scm_sock_data *data,
 	char b[1];
 
 	if (!get_nih_io_creds(io, &vcred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 
@@ -836,7 +861,7 @@ void chown_scm_reader (struct scm_sock_data *data,
 		memcpy(&data->rcred, &vcred, sizeof(struct ucred));
 		data->step = 1;
 		if (write(data->fd, b, 1) != 1) {
-			nih_error("failed to read ucred");
+			nih_error("%s: failed to read ucred", __func__);
 			nih_io_shutdown(io);
 			return;
 		}
@@ -851,7 +876,8 @@ void chown_scm_reader (struct scm_sock_data *data,
 	if (chown_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("ChownScm: Error writing final result to client");
+		nih_error("ChownScm: Error writing final result to client: %s",
+			strerror(errno));
 out:
 	nih_io_shutdown(io);
 }
@@ -956,15 +982,15 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s", __func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 
@@ -991,7 +1017,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -1001,17 +1027,20 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	char output[MAXPATHLEN];
 	memset(output, 0, MAXPATHLEN);
 	if (recv(sv[0], output, MAXPATHLEN, 0) <= 0)
-		nih_error("Bad string from cgmanager");
+		nih_error("%s: Failed reading string from cgmanager: %s",
+			__func__, strerror(errno));
 	else {
 		*value = nih_strdup(parent, output);
 		ret = 0;
@@ -1032,7 +1061,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 	int ret;
 
 	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 
@@ -1044,7 +1073,8 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 	else
 		ret = write(data->fd, &ucred, 0);  // kick the client
 	if (ret < 0)
-		nih_error("GetValueScm: Error writing final result to client");
+		nih_error("GetValueScm: Error writing final result to client: %s",
+			 strerror(errno));
 out:
 	nih_io_shutdown(io);
 }
@@ -1140,15 +1170,16 @@ int set_value_main (const char *controller, const char *req_cgroup,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s",
+			__func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 
@@ -1179,7 +1210,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -1189,11 +1220,13 @@ int set_value_main (const char *controller, const char *req_cgroup,
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
@@ -1214,7 +1247,7 @@ void set_value_scm_reader (struct scm_sock_data *data,
 	char b[1];
 
 	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 
@@ -1224,7 +1257,8 @@ void set_value_scm_reader (struct scm_sock_data *data,
 	ret = set_value_main(data->controller, data->cgroup, data->key, data->value, ucred);
 	*b = ret == 0 ? '1' : '0';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("SetValueScm: Error writing final result to client");
+		nih_error("SetValueScm: Error writing final result to client: %s",
+			strerror(errno));
 out:
 	nih_io_shutdown(io);
 }
@@ -1317,15 +1351,16 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 	dbus_uint32_t serial;;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s",
+			__func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 
@@ -1352,7 +1387,7 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -1362,11 +1397,13 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
@@ -1389,7 +1426,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 	int32_t existed = -1;
 
 	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
@@ -1401,7 +1438,8 @@ void remove_scm_reader (struct scm_sock_data *data,
 	else
 		*b = '0';
 	if (write(data->fd, b, 1) < 0)
-		nih_error("removeScm: Error writing final result to client");
+		nih_error("removeScm: Error writing final result to client: %s",
+			strerror(errno));
 out:
 	nih_io_shutdown(io);
 }
@@ -1496,15 +1534,16 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	int i;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("Error creating socketpair: %s", strerror(errno));
+		nih_error("%s: Error creating socketpair: %s",
+			__func__, strerror(errno));
 		return -1;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("setsockopt: %s", strerror(errno));
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
 		goto out;
 	}
 
@@ -1527,7 +1566,7 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	}
 
 	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("failed to send dbus message");
+		nih_error("%s: failed to send dbus message", __func__);
 		goto out;
 	}
 	dbus_connection_flush(server_conn);
@@ -1537,11 +1576,13 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	}
 
 	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("Error getting reply from server over socketpair");
+		nih_error("%s: Error getting reply from server over socketpair: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (send_creds(sv[0], ucred)) {
-		nih_error("Error sending pid over SCM_CREDENTIAL");
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
+			__func__, strerror(errno));
 		goto out;
 	}
 	if (recv(sv[0], &nrpids, sizeof(uint32_t), 0) != sizeof(uint32_t))
@@ -1555,7 +1596,8 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	for (i=0; i<nrpids; i++) {
 		get_scm_creds_sync(sv[0], &u, &g, &tmp);
 		if (tmp == -1) {
-			nih_error("Failed getting pid from server");
+			nih_error("%s: Failed getting pid from server",
+				__func__);
 			goto out;
 		}
 		(*pids)[i] = tmp;
@@ -1577,7 +1619,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 	int32_t *pids, nrpids;
 
 	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
+		nih_error("%s: failed to read ucred", __func__);
 		goto out;
 	}
 	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
@@ -1592,7 +1634,8 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 	}
 	nrpids = ret;
 	if (write(data->fd, &nrpids, sizeof(int32_t)) != sizeof(int32_t)) {
-		nih_error("get_tasks_scm: Error writing final result to client");
+		nih_error("get_tasks_scm: Error writing final result to client: %s",
+			strerror(errno));
 		goto out;
 	}
 
@@ -1756,7 +1799,7 @@ main (int argc, char *argv[])
 	nih_option_set_help (_("The cgroup manager proxy"));
 
 	if (geteuid() != 0) {
-		nih_error("Cgmanager proxy must be run as root");
+		nih_error(_("Cgmanager proxy must be run as root"));
 		exit(1);
 	}
 

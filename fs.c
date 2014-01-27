@@ -166,7 +166,7 @@ int setup_cgroup_mounts(void)
 		*p = '\0';
 		h = strtoul(p+1, NULL, 10);
 		if (h) {
-			nih_info("%s was already mounted!", line);
+			nih_info(_("%s was already mounted!"), line);
 #if STRICT
 			ret = -1;
 			goto out;
@@ -205,19 +205,19 @@ int setup_cgroup_mounts(void)
 			nih_fatal("Out of memory mounting controllers");
 			goto out;
 		}
-		nih_info("Mounted %s onto %s",
+		nih_info(_("Mounted %s onto %s"),
 			all_mounts[num_controllers].controller,
 			all_mounts[num_controllers].path);
 		if (strcmp(all_mounts[num_controllers].controller, "cpuset") == 0) {
 			set_clone_children(dest); // TODO make this optional?
-			nih_info("set clone_children");
+			nih_info(_("set clone_children"));
 		} else if (strcmp(all_mounts[num_controllers].controller, "memory") == 0) {
 			set_use_hierarchy(dest);  // TODO make this optional?
-			nih_info("set memory.use_hierarchy");
+			nih_info(_("set memory.use_hierarchy"));
 		}
 		num_controllers++;
 	}
-	nih_info("mounted %d controllers", num_controllers);
+	nih_info(_("mounted %d controllers"), num_controllers);
 	ret = 0;
 out:
 	fclose(cgf);
@@ -621,7 +621,7 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 			if (ret < 0 || ret >= MAXPATHLEN-len)
 				continue;
 			if (chown(fpath, uid, gid) < 0)
-				nih_info("Failed to chown file %s to %u:%u",
+				nih_error("Failed to chown file %s to %u:%u",
 					fpath, uid, gid);
 		}
 		closedir(d);
@@ -632,10 +632,10 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		if (!fpath)
 			return true;
 		if (chown(fpath, uid, gid) < 0)
-			nih_info("Failed to chown procs file %s", fpath);
+			nih_error("Failed to chown procs file %s", fpath);
 		sprintf(fpath+len, "/tasks");
 		if (chown(fpath, uid, gid) < 0)
-			nih_info("Failed to chown tasks file %s", fpath);
+			nih_error("Failed to chown tasks file %s", fpath);
 	}
 
 out:
@@ -666,7 +666,6 @@ bool set_value(const char *path, const char *value)
 			p++;
 		else
 			p = path;
-nih_info("comparing %s to %s", p, set_value_blacklist[i]);
 		if (strcmp(p, set_value_blacklist[i]) == 0) {
 			nih_error("attempted write to %s", set_value_blacklist[i]);
 			return false;

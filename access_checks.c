@@ -67,17 +67,16 @@ bool get_nih_io_creds(NihIo *io, struct ucred *ucred)
 		nih_error("cmsg null");
 		return false;
 	}
-	if (cmsg->cmsg_level != SOL_SOCKET) nih_error("level %d sock %d", cmsg->cmsg_level, SOL_SOCKET);
 	if (cmsg->cmsg_level != SOL_SOCKET ||
 			cmsg->cmsg_len != CMSG_LEN (sizeof(*ucred)) ||
 			cmsg->cmsg_type != SCM_CREDENTIALS) {
-		nih_error("non-scm control message");
+		nih_error("Got unexpected non-scm control message");
 		return false;
 	}
 	memcpy(ucred, CMSG_DATA(cmsg), sizeof(*ucred));
 	if (ucred->pid == -1)
 		return false;
-	nih_info("got creds pid %d (%u:%u)", ucred->pid, ucred->uid, ucred->gid);
+	nih_info(_("got creds pid %d (%u:%u)"), ucred->pid, ucred->uid, ucred->gid);
 	return true;
 }
 
@@ -108,7 +107,8 @@ int send_creds(int sock, struct ucred cred)
 	msg.msg_iovlen = 1;
 
 	if (sendmsg(sock, &msg, 0) < 0) {
-		perror("sendmsg");
+		nih_error("%s: failed at sendmsg: %s", __func__,
+			  strerror(errno));
 		return -1;
 	}
 	return 0;
@@ -212,7 +212,8 @@ int send_pid(int sock, int pid)
 	msg.msg_iovlen = 1;
 
 	if (sendmsg(sock, &msg, 0) < 0) {
-		perror("sendmsg");
+		nih_error("%s: failed at sendmsg: %s", __func__,
+			  strerror(errno));
 		return -1;
 	}
 	return 0;
