@@ -123,12 +123,12 @@ int send_creds(int sock, struct ucred cred)
  */
 void get_scm_creds_sync(int sock, uid_t *u, gid_t *g, pid_t *p)
 {
-        struct msghdr msg = { 0 };
-        struct iovec iov;
-        struct cmsghdr *cmsg;
+	struct msghdr msg = { 0 };
+	struct iovec iov;
+	struct cmsghdr *cmsg;
 	struct ucred cred;
-        char cmsgbuf[CMSG_SPACE(sizeof(cred))];
-        char buf[1];
+	char cmsgbuf[CMSG_SPACE(sizeof(cred))];
+	char buf[1];
 	int ret;
 	int optval = 1;
 
@@ -146,15 +146,15 @@ void get_scm_creds_sync(int sock, uid_t *u, gid_t *g, pid_t *p)
 		goto out;
 	}
 
-        msg.msg_name = NULL;
-        msg.msg_namelen = 0;
-        msg.msg_control = cmsgbuf;
-        msg.msg_controllen = sizeof(cmsgbuf);
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_control = cmsgbuf;
+	msg.msg_controllen = sizeof(cmsgbuf);
 
-        iov.iov_base = buf;
-        iov.iov_len = sizeof(buf);
-        msg.msg_iov = &iov;
-        msg.msg_iovlen = 1;
+	iov.iov_base = buf;
+	iov.iov_len = sizeof(buf);
+	msg.msg_iov = &iov;
+	msg.msg_iovlen = 1;
 
 	// retry logic is not ideal, especially as we are not
 	// threaded.  Sleep at most 1 second waiting for the client
@@ -166,18 +166,18 @@ void get_scm_creds_sync(int sock, uid_t *u, gid_t *g, pid_t *p)
 		goto out;
 	}
 
-        cmsg = CMSG_FIRSTHDR(&msg);
+	cmsg = CMSG_FIRSTHDR(&msg);
 
-        if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)) &&
-            cmsg->cmsg_level == SOL_SOCKET &&
-            cmsg->cmsg_type == SCM_CREDENTIALS) {
+	if (cmsg && cmsg->cmsg_len == CMSG_LEN(sizeof(struct ucred)) &&
+			cmsg->cmsg_level == SOL_SOCKET &&
+			cmsg->cmsg_type == SCM_CREDENTIALS) {
 		memcpy(&cred, CMSG_DATA(cmsg), sizeof(cred));
-        }
+	}
 out:
 	*u = cred.uid;
 	*g = cred.gid;
 	*p = cred.pid;
-        return;
+	return;
 }
 
 int send_pid(int sock, int pid)

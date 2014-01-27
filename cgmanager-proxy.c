@@ -141,10 +141,10 @@ void send_dummy_msg(DBusConnection *conn)
 			"org.linuxcontainers.cgmanager0_0", "Ping");
 	dbus_message_set_no_reply(message, TRUE);
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &a)) {
-                nih_error_raise_no_memory ();
-                return;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &a)) {
+		nih_error_raise_no_memory ();
+		return;
+	}
 	dbus_connection_send(conn, message, NULL);
 	dbus_connection_flush(conn);
 	dbus_message_unref(message);
@@ -177,10 +177,10 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 			"org.linuxcontainers.cgmanager0_0", "GetPidCgroupScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -276,7 +276,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 		return;
 	}
 	nih_info (_("Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
+			data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
 	nih_info (_("Victim is pid=%d"), vcred.pid);
 
 	if (!get_pid_cgroup_main(data, controller, data->rcred, vcred, &output))
@@ -292,7 +292,7 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 			const char *controller, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -403,14 +403,14 @@ int move_pid_main (const char *controller, const char *cgroup,
 			"org.linuxcontainers.cgmanager0_0", "MovePidScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -491,7 +491,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message, const char *con
 			    const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -602,14 +602,14 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 			"org.linuxcontainers.cgmanager0_0", "CreateScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -673,7 +673,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 			  const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -725,7 +725,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could not get client socket.");
+				"Could not get client socket.");
 		return -1;
 	}
 
@@ -771,14 +771,14 @@ int chown_main ( const char *controller, const char *cgroup,
 			"org.linuxcontainers.cgmanager0_0", "ChownScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -859,7 +859,7 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -911,7 +911,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+				"Could not get client socket.");
 		return -1;
 	}
 
@@ -973,18 +973,18 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 			"org.linuxcontainers.cgmanager0_0", "GetValueScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -1050,15 +1050,15 @@ out:
 }
 int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
-		                 const char *key, int sockfd)
+				 const char *key, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -1093,7 +1093,7 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 }
 int cgmanager_get_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
-		                 const char *key, char **value)
+				 const char *key, char **value)
 
 {
 	struct ucred ucred;
@@ -1108,7 +1108,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+				"Could not get client socket.");
 		return -1;
 	}
 
@@ -1157,22 +1157,22 @@ int set_value_main (const char *controller, const char *req_cgroup,
 			"org.linuxcontainers.cgmanager0_0", "SetValueScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &value)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &value)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -1230,10 +1230,10 @@ out:
 }
 int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
-		                 const char *key, const char *value, int sockfd)
+				 const char *key, const char *value, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -1288,7 +1288,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+				"Could not get client socket.");
 		return -1;
 	}
 
@@ -1334,18 +1334,18 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 			"org.linuxcontainers.cgmanager0_0", "RemoveScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &recursive)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &recursive)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -1410,7 +1410,7 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 		 int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -1464,7 +1464,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could not get client socket.");
+				"Could not get client socket.");
 		return -1;
 	}
 
@@ -1513,14 +1513,14 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 			"org.linuxcontainers.cgmanager0_0", "GetTasksScm");
 
 	dbus_message_iter_init_append(message, &iter);
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
-        if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-                nih_error_raise_no_memory ();
-                goto out;
-        }
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error_raise_no_memory ();
+		goto out;
+	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error_raise_no_memory ();
 		goto out;
@@ -1611,7 +1611,7 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -1663,7 +1663,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+				"Could not get client socket.");
 		return -1;
 	}
 
@@ -1680,7 +1680,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message,
 		ret = 0;
 	} else
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
+				"invalid request");
 	return ret;
 }
 
@@ -1712,8 +1712,8 @@ client_connect (DBusServer *server, DBusConnection *conn)
 	nih_info (_("Connection from private client"));
 
 	NIH_MUST (nih_dbus_object_new (NULL, conn,
-	          "/org/linuxcontainers/cgmanager",
-	          cgmanager_interfaces, NULL));
+				"/org/linuxcontainers/cgmanager",
+				cgmanager_interfaces, NULL));
 
 	return TRUE;
 }
@@ -1743,12 +1743,11 @@ static NihOption options[] = {
 };
 
 int
-main (int   argc,
-      char *argv[])
+main (int argc, char *argv[])
 {
-	char **             args;
-	int                 ret;
-	DBusServer *        server;
+	char **		args;
+	int		ret;
+	DBusServer *	server;
 	struct stat sb;
 
 	nih_main_init (argv[0]);
@@ -1782,7 +1781,7 @@ main (int   argc,
 
 	/* Setup the DBus server */
 	server = nih_dbus_server ( CGMANAGER_DBUS_PATH, client_connect,
-	                          client_disconnect);
+			client_disconnect);
 	nih_assert (server != NULL);
 
 	if (stat("/proc/self/ns/pid", &sb) == 0) {

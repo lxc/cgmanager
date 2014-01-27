@@ -139,8 +139,7 @@ enum req_type {
 };
 
 static void
-scm_sock_error_handler (void  *data,
-		NihIo *io)
+scm_sock_error_handler (void *data, NihIo *io)
 {
 	struct scm_sock_data *d = data;
 	NihError *error = nih_error_get ();
@@ -180,7 +179,7 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 	target_pid = ucred.pid;
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
 	nih_info (_("GetPidCgroupScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+			data->fd, ucred.pid, ucred.uid, ucred.gid);
 	nih_info (_("Victim is pid=%d"), target_pid);
 
 	if (!get_pid_cgroup_main(data, controller, target_pid, ucred, &output))
@@ -210,12 +209,12 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 			const char *controller, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -268,7 +267,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+					     "Could not get client socket.");
 		return -1;
 	}
 
@@ -276,7 +275,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("GetPidCgroup: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!is_same_pidns(ucred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -284,7 +283,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 		return -1;
 	}
 	ret = get_pid_cgroup_main(message, controller, plain_pid, ucred,
-				   output);
+			output);
 	if (ret) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
@@ -394,7 +393,7 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 	target_pid = ucred.pid;
 	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
 	nih_info (_("MovePidScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+			data->fd, ucred.pid, ucred.uid, ucred.gid);
 	nih_info (_("Victim is pid=%d"), target_pid);
 
 	*b = '0';
@@ -410,12 +409,12 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 			int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -464,7 +463,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+					     "Could not get client socket.");
 		return -1;
 	}
 
@@ -472,12 +471,12 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = move_pid_main(controller, cgroup, ucred, plain_pid);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
+					     "invalid request");
 	return ret;
 }
 
@@ -594,7 +593,7 @@ void create_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 	nih_info (_("CreateScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+			data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = create_main(data->controller, data->cgroup, ucred, &existed);
 	if (ret == 0)
@@ -610,12 +609,12 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -656,13 +655,13 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	*existed = -1;
 	if (message == NULL) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"message was null");
+				"message was null");
 		return -1;
 	}
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+				"Could not get client socket.");
 		return -1;
 	}
 
@@ -670,13 +669,13 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("Create: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = create_main(controller, cgroup, ucred, existed);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
-nih_info("%s: returning %d; existed is %d", __func__, ret, *existed);
+				"invalid request");
+	nih_info("%s: returning %d; existed is %d", __func__, ret, *existed);
 	return ret;
 }
 
@@ -699,7 +698,7 @@ int chown_main (const char *controller, const char *cgroup,
 
 	/* If caller is not root in his userns, then he can't chown, as
 	 * that requires privilege over two uids */
-	if (!hostuid_to_ns(r.uid, r.pid, &uid)|| uid  != 0) {
+	if (!hostuid_to_ns(r.uid, r.pid, &uid)|| uid != 0) {
 		nih_error("Chown requested by non-root uid %u", r.uid);
 		return -1;
 	}
@@ -731,7 +730,7 @@ int chown_main (const char *controller, const char *cgroup,
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("pid %d (uid %u gid %u) may not write under %s",
+		nih_error("pid %d (uid %u gid %u) may not read under %s",
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
@@ -777,7 +776,7 @@ void chown_scm_reader (struct scm_sock_data *data,
 	}
 	// we've read the second ucred, now we can proceed
 	nih_info (_("ChownScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
+			data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
 	nih_info (_("Victim is (uid=%u, gid=%u)"), vcred.uid, vcred.gid);
 
 	*b = '0';
@@ -792,12 +791,12 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -845,7 +844,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+					     "Could not get client socket.");
 		return -1;
 	}
 
@@ -853,7 +852,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!is_same_pidns(ucred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -873,7 +872,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 	ret = chown_main(controller, cgroup, ucred, vcred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
+					     "invalid request");
 	return ret;
 }
 
@@ -888,7 +887,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
  * pretend to be the cgroup root which is annoying in itself
  */
 int get_value_main (void *parent, const char *controller, const char *req_cgroup,
-		                 const char *key, struct ucred ucred, char **value)
+		const char *key, struct ucred ucred, char **value)
 {
 	char path[MAXPATHLEN];
 
@@ -941,7 +940,7 @@ static void get_value_scm_reader (struct scm_sock_data *data,
 	}
 
 	nih_info (_("GetValueScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+			data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
 		ret = write(data->fd, output, strlen(output)+1);
@@ -954,15 +953,15 @@ out:
 }
 int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
-		                 const char *key, int sockfd)
+				 const char *key, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -998,7 +997,7 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 }
 int cgmanager_get_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
-		                 const char *key, char **value)
+				 const char *key, char **value)
 
 {
 	int fd = 0, ret;
@@ -1013,7 +1012,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could not get client socket.");
+					     "Could not get client socket.");
 		return -1;
 	}
 
@@ -1021,12 +1020,12 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("GetValue: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_value_main(message, controller, req_cgroup, key, ucred, value);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
+				"invalid request");
 	return ret;
 }
 
@@ -1038,7 +1037,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
  * to the caller's cgroup.
  */
 int set_value_main (const char *controller, const char *req_cgroup,
-		                 const char *key, const char *value, struct ucred ucred)
+		const char *key, const char *value, struct ucred ucred)
 
 {
 	char path[MAXPATHLEN];
@@ -1089,7 +1088,7 @@ void set_value_scm_reader (struct scm_sock_data *data,
 	}
 
 	nih_info (_("SetValueScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+			data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	*b = '0';
 	if (set_value_main(data->controller, data->cgroup, data->key, data->value, ucred) == 0)
@@ -1101,15 +1100,15 @@ out:
 }
 int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
-		                 const char *key, const char *value, int sockfd)
+				 const char *key, const char *value, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -1145,7 +1144,7 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 }
 int cgmanager_set_value (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
-		                 const char *key, const char *value)
+				 const char *key, const char *value)
 
 {
 	int fd = 0, ret;
@@ -1160,7 +1159,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+					     "Could not get client socket.");
 		return -1;
 	}
 
@@ -1168,12 +1167,12 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("SetValue: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = set_value_main(controller, req_cgroup, key, value, ucred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
+					     "invalid request");
 	return ret;
 }
 
@@ -1348,7 +1347,7 @@ void remove_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 	nih_info (_("RemoveScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+			data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
 	if (ret == 0)
@@ -1364,12 +1363,12 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int recursive, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -1417,7 +1416,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+					     "Could not get client socket.");
 		return -1;
 	}
 
@@ -1425,12 +1424,12 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("Remove: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = remove_main(controller, cgroup, ucred, recursive, existed);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
+					     "invalid request");
 	return ret;
 }
 
@@ -1482,7 +1481,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 		goto out;
 	}
 	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  data->fd, ucred.pid, ucred.uid, ucred.gid);
+			data->fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(data, data->controller, data->cgroup, ucred, &pids);
 	if (ret < 0) {
@@ -1511,12 +1510,12 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-        char buf[1];
+	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			     "Failed to set passcred: %s", strerror(errno));
+				"Failed to set passcred: %s", strerror(errno));
 		return -1;
 	}
 	d = nih_alloc(NULL, sizeof(*d));
@@ -1563,7 +1562,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "Could  not get client socket.");
+					     "Could not get client socket.");
 		return -1;
 	}
 
@@ -1571,7 +1570,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
 
 	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-		  fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, ucred.pid, ucred.uid, ucred.gid);
 
 	ret = get_tasks_main(message, controller, cgroup, ucred, &tmp);
 	if (ret >= 0) {
@@ -1580,7 +1579,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 		ret = 0;
 	} else
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-		                             "invalid request");
+					     "invalid request");
 	return ret;
 }
 
@@ -1601,8 +1600,8 @@ client_connect (DBusServer *server, DBusConnection *conn)
 	nih_info (_("Connection from private client"));
 
 	NIH_MUST (nih_dbus_object_new (NULL, conn,
-	          "/org/linuxcontainers/cgmanager",
-	          cgmanager_interfaces, NULL));
+				"/org/linuxcontainers/cgmanager",
+				cgmanager_interfaces, NULL));
 
 	return TRUE;
 }
@@ -1624,7 +1623,7 @@ client_disconnect (DBusConnection *conn)
  **/
 static NihOption options[] = {
 	{ 0, "daemon", N_("Detach and run in the background"),
-	  NULL, NULL, &daemonise, NULL },
+		NULL, NULL, &daemonise, NULL },
 
 	NIH_OPTION_LAST
 };
@@ -1694,12 +1693,11 @@ static bool setup_cgroup_dir(void)
 }
 
 int
-main (int   argc,
-      char *argv[])
+main (int argc, char *argv[])
 {
-	char **             args;
-	int                 ret;
-	DBusServer *        server;
+	char **		args;
+	int		ret;
+	DBusServer *	server;
 	struct stat sb;
 
 	nih_main_init (argv[0]);
@@ -1718,7 +1716,7 @@ main (int   argc,
 
 	/* Setup the DBus server */
 	server = nih_dbus_server (CGMANAGER_DBUS_PATH, client_connect,
-	                          client_disconnect);
+				  client_disconnect);
 	nih_assert (server != NULL);
 
 	if (setup_cgroup_mounts() < 0) {
@@ -1743,7 +1741,7 @@ main (int   argc,
 
 			err = nih_error_get ();
 			nih_fatal ("%s: %s", _("Unable to become daemon"),
-				   err->message);
+					err->message);
 			nih_free (err);
 
 			exit (1);
