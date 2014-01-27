@@ -79,42 +79,6 @@ int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 	return 0;
 }
 
-/* GetPidCgroup */
-int get_pid_cgroup_main (const void *parent, const char *controller,
-			 int target_pid, struct ucred c, char **output)
-{
-	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
-
-	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(c.pid, controller, "", rcgpath)) {
-		nih_error("Could not determine the requestor cgroup");
-		return -1;
-	}
-
-	// Get v's cgroup in vcgpath
-	if (!compute_pid_cgroup(target_pid, controller, "", vcgpath)) {
-		nih_error("Could not determine the victim cgroup");
-		return -1;
-	}
-
-	// Make sure v's cgroup is under r's
-	int rlen = strlen(rcgpath);
-	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
-		nih_error("v (%d)'s cgroup is not below r (%d)'s",
-			target_pid, c.pid);
-		return -1;
-	}
-	if (strlen(vcgpath) == rlen)
-		*output = nih_strdup(parent, "/");
-	else
-		*output = nih_strdup(parent, vcgpath + rlen + 1);
-
-	if (! *output)
-		nih_return_no_memory_error(-1);
-
-	return 0;
-}
-
 struct scm_sock_data {
 	int type;
 	char *controller;
@@ -138,6 +102,24 @@ enum req_type {
 	REQ_TYPE_GET_TASKS,
 };
 
+int get_pid_cgroup_main(const void *parent, const char *controller,
+		struct ucred r, struct ucred v, char **output);
+int move_pid_main(const char *controller, const char *cgroup,
+		struct ucred r, struct ucred v);
+int create_main(const char *controller, const char *cgroup,
+		struct ucred ucred, int32_t *existed);
+int chown_main(const char *controller, const char *cgroup,
+		struct ucred r, struct ucred v);
+int get_value_main(void *parent, const char *controller,
+		const char *req_cgroup, const char *key, struct ucred ucred,
+		char **value);
+int set_value_main(const char *controller, const char *req_cgroup,
+		const char *key, const char *value, struct ucred ucred);
+int remove_main(const char *controller, const char *cgroup, struct ucred ucred,
+		 int recursive, int32_t *existed);
+int get_tasks_main (void *parent, const char *controller, const char *cgroup,
+			struct ucred ucred, int32_t **pids);
+
 static void
 scm_sock_error_handler (void *data, NihIo *io)
 {
@@ -148,13 +130,57 @@ scm_sock_error_handler (void *data, NihIo *io)
 	nih_free(error);
 }
 
+static void
+scm_sock_close (struct scm_sock_data *data, NihIo *io)
+{
+	nih_assert (data);
+	nih_assert (io);
+	close (data->fd);
+	nih_free (data);
+	nih_free (io);
+}
+
+/* GetPidCgroup */
+int get_pid_cgroup_main (const void *parent, const char *controller,
+			 struct ucred r, struct ucred v, char **output)
+{
+	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+		nih_error("Could not determine the requestor cgroup");
+		return -1;
+	}
+
+	// Get v's cgroup in vcgpath
+	if (!compute_pid_cgroup(v.pid, controller, "", vcgpath)) {
+		nih_error("Could not determine the victim cgroup");
+		return -1;
+	}
+
+	// Make sure v's cgroup is under r's
+	int rlen = strlen(rcgpath);
+	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
+		nih_error("v (%d)'s cgroup is not below r (%d)'s",
+			v.pid, r.pid);
+		return -1;
+	}
+	if (strlen(vcgpath) == rlen)
+		*output = nih_strdup(parent, "/");
+	else
+		*output = nih_strdup(parent, vcgpath + rlen + 1);
+
+	if (! *output)
+		nih_return_no_memory_error(-1);
+
+	return 0;
+}
+
 static void get_pid_scm_reader (struct scm_sock_data *data,
 			NihIo *io, const char *buf, size_t len)
 {
-	const char *controller = data->controller;
 	char *output = NULL;
 	struct ucred ucred;
-	pid_t target_pid;
 	int ret;
 
 	if (!get_nih_io_creds(io, &ucred)) {
@@ -176,31 +202,23 @@ static void get_pid_scm_reader (struct scm_sock_data *data,
 		return;
 	}
 	// we've read the second ucred, now we can proceed
-	target_pid = ucred.pid;
-	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
 	nih_info (_("GetPidCgroupScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, ucred.pid, ucred.uid, ucred.gid);
-	nih_info (_("GetPidCgroupScm: Victim is pid=%d"), target_pid);
+			data->fd, data->rcred.pid, data->rcred.uid,
+			data->rcred.gid);
+	nih_info (_("GetPidCgroupScm: Victim is pid=%d"), ucred.pid);
 
-	if (!get_pid_cgroup_main(data, controller, target_pid, ucred, &output))
+	if (!get_pid_cgroup_main(data, data->controller, data->rcred, ucred,
+				 &output))
 		ret = write(data->fd, output, strlen(output)+1);
 	else
 		ret = write(data->fd, &ucred, 0);  // kick the client
 	if (ret < 0)
-		nih_error("GetPidCgroupScm: Error writing final result to client");
+		nih_error("GetPidCgroupScm: Error writing final result to client: %s",
+			strerror(errno));
 out:
 	nih_io_shutdown(io);
 }
 
-static void
-scm_sock_close (struct scm_sock_data *data, NihIo *io)
-{
-	nih_assert (data);
-	nih_assert (io);
-	close (data->fd);
-	nih_free (data);
-	nih_free (io);
-}
 /*
  * This is one of the dbus callbacks.
  * Caller requests the cgroup of @pid in a given @controller
@@ -256,7 +274,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 			const char *controller, int plain_pid, char **output)
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred rcred, vcred;
 	socklen_t len;
 
 	if (message == NULL) {
@@ -272,18 +290,20 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) != -1);
 
 	nih_info (_("GetPidCgroup: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	if (!is_same_pidns(ucred.pid)) {
+	if (!is_same_pidns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"GetPidCgroup called from non-init namespace");
 		return -1;
 	}
-	ret = get_pid_cgroup_main(message, controller, plain_pid, ucred,
-			output);
+	vcred.uid = 0;
+	vcred.gid = 0;
+	vcred.pid = plain_pid;
+	ret = get_pid_cgroup_main(message, controller, rcred, vcred, output);
 	if (ret) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
@@ -299,14 +319,14 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
  * by the name (@cgroup) and controller type (@controller).
  */
 int move_pid_main (const char *controller, const char *cgroup,
-		struct ucred r, int target_pid)
+		struct ucred r, struct ucred v)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
 
-	// verify that ucred.pid may move target_pid
-	if (!may_move_pid(r.pid, r.uid, target_pid)) {
-		nih_error("%d may not move %d", r.pid, target_pid);
+	// verify that ucred.pid may move target pid
+	if (!may_move_pid(r.pid, r.uid, v.pid)) {
+		nih_error("%d may not move %d", r.pid, v.pid);
 		return -1;
 	}
 
@@ -351,16 +371,16 @@ int move_pid_main (const char *controller, const char *cgroup,
 		nih_error("Failed to open %s", path);
 		return -1;
 	}
-	if (fprintf(f, "%d\n", target_pid) < 0) {
+	if (fprintf(f, "%d\n", v.pid) < 0) {
 		fclose(f);
 		nih_error("Failed to open %s", path);
 		return -1;
 	}
 	if (fclose(f) != 0) {
-		nih_error("Failed to write %d to %s", target_pid, path);
+		nih_error("Failed to write %d to %s", v.pid, path);
 		return -1;
 	}
-	nih_info(_("%d moved to %s:%s by %d's request"), target_pid,
+	nih_info(_("%d moved to %s:%s by %d's request"), v.pid,
 		controller, cgroup, r.pid);
 	return 0;
 }
@@ -369,7 +389,6 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 		NihIo *io, const char *buf, size_t len)
 {
 	struct ucred ucred;
-	pid_t target_pid;
 	char b[1];
 
 	if (!get_nih_io_creds(io, &ucred)) {
@@ -390,14 +409,13 @@ void move_pid_scm_reader (struct scm_sock_data *data,
 		return;
 	}
 	// we've read the second ucred, now we can proceed
-	target_pid = ucred.pid;
-	memcpy(&ucred, &data->rcred, sizeof(struct ucred));
 	nih_info (_("MovePidScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, ucred.pid, ucred.uid, ucred.gid);
-	nih_info (_("MovePidScm: Victim is pid=%d"), target_pid);
+			data->fd, data->rcred.pid, data->rcred.uid,
+			data->rcred.gid);
+	nih_info (_("MovePidScm: Victim is pid=%d"), ucred.pid);
 
 	*b = '0';
-	if (move_pid_main(data->controller, data->cgroup, ucred, target_pid) == 0)
+	if (move_pid_main(data->controller, data->cgroup, data->rcred, ucred) == 0)
 		*b = '1';
 	if (write(data->fd, b, 1) < 0)
 		nih_error("MovePidScm: Error writing final result to client");
@@ -451,7 +469,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup, int plain_pid)
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred ucred, vcred;
 	socklen_t len;
 
 	if (message == NULL) {
@@ -472,7 +490,10 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, ucred.pid, ucred.uid, ucred.gid);
 
-	ret = move_pid_main(controller, cgroup, ucred, plain_pid);
+	vcred.uid = 0;
+	vcred.gid = 0;
+	vcred.pid = plain_pid;
+	ret = move_pid_main(controller, cgroup, ucred, vcred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");
@@ -485,7 +506,8 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
  * @name is taken to be relative to the caller's cgroup and may not
  * start with / or .. .
  */
-int create_main (const char *controller, const char *cgroup, struct ucred ucred, int32_t *existed)
+int create_main (const char *controller, const char *cgroup,
+		struct ucred ucred, int32_t *existed)
 {
 	int ret;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], dirpath[MAXPATHLEN];
