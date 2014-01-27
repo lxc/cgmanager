@@ -1497,7 +1497,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 	pcred.uid = 0; pcred.gid = 0;
 	for (i=0; i<ret; i++) {
 		pcred.pid = pids[i];
-		if (send_creds(data->fd, pcred)) {
+		if (send_creds(data->fd, &pcred)) {
 			nih_error("get_tasks_scm: error writing pids back to client");
 			goto out;
 		}

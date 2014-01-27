@@ -25,8 +25,8 @@
  */
 
 bool get_nih_io_creds(NihIo *io, struct ucred *ucred);
-int send_creds(int sock, struct ucred cred);
-void get_scm_creds_sync(int sock, uid_t *u, gid_t *g, pid_t *p);
+int send_creds(int sock, struct ucred *cred);
+void get_scm_creds_sync(int sock, struct ucred *cred);
 bool is_same_pidns(int pid);
 bool is_same_userns(int pid);
 bool may_move_pid(pid_t r, uid_t r_uid, pid_t v);

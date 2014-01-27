@@ -150,37 +150,91 @@ void send_dummy_msg(DBusConnection *conn)
 	dbus_message_unref(message);
 }
 
-int get_pid_cgroup_main (void *parent, const char *controller,
-		struct ucred ucred, struct ucred vcred, char **output)
+static DBusMessage *start_dbus_request(const char *method, int *sv)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
-	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
+	int optval = 1;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
 		nih_error("%s: Error creating socketpair: %s",
 			__func__, strerror(errno));
-		return -1;
+		return NULL;
 	}
 	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s",
-			__func__, strerror(errno));
-		goto out;
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
+		goto err;
 	}
 	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s",
-			__func__, strerror(errno));
-		goto out;
+		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
+		goto err;
 	}
 
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
+	return dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "GetPidCgroupScm");
+			"org.linuxcontainers.cgmanager0_0", method);
+err:
+	close(sv[0]);
+	close(sv[1]);
+	return NULL;
+}
+
+static bool complete_dbus_request(DBusMessage *message,
+		int *sv, struct ucred *rcred, struct ucred *vcred)
+{
+	char buf[1];
+
+	if (!dbus_connection_send(server_conn, message, NULL)) {
+		nih_error("%s: failed to send dbus message", __func__);
+		dbus_message_unref(message);
+		return false;
+	}
+	dbus_connection_flush(server_conn);
+	dbus_message_unref(message);
+
+	if (recv(sv[0], buf, 1, 0) != 1) {
+		nih_error("%s: Error getting reply from server over socketpair",
+			  __func__);
+		return false;
+	}
+	if (send_creds(sv[0], rcred)) {
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL",
+			__func__);
+		return false;
+	}
+
+	if (!vcred) // this request only requires one scm_credential
+		return true;
+
+	if (recv(sv[0], buf, 1, 0) != 1) {
+		nih_error("%s: Error getting reply from server over socketpair",
+			__func__);
+		return false;
+	}
+	if (send_creds(sv[0], vcred)) {
+		nih_error("%s: Error sending pid over SCM_CREDENTIAL",
+			__func__);
+		return false;
+	}
+
+	return true;
+}
+
+int get_pid_cgroup_main (void *parent, const char *controller,
+		struct ucred ucred, struct ucred vcred, char **output)
+{
+	DBusMessage *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1;
+	char s[MAXPATHLEN] = { 0 };
+
+	if (!(message = start_dbus_request("GetPidCgroupScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
 
 	dbus_message_iter_init_append(message, &iter);
-	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+	if (!dbus_message_iter_append_basic (&iter,
+			DBUS_TYPE_STRING,
+			&controller)) {
 		nih_error_raise_no_memory ();
 		goto out;
 	}
@@ -189,38 +243,12 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
+	if (!complete_dbus_request(message, sv, &ucred, &vcred)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
 	}
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair",
-			  __func__);
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL",
-			__func__);
-		goto out;
-	}
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair",
-			__func__);
-		goto out;
-	}
-	if (send_creds(sv[0], vcred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL",
-			__func__);
-		goto out;
-	}
-	char s[MAXPATHLEN];
-	memset(s, 0, MAXPATHLEN);
+	// TODO - switch to nih_io_message_recv?
 	if (recv(sv[0], s, MAXPATHLEN-1, 0) <= 0)
 		nih_error("%s: Error reading result from cgmanager",
 			__func__);
@@ -231,8 +259,6 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
@@ -387,34 +413,19 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 int move_pid_main (const char *controller, const char *cgroup,
 			struct ucred ucred, struct ucred vcred)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
+	int sv[2], ret = -1;
+	char buf[1];
 
-	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("%s: Error creating socketpair: %s",
-			__func__, strerror(errno));
+	if (!(message = start_dbus_request("MovePidScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
-	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "MovePidScm");
 
 	dbus_message_iter_init_append(message, &iter);
-	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+	if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING,
+				&controller)) {
 		nih_error_raise_no_memory ();
 		goto out;
 	}
@@ -427,45 +438,19 @@ int move_pid_main (const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
+	if (!complete_dbus_request(message, sv, &ucred, &vcred)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
 	}
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], vcred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
 	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
+
 void move_pid_scm_reader (struct scm_sock_data *data,
 		NihIo *io, const char *buf, size_t len)
 {
@@ -594,29 +579,15 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message, const char *control
 int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 		 int32_t *existed)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
+	int sv[2], ret = -1;
+	char buf[1];
 
-	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("%s: Error creating socketpair: %s",
-			__func__, strerror(errno));
+	if (!(message = start_dbus_request("CreateScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
-	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "CreateScm");
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -632,34 +603,17 @@ int create_main (const char *controller, const char *cgroup, struct ucred ucred,
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
+	if (!complete_dbus_request(message, sv, &ucred, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
 	}
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
 	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
 	*existed = *buf == '2' ? 1 : -1;
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
@@ -767,29 +721,15 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 int chown_main ( const char *controller, const char *cgroup,
 	struct ucred ucred, struct ucred vcred)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
+	int sv[2], ret = -1;
+	char buf[1];
 
-	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("%s: Error creating socketpair: %s",
-			__func__, strerror(errno));
+	if (!(message = start_dbus_request("ChownScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
-	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "ChownScm");
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -805,36 +745,11 @@ int chown_main ( const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
+	if (!complete_dbus_request(message, sv, &ucred, &vcred)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
 	}
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], vcred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
 	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
 		ret = 0;
 out:
@@ -975,28 +890,15 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 int get_value_main (void *parent, const char *controller, const char *req_cgroup,
 		 const char *key, struct ucred ucred, char **value)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
+	int sv[2], ret = -1;
+	char output[MAXPATHLEN] = { 0 };
 
-	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("%s: Error creating socketpair: %s", __func__, strerror(errno));
+	if (!(message = start_dbus_request("GetValueScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
-	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "GetValueScm");
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -1016,40 +918,21 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
+	if (!complete_dbus_request(message, sv, &ucred, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
 	}
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	char output[MAXPATHLEN];
-	memset(output, 0, MAXPATHLEN);
-	if (recv(sv[0], output, MAXPATHLEN, 0) <= 0)
+	if (recv(sv[0], output, MAXPATHLEN, 0) <= 0) {
 		nih_error("%s: Failed reading string from cgmanager: %s",
 			__func__, strerror(errno));
-	else {
+	} else {
 		*value = nih_strdup(parent, output);
 		ret = 0;
 	}
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
@@ -1163,29 +1046,15 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 int set_value_main (const char *controller, const char *req_cgroup,
 		 const char *key, const char *value, struct ucred ucred)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
+	int sv[2], ret = -1;
+	char buf[1];
 
-	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("%s: Error creating socketpair: %s",
-			__func__, strerror(errno));
+	if (!(message = start_dbus_request("SetValueScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
-	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "SetValueScm");
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -1209,33 +1078,16 @@ int set_value_main (const char *controller, const char *req_cgroup,
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
+	if (!complete_dbus_request(message, sv, &ucred, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
 	}
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
 	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
@@ -1344,29 +1196,15 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 		 int recursive, int32_t *existed)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
+	int sv[2], ret = -1;
+	char buf[1];
 
-	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("%s: Error creating socketpair: %s",
-			__func__, strerror(errno));
+	if (!(message = start_dbus_request("RemoveScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
-	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "RemoveScm");
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -1386,34 +1224,17 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
+	if (!complete_dbus_request(message, sv, &ucred, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
 	}
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
 	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
 	*existed = *buf == '2' ? 1 : -1;
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
@@ -1523,33 +1344,17 @@ int cgmanager_remove (void *data, NihDBusMessage *message,
 int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 		    struct ucred ucred, int32_t **pids)
 {
-	char buf[1];
-	DBusMessage *message = NULL;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	int sv[2], ret = -1, optval = 1;
-	dbus_uint32_t serial;;
-	uid_t u; gid_t g;
+	int sv[2], ret = -1;
 	uint32_t nrpids;
-	pid_t tmp;
+	struct ucred tcred;
 	int i;
 
-	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
-		nih_error("%s: Error creating socketpair: %s",
-			__func__, strerror(errno));
+	if (!(message = start_dbus_request("GetTasksScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
-	if (setsockopt(sv[1], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-	if (setsockopt(sv[0], SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_error("%s: setsockopt: %s", __func__, strerror(errno));
-		goto out;
-	}
-
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "GetTasksScm");
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
@@ -1565,24 +1370,8 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (!dbus_connection_send(server_conn, message, &serial)) {
-		nih_error("%s: failed to send dbus message", __func__);
-		goto out;
-	}
-	dbus_connection_flush(server_conn);
-	if (message) {
-		dbus_message_unref(message);
-		message = NULL;
-	}
-
-	if (recv(sv[0], buf, 1, 0) != 1) {
-		nih_error("%s: Error getting reply from server over socketpair: %s",
-			__func__, strerror(errno));
-		goto out;
-	}
-	if (send_creds(sv[0], ucred)) {
-		nih_error("%s: Error sending pid over SCM_CREDENTIAL: %s",
-			__func__, strerror(errno));
+	if (!complete_dbus_request(message, sv, &ucred, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
 		goto out;
 	}
 	if (recv(sv[0], &nrpids, sizeof(uint32_t), 0) != sizeof(uint32_t))
@@ -1594,13 +1383,13 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 
 	*pids = nih_alloc(parent, nrpids * sizeof(uint32_t));
 	for (i=0; i<nrpids; i++) {
-		get_scm_creds_sync(sv[0], &u, &g, &tmp);
-		if (tmp == -1) {
+		get_scm_creds_sync(sv[0], &tcred);
+		if (tcred.pid == -1) {
 			nih_error("%s: Failed getting pid from server",
 				__func__);
 			goto out;
 		}
-		(*pids)[i] = tmp;
+		(*pids)[i] = tcred.pid;
 	}
 	ret = nrpids;
 out:
@@ -1642,7 +1431,7 @@ void get_tasks_scm_reader (struct scm_sock_data *data,
 	pcred.uid = 0; pcred.gid = 0;
 	for (i=0; i<ret; i++) {
 		pcred.pid = pids[i];
-		if (send_creds(data->fd, pcred)) {
+		if (send_creds(data->fd, &pcred)) {
 			nih_error("get_tasks_scm: error writing pids back to client");
 			goto out;
 		}
