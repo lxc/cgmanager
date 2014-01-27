@@ -89,7 +89,6 @@ struct scm_sock_data {
 	struct ucred rcred, vcred;
 	int fd;
 	int recursive;
-	void (*complete)(struct scm_sock_data *data);
 };
 
 enum req_type {
@@ -105,21 +104,51 @@ enum req_type {
 
 int get_pid_cgroup_main(const void *parent, const char *controller,
 		struct ucred r, struct ucred v, char **output);
+void get_pid_scm_complete(struct scm_sock_data *data);
 int move_pid_main(const char *controller, const char *cgroup,
 		struct ucred r, struct ucred v);
+void move_pid_scm_complete(struct scm_sock_data *data);
 int create_main(const char *controller, const char *cgroup,
 		struct ucred ucred, int32_t *existed);
+void create_scm_complete(struct scm_sock_data *data);
 int chown_main(const char *controller, const char *cgroup,
 		struct ucred r, struct ucred v);
+void chown_scm_complete(struct scm_sock_data *data);
 int get_value_main(void *parent, const char *controller,
 		const char *req_cgroup, const char *key, struct ucred ucred,
 		char **value);
+void get_value_complete(struct scm_sock_data *data);
 int set_value_main(const char *controller, const char *req_cgroup,
 		const char *key, const char *value, struct ucred ucred);
+void set_value_complete(struct scm_sock_data *data);
 int remove_main(const char *controller, const char *cgroup, struct ucred ucred,
 		 int recursive, int32_t *existed);
+void remove_scm_complete(struct scm_sock_data *data);
 int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 			struct ucred ucred, int32_t **pids);
+void get_tasks_scm_complete(struct scm_sock_data *data);
+
+static struct scm_sock_data *alloc_scm_sock_data(int fd, enum req_type t)
+{
+	struct scm_sock_data *d;
+	int optval = -1;
+
+	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"Failed to set passcred: %s", strerror(errno));
+		return NULL;
+	}
+	d = nih_alloc(NULL, sizeof(*d));
+	if (!d) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
+			"Out of memory");
+		return NULL;
+	}
+	memset(d, 0, sizeof(*d));
+	d->fd = fd;
+	d->type = t;
+	return d;
+}
 
 static bool need_two_creds(enum req_type t)
 {
@@ -185,7 +214,19 @@ void sock_scm_reader(struct scm_sock_data *data,
 	} else
 		memcpy(&data->vcred, &ucred, sizeof(struct ucred));
 
-	data->complete(data);
+	switch (data->type) {
+	case REQ_TYPE_GET_PID: get_pid_scm_complete(data); break;
+	case REQ_TYPE_MOVE_PID: move_pid_scm_complete(data); break;
+	case REQ_TYPE_CREATE: create_scm_complete(data); break;
+	case REQ_TYPE_CHOWN: chown_scm_complete(data); break;
+	case REQ_TYPE_GET_VALUE: get_value_complete(data); break;
+	case REQ_TYPE_SET_VALUE: set_value_complete(data); break;
+	case REQ_TYPE_REMOVE: remove_scm_complete(data); break;
+	case REQ_TYPE_GET_TASKS: get_tasks_scm_complete(data); break;
+	default:
+		nih_fatal("%s: bad req_type %d", __func__, data->type);
+		exit(1);
+	}
 	nih_io_shutdown(io);
 }
 
@@ -249,25 +290,11 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 			const char *controller, int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_PID);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
-	d->step = 0;
-	d->fd = sockfd;
-	d->type = REQ_TYPE_GET_PID;
-	d->complete = get_pid_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) sock_scm_reader,
@@ -419,26 +446,12 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 			int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_MOVE_PID);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
-	d->step = 0;
-	d->fd = sockfd;
-	d->type = REQ_TYPE_MOVE_PID;
-	d->complete = move_pid_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) sock_scm_reader,
@@ -605,25 +618,12 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CREATE);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
-	d->fd = sockfd;
-	d->type = REQ_TYPE_CREATE;
-	d->complete = create_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) sock_scm_reader,
@@ -759,26 +759,12 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CHOWN);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
-	d->step = 0;
-	d->fd = sockfd;
-	d->type = REQ_TYPE_CHOWN;
-	d->complete = chown_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader)  sock_scm_reader,
@@ -911,27 +897,13 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 				 const char *key, int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_VALUE);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, req_cgroup);
 	d->key = nih_strdup(d, key);
-	d->step = 0;
-	d->fd = sockfd;
-	d->type = REQ_TYPE_GET_VALUE;
-	d->complete = get_value_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) sock_scm_reader,
@@ -1043,28 +1015,14 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 				 const char *key, const char *value, int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_SET_VALUE);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, req_cgroup);
 	d->key = nih_strdup(d, key);
 	d->value = nih_strdup(d, value);
-	d->step = 0;
-	d->fd = sockfd;
-	d->type = REQ_TYPE_SET_VALUE;
-	d->complete = set_value_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) sock_scm_reader,
@@ -1287,26 +1245,13 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int recursive, int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_REMOVE);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
-	d->fd = sockfd;
 	d->recursive = recursive;
-	d->type = REQ_TYPE_REMOVE;
-	d->complete = remove_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) sock_scm_reader,
@@ -1420,25 +1365,12 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
 
-	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"Failed to set passcred: %s", strerror(errno));
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_TASKS);
+	if (!d)
 		return -1;
-	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return -1;
-	}
-	memset(d, 0, sizeof(*d));
 	d->controller = nih_strdup(d, controller);
 	d->cgroup = nih_strdup(d, cgroup);
-	d->fd = sockfd;
-	d->type = REQ_TYPE_GET_TASKS;
-	d->complete = get_tasks_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
 		(NihIoReader) sock_scm_reader,
