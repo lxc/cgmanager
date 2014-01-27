@@ -336,14 +336,14 @@ int move_pid_main (const char *controller, const char *cgroup,
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("pid %d (uid %u gid %u) may not write under %s",
+		nih_error("pid %d (uid %u gid %u) may not read under %s",
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 	// is r allowed to write to tasks file?
 	strncat(path, "/tasks", MAXPATHLEN-1);
 	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
-		nih_error("pid %d (uid %u gid %u) may not write under %s",
+		nih_error("pid %d (uid %u gid %u) may not write to %s",
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
