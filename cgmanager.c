@@ -86,9 +86,10 @@ struct scm_sock_data {
 	char *key;
 	char *value;
 	int step;
-	struct ucred rcred;
+	struct ucred rcred, vcred;
 	int fd;
 	int recursive;
+	void (*complete)(struct scm_sock_data *data);
 };
 
 enum req_type {
@@ -120,6 +121,18 @@ int remove_main(const char *controller, const char *cgroup, struct ucred ucred,
 int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 			struct ucred ucred, int32_t **pids);
 
+static bool need_two_creds(enum req_type t)
+{
+	switch (t) {
+	case REQ_TYPE_GET_PID:
+	case REQ_TYPE_MOVE_PID:
+	case REQ_TYPE_CHOWN:
+		return true;
+	default:
+		return false;
+	}
+}
+
 static void
 scm_sock_error_handler (void *data, NihIo *io)
 {
@@ -138,6 +151,42 @@ scm_sock_close (struct scm_sock_data *data, NihIo *io)
 	close (data->fd);
 	nih_free (data);
 	nih_free (io);
+}
+
+static bool kick_fd_client(int fd)
+{
+	char buf = '1';
+	if (write(fd, &buf, 1) != 1) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed to start write on scm fd: %s", strerror(errno));
+		return false;
+	}
+	return true;
+}
+
+void sock_scm_reader(struct scm_sock_data *data,
+			NihIo *io, const char *buf, size_t len)
+{
+	struct ucred ucred;
+
+	if (!get_nih_io_creds(io, &ucred)) {
+		nih_error("failed to read ucred");
+		nih_io_shutdown(io);
+		return;
+	}
+	if (data->step == 0) {
+		memcpy(&data->rcred, &ucred, sizeof(struct ucred));
+		if (need_two_creds(data->type)) {
+			data->step = 1;
+			if (!kick_fd_client(data->fd))
+				nih_io_shutdown(io);
+			return;
+		}
+	} else
+		memcpy(&data->vcred, &ucred, sizeof(struct ucred));
+
+	data->complete(data);
+	nih_io_shutdown(io);
 }
 
 /* GetPidCgroup */
@@ -176,47 +225,20 @@ int get_pid_cgroup_main (const void *parent, const char *controller,
 	return 0;
 }
 
-static void get_pid_scm_reader (struct scm_sock_data *data,
-			NihIo *io, const char *buf, size_t len)
+void get_pid_scm_complete(struct scm_sock_data *data)
 {
 	char *output = NULL;
-	struct ucred ucred;
 	int ret;
 
-	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-
-	if (data->step == 0) {
-		char b[1];
-		b[0] = '1';
-		// We need to fetch a second ucred
-		memcpy(&data->rcred, &ucred, sizeof(struct ucred));
-		data->step = 1;
-		if (write(data->fd, b, 1) != 1) {
-			nih_error("failed to write ucred");
-			nih_io_shutdown(io);
-			return;
-		}
-		return;
-	}
-	// we've read the second ucred, now we can proceed
-	nih_info (_("GetPidCgroupScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, data->rcred.pid, data->rcred.uid,
-			data->rcred.gid);
-	nih_info (_("GetPidCgroupScm: Victim is pid=%d"), ucred.pid);
-
-	if (!get_pid_cgroup_main(data, data->controller, data->rcred, ucred,
-				 &output))
+	ret = get_pid_cgroup_main(data, data->controller, data->rcred,
+				data->vcred, &output);
+	if (ret == 0)
 		ret = write(data->fd, output, strlen(output)+1);
 	else
-		ret = write(data->fd, &ucred, 0);  // kick the client
+		ret = write(data->fd, &data->rcred, 0);  // kick the client
 	if (ret < 0)
 		nih_error("GetPidCgroupScm: Error writing final result to client: %s",
 			strerror(errno));
-out:
-	nih_io_shutdown(io);
 }
 
 /*
@@ -227,7 +249,6 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 			const char *controller, int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -246,9 +267,10 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 	d->step = 0;
 	d->fd = sockfd;
 	d->type = REQ_TYPE_GET_PID;
+	d->complete = get_pid_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)get_pid_scm_reader,
+		(NihIoReader) sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -256,12 +278,8 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -385,49 +403,22 @@ int move_pid_main (const char *controller, const char *cgroup,
 	return 0;
 }
 
-void move_pid_scm_reader (struct scm_sock_data *data,
-		NihIo *io, const char *buf, size_t len)
+void move_pid_scm_complete(struct scm_sock_data *data)
 {
-	struct ucred ucred;
-	char b[1];
+	char b = '0';
 
-	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-
-	if (data->step == 0) {
-		b[0] = '1';
-		// We need to fetch a second ucred
-		memcpy(&data->rcred, &ucred, sizeof(struct ucred));
-		data->step = 1;
-		if (write(data->fd, b, 1) != 1) {
-			nih_error("failed to read ucred");
-			nih_io_shutdown(io);
-			return;
-		}
-		return;
-	}
-	// we've read the second ucred, now we can proceed
-	nih_info (_("MovePidScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, data->rcred.pid, data->rcred.uid,
-			data->rcred.gid);
-	nih_info (_("MovePidScm: Victim is pid=%d"), ucred.pid);
-
-	*b = '0';
-	if (move_pid_main(data->controller, data->cgroup, data->rcred, ucred) == 0)
-		*b = '1';
-	if (write(data->fd, b, 1) < 0)
+	if (move_pid_main(data->controller, data->cgroup, data->rcred,
+			  data->vcred) == 0)
+		b = '1';
+	if (write(data->fd, &b, 1) < 0)
 		nih_error("MovePidScm: Error writing final result to client");
-out:
-	nih_io_shutdown(io);
 }
+
 int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup,
 			int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -447,21 +438,18 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	d->step = 0;
 	d->fd = sockfd;
 	d->type = REQ_TYPE_MOVE_PID;
+	d->complete = move_pid_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)move_pid_scm_reader,
+		(NihIoReader) sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -515,6 +503,7 @@ int create_main (const char *controller, const char *cgroup,
 	size_t cgroup_len;
 	char *p, *p2, oldp2;
 
+	*existed = 1;
 	if (!cgroup || ! *cgroup)  // nothing to do
 		return 0;
 	if (cgroup[0] == '/' || cgroup[0] == '.') {
@@ -601,36 +590,21 @@ next:
 	return 0;
 }
 
-void create_scm_reader (struct scm_sock_data *data,
-		NihIo *io, const char *buf, size_t len)
+void create_scm_complete(struct scm_sock_data *data)
 {
-	struct ucred ucred;
-	char b[1];
-	int ret;
-	int32_t existed = -1;
+	char b = '0';
+	int32_t existed;
 
-	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-	nih_info (_("CreateScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, ucred.pid, ucred.uid, ucred.gid);
-
-	ret = create_main(data->controller, data->cgroup, ucred, &existed);
-	if (ret == 0)
-		*b = existed == 1 ? '2' : '1';
-	else
-		*b = '0';
-	if (write(data->fd, b, 1) < 0)
+	if (create_main(data->controller, data->cgroup, data->rcred, &existed) == 0)
+		b = existed == 1 ? '2' : '1';
+	if (write(data->fd, &b, 1) < 0)
 		nih_error("createScm: Error writing final result to client");
-out:
-	nih_io_shutdown(io);
 }
+
 int cgmanager_create_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -649,23 +623,21 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	d->cgroup = nih_strdup(d, cgroup);
 	d->fd = sockfd;
 	d->type = REQ_TYPE_CREATE;
+	d->complete = create_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)create_scm_reader,
+		(NihIoReader) sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
+
 int cgmanager_create (void *data, NihDBusMessage *message,
 			 const char *controller, const char *cgroup, int32_t *existed)
 {
@@ -772,47 +744,21 @@ int chown_main (const char *controller, const char *cgroup,
 	return 0;
 }
 
-void chown_scm_reader (struct scm_sock_data *data,
-		NihIo *io, const char *buf, size_t len)
+void chown_scm_complete(struct scm_sock_data *data)
 {
-	struct ucred vcred;
-	char b[1];
+	char b = '0';
 
-	if (!get_nih_io_creds(io, &vcred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-
-	if (data->step == 0) {
-		b[0] = '1';
-		// We need to fetch a second ucred
-		memcpy(&data->rcred, &vcred, sizeof(struct ucred));
-		data->step = 1;
-		if (write(data->fd, b, 1) != 1) {
-			nih_error("failed to read ucred");
-			nih_io_shutdown(io);
-			return;
-		}
-		return;
-	}
-	// we've read the second ucred, now we can proceed
-	nih_info (_("ChownScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, data->rcred.pid, data->rcred.uid, data->rcred.gid);
-	nih_info (_("ChownScm: Victim is (uid=%u, gid=%u)"), vcred.uid, vcred.gid);
-
-	*b = '0';
-	if (chown_main(data->controller, data->cgroup, data->rcred, vcred) == 0)
-		*b = '1';
-	if (write(data->fd, b, 1) < 0)
+	if (chown_main(data->controller, data->cgroup, data->rcred, data->vcred)
+			== 0)
+		b = '1';
+	if (write(data->fd, &b, 1) < 0)
 		nih_error("ChownScm: Error writing final result to client");
-out:
-	nih_io_shutdown(io);
 }
+
 int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -832,21 +778,18 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 	d->step = 0;
 	d->fd = sockfd;
 	d->type = REQ_TYPE_CHOWN;
+	d->complete = chown_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) chown_scm_reader,
+		(NihIoReader)  sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -948,36 +891,26 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 	nih_info(_("Sending to client: %s"), *value);
 	return 0;
 }
-static void get_value_scm_reader (struct scm_sock_data *data,
-			NihIo *io, const char *buf, size_t len)
+
+void get_value_complete(struct scm_sock_data *data)
 {
 	char *output = NULL;
-	struct ucred ucred;
 	int ret;
 
-	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-
-	nih_info (_("GetValueScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, ucred.pid, ucred.uid, ucred.gid);
-
-	if (!get_value_main(data, data->controller, data->cgroup, data->key, ucred, &output))
+	if (!get_value_main(data, data->controller, data->cgroup, data->key,
+			data->rcred, &output))
 		ret = write(data->fd, output, strlen(output)+1);
 	else
-		ret = write(data->fd, &ucred, 0);  // kick the client
+		ret = write(data->fd, &data->rcred, 0);  // kick the client
 	if (ret < 0)
 		nih_error("GetValueScm: Error writing final result to client");
-out:
-	nih_io_shutdown(io);
 }
+
 int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 				 const char *key, int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -998,21 +931,18 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 	d->step = 0;
 	d->fd = sockfd;
 	d->type = REQ_TYPE_GET_VALUE;
+	d->complete = get_value_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)get_value_scm_reader,
+		(NihIoReader) sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 
 }
@@ -1097,34 +1027,22 @@ int set_value_main (const char *controller, const char *req_cgroup,
 
 	return 0;
 }
-void set_value_scm_reader (struct scm_sock_data *data,
-		NihIo *io, const char *buf, size_t len)
+
+void set_value_complete(struct scm_sock_data *data)
 {
-	struct ucred ucred;
-	char b[1];
-
-	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-
-	nih_info (_("SetValueScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, ucred.pid, ucred.uid, ucred.gid);
-
-	*b = '0';
-	if (set_value_main(data->controller, data->cgroup, data->key, data->value, ucred) == 0)
-		*b = '1';
-	if (write(data->fd, b, 1) < 0)
+	char b = '0';
+	if (set_value_main(data->controller, data->cgroup, data->key,
+			data->value, data->rcred) == 0)
+		b = '1';
+	if (write(data->fd, &b, 1) < 0)
 		nih_error("SetValueScm: Error writing final result to client");
-out:
-	nih_io_shutdown(io);
 }
+
 int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 				 const char *controller, const char *req_cgroup,
 				 const char *key, const char *value, int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -1146,21 +1064,18 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 	d->step = 0;
 	d->fd = sockfd;
 	d->type = REQ_TYPE_SET_VALUE;
+	d->complete = set_value_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)set_value_scm_reader,
+		(NihIoReader) sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 int cgmanager_set_value (void *data, NihDBusMessage *message,
@@ -1329,7 +1244,6 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 		*existed = -1;
 		return 0;
 	}
-	*existed = 1;
 	// must have write access to the parent dir
 	if (!(copy = nih_strdup(NULL, working)))
 		return -1;
@@ -1355,36 +1269,24 @@ int remove_main (const char *controller, const char *cgroup, struct ucred ucred,
 	return 0;
 }
 
-void remove_scm_reader (struct scm_sock_data *data,
-		NihIo *io, const char *buf, size_t len)
+void remove_scm_complete(struct scm_sock_data *data)
 {
-	struct ucred ucred;
-	char b[1];
+	char b = '0';
 	int ret;
 	int32_t existed = -1;
 
-	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-	nih_info (_("RemoveScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, ucred.pid, ucred.uid, ucred.gid);
-
-	ret = remove_main(data->controller, data->cgroup, ucred, data->recursive, &existed);
+	ret = remove_main(data->controller, data->cgroup, data->rcred,
+			data->recursive, &existed);
 	if (ret == 0)
-		*b = existed == 1 ? '2' : '1';
-	else
-		*b = '0';
-	if (write(data->fd, b, 1) < 0)
+		b = existed == 1 ? '2' : '1';
+	if (write(data->fd, &b, 1) < 0)
 		nih_error("removeScm: Error writing final result to client");
-out:
-	nih_io_shutdown(io);
 }
+
 int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int recursive, int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -1404,21 +1306,18 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 	d->fd = sockfd;
 	d->recursive = recursive;
 	d->type = REQ_TYPE_REMOVE;
+	d->complete = remove_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)remove_scm_reader,
+		(NihIoReader) sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 int cgmanager_remove (void *data, NihDBusMessage *message, const char *controller,
@@ -1490,48 +1389,37 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	return file_read_pids(parent, path, pids);
 }
 
-void get_tasks_scm_reader (struct scm_sock_data *data,
-		NihIo *io, const char *buf, size_t len)
+void get_tasks_scm_complete(struct scm_sock_data *data)
 {
-	struct ucred ucred, pcred;
+	struct ucred pcred;
 	int i, ret;
 	int32_t *pids, nrpids;
-
-	if (!get_nih_io_creds(io, &ucred)) {
-		nih_error("failed to read ucred");
-		goto out;
-	}
-	nih_info (_("GetTasksScm: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			data->fd, ucred.pid, ucred.uid, ucred.gid);
-
-	ret = get_tasks_main(data, data->controller, data->cgroup, ucred, &pids);
+	ret = get_tasks_main(data, data->controller, data->cgroup,
+			data->rcred, &pids);
 	if (ret < 0) {
 		nih_error("Error getting nrtasks for %s:%s for pid %d",
-			data->controller, data->cgroup, ucred.pid);
-		nih_io_shutdown(io);
+			data->controller, data->cgroup, data->rcred.pid);
 		return;
 	}
 	nrpids = ret;
 	if (write(data->fd, &nrpids, sizeof(int32_t)) != sizeof(int32_t)) {
 		nih_error("get_tasks_scm: Error writing final result to client");
-		goto out;
+		return;
 	}
 	pcred.uid = 0; pcred.gid = 0;
 	for (i=0; i<ret; i++) {
 		pcred.pid = pids[i];
 		if (send_creds(data->fd, &pcred)) {
 			nih_error("get_tasks_scm: error writing pids back to client");
-			goto out;
+			return;
 		}
 	}
-out:
-	nih_io_shutdown(io);
 }
+
 int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 		 const char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
-	char buf[1];
 	int optval = -1;
 
 	if (setsockopt(sockfd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
@@ -1550,23 +1438,21 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 	d->cgroup = nih_strdup(d, cgroup);
 	d->fd = sockfd;
 	d->type = REQ_TYPE_GET_TASKS;
+	d->complete = get_tasks_scm_complete;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)get_tasks_scm_reader,
+		(NihIoReader) sock_scm_reader,
 		(NihIoCloseHandler) scm_sock_close,
 		 scm_sock_error_handler, d)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed to queue scm message: %s", strerror(errno));
 		return -1;
 	}
-	buf[0] = '1';
-	if (write(sockfd, buf, 1) != 1) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to start write on scm fd: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
+
 int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *controller,
 			const char *cgroup, int32_t **pids, size_t *nrpids)
 {
