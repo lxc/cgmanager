@@ -475,7 +475,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	vcred.pid = 0;
+	vcred.pid = getpid();
 	vcred.uid = uid;
 	vcred.gid = gid;
 
