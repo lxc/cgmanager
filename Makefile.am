@@ -56,12 +56,14 @@ $(client_files_OUTPUTS): org.linuxcontainers.cgmanager.xml
 cgmanager_SOURCES = cgmanager.c \
 	$(manager_files_OUTPUTS) \
 	access_checks.h access_checks.c \
-	fs.c fs.h cgmanager.h
+	fs.c fs.h cgmanager.h \
+	frontend.c frontend.h
 
 cgproxy_SOURCES = cgmanager-proxy.c \
 	$(manager_files_OUTPUTS) \
 	access_checks.c access_checks.h \
-	fs.c fs.h cgmanager.h
+	fs.c fs.h cgmanager.h \
+	frontend.c frontend.h
 
 libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \
