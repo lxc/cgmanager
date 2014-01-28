@@ -455,6 +455,10 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, c
  *
  * Read specified file and return its contents.
  *
+ * Note: this is not a general purpose I/O function.  It is specifically
+ * written for virtual filesystems (cgroupfs) where we do know that the
+ * file ends in \0, and do not know that stat.st_size is reliable.
+ *
  * Returns: newly-allocated contents of file @path, or NULL on
  * insufficient memory.
  */
