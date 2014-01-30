@@ -39,16 +39,26 @@ struct scm_sock_data *alloc_scm_sock_data(int fd, enum req_type t)
 				"Failed to set passcred: %s", strerror(errno));
 		return NULL;
 	}
-	d = nih_alloc(NULL, sizeof(*d));
-	if (!d) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_NO_MEMORY,
-			"Out of memory");
-		return NULL;
-	}
+	NIH_MUST( nih_alloc(NULL, sizeof(*d)) );
 	memset(d, 0, sizeof(*d));
 	d->fd = fd;
 	d->type = t;
 	return d;
+}
+
+const char *req_type_to_str(enum req_type r)
+{
+	switch(r) {
+		case REQ_TYPE_GET_PID: return "get_pid";
+		case REQ_TYPE_MOVE_PID: return "move_pid";
+		case REQ_TYPE_CREATE: return "create";
+		case REQ_TYPE_CHOWN: return "chown";
+		case REQ_TYPE_GET_VALUE: return "get_value";
+		case REQ_TYPE_SET_VALUE: return "set_value";
+		case REQ_TYPE_REMOVE: return "remove";
+		case REQ_TYPE_GET_TASKS: return "get_tasks";
+		default: return "invalid";
+	}
 }
 
 bool need_two_creds(enum req_type t)
@@ -67,7 +77,7 @@ void scm_sock_error_handler (void *data, NihIo *io)
 {
 	struct scm_sock_data *d = data;
 	NihError *error = nih_error_get ();
-	nih_error("got an error, type %d", d->type);
+	nih_error("got an error, type %s", req_type_to_str(d->type));
 	nih_error("error %s", strerror(error->number));
 	nih_free(error);
 }
@@ -168,19 +178,24 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_PID);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
 
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 }
 
@@ -257,19 +272,24 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_MOVE_PID);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
-	d->cgroup = nih_strdup(d, cgroup);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 }
 
@@ -332,19 +352,24 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CREATE);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
-	d->cgroup = nih_strdup(d, cgroup);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 }
 
@@ -407,19 +432,24 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CHOWN);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
-	d->cgroup = nih_strdup(d, cgroup);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader)  sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader)  sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 }
 
@@ -509,20 +539,25 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_VALUE);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
-	d->cgroup = nih_strdup(d, req_cgroup);
-	d->key = nih_strdup(d, key);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, req_cgroup) );
+	d->key = NIH_MUST( nih_strdup(d, key) );
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 
 }
@@ -590,21 +625,26 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_SET_VALUE);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
-	d->cgroup = nih_strdup(d, req_cgroup);
-	d->key = nih_strdup(d, key);
-	d->value = nih_strdup(d, value);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, req_cgroup) );
+	d->key = NIH_MUST( nih_strdup(d, key) );
+	d->value = NIH_MUST( nih_strdup(d, value) );
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 }
 
@@ -671,20 +711,25 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_REMOVE);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
-	d->cgroup = nih_strdup(d, cgroup);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
 	d->recursive = recursive;
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 }
 
@@ -762,19 +807,24 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_TASKS);
 	if (!d)
 		return -1;
-	d->controller = nih_strdup(d, controller);
-	d->cgroup = nih_strdup(d, cgroup);
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
 
 	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
-		(NihIoReader) sock_scm_reader,
-		(NihIoCloseHandler) scm_sock_close,
-		 scm_sock_error_handler, d)) {
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Failed to queue scm message: %s", strerror(errno));
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd))
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
 		return -1;
+	}
 	return 0;
 }
 
@@ -827,8 +877,10 @@ static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, voi
 
 int client_connect (DBusServer *server, DBusConnection *conn)
 {
-	if (server == NULL || conn == NULL)
+	if (server == NULL || conn == NULL) {
+		nih_error("client_connect called with bad arguments");
 		return FALSE;
+	}
 
 	dbus_connection_set_unix_user_function(conn, allow_user, NULL, NULL);
 	dbus_connection_set_allow_anonymous(conn, TRUE);

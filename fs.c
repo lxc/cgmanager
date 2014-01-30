@@ -632,9 +632,7 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 	} else {
 		// chown only the tasks and procs files
 		nih_local char *fpath = NULL;
-		fpath = nih_sprintf(NULL, "%s/cgroup.procs", path);
-		if (!fpath)
-			return true;
+		fpath = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.procs", path) );
 		if (chown(fpath, uid, gid) < 0)
 			nih_error("Failed to chown procs file %s", fpath);
 		sprintf(fpath+len, "/tasks");

@@ -38,6 +38,7 @@ bool master_running(void)
 int setup_proxy(void)
 {
 	bool exists_upper = false, exists_lower = false;
+	NihError *err;
 
 	/*
 	 * If /sys/fs/cgroup/cgmanager.lower exists,
@@ -51,10 +52,16 @@ int setup_proxy(void)
 	if (server_conn) {
 		exists_upper = true;
 		dbus_connection_unref (server_conn);
+	} else {
+		err = nih_error_get();
+		nih_free(err);
 	}
 	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
 	if (server_conn) {
 		exists_lower = true;
+	} else {
+		err = nih_error_get();
+		nih_free(err);
 	}
 	if (exists_upper && exists_lower) {
 		dbus_connection_unref (server_conn);
@@ -76,12 +83,18 @@ int setup_proxy(void)
 		}
 	}
 	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
+	if (!server_conn) {
+		err = nih_error_get();
+		nih_fatal("Failed to open connection to %s: %s",
+				CGPROXY_DBUS_PATH, err->message);
+		nih_free(err);
+	}
 	return 0;
 }
 
 static int checkmaster = FALSE;
 
-void send_dummy_msg(DBusConnection *conn)
+bool send_dummy_msg(DBusConnection *conn)
 {
 	DBusMessage *message = NULL;
 	DBusMessageIter iter;
@@ -92,12 +105,13 @@ void send_dummy_msg(DBusConnection *conn)
 	dbus_message_set_no_reply(message, TRUE);
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &a)) {
-		nih_error_raise_no_memory ();
-		return;
+		nih_error("%s: out of memory", __func__);
+		return false;
 	}
 	dbus_connection_send(conn, message, NULL);
 	dbus_connection_flush(conn);
 	dbus_message_unref(message);
+	return true;
 }
 
 static DBusMessage *start_dbus_request(const char *method, int *sv)
@@ -185,11 +199,11 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	if (!dbus_message_iter_append_basic (&iter,
 			DBUS_TYPE_STRING,
 			&controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -203,7 +217,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 		nih_error("%s: Error reading result from cgmanager",
 			__func__);
 	else {
-		*output = nih_strdup(parent, s);
+		*output = NIH_MUST( nih_strdup(parent, s) );
 		ret = 0;
 	}
 out:
@@ -228,15 +242,15 @@ int move_pid_main (const char *controller, const char *cgroup,
 	dbus_message_iter_init_append(message, &iter);
 	if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING,
 				&controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -268,15 +282,15 @@ int create_main (const char *controller, const char *cgroup, struct ucred r,
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -309,15 +323,15 @@ int chown_main (const char *controller, const char *cgroup,
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -351,19 +365,19 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -376,7 +390,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 		nih_error("%s: Failed reading string from cgmanager: %s",
 			__func__, strerror(errno));
 	} else {
-		*value = nih_strdup(parent, output);
+		*value = NIH_MUST( nih_strdup(parent, output) );
 		ret = 0;
 	}
 out:
@@ -400,23 +414,23 @@ int set_value_main (const char *controller, const char *req_cgroup,
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &value)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -448,19 +462,19 @@ int remove_main (const char *controller, const char *cgroup, struct ucred r,
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &recursive)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -495,15 +509,15 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
-		nih_error_raise_no_memory ();
+		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 
@@ -518,7 +532,7 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	*pids = nih_alloc(parent, nrpids * sizeof(uint32_t));
+	*pids = NIH_MUST( nih_alloc(parent, nrpids * sizeof(uint32_t)) );
 	for (i=0; i<nrpids; i++) {
 		get_scm_creds_sync(sv[0], &tcred);
 		if (tcred.pid == -1) {
@@ -617,7 +631,15 @@ main (int argc, char *argv[])
 		}
 	}
 
-	send_dummy_msg(server_conn);
+	/*
+	 * We have to send a message to force fd passing over the dbus
+	 * link to be negotiated.  Else when we try to attach an fd we'll
+	 * fail.
+	 */
+	if (!send_dummy_msg(server_conn)) {
+		nih_fatal("Failed to send opening ping to cgmanager");
+		exit(1);
+	}
 
 	ret = nih_main_loop ();
 

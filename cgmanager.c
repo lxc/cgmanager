@@ -45,12 +45,9 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 		return -1;
 	}
 	if (strlen(vcgpath) == rlen)
-		*output = nih_strdup(parent, "/");
+		*output = NIH_MUST (nih_strdup(parent, "/") );
 	else
-		*output = nih_strdup(parent, vcgpath + rlen + 1);
-
-	if (! *output)
-		nih_return_no_memory_error(-1);
+		*output = NIH_MUST (nih_strdup(parent, vcgpath + rlen + 1) );
 
 	return 0;
 }
@@ -154,11 +151,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred r,
 		nih_error("Path name too long");
 		return -1;
 	}
-	copy = nih_strndup(NULL, cgroup, cgroup_len);
-	if (!copy) {
-		nih_error("Out of memory copying cgroup name");
-		return -1;
-	}
+	copy = NIH_MUST( nih_strndup(NULL, cgroup, cgroup_len) );
 
 	strcpy(path, rcgpath);
 	strcpy(dirpath, rcgpath);
@@ -248,11 +241,7 @@ int chown_main (const char *controller, const char *cgroup,
 		nih_error("Path name too long");
 		return -1;
 	}
-	path = nih_sprintf(NULL, "%s/%s", rcgpath, cgroup);
-	if (!path) {
-		nih_error("Out of memory calculating pathname");
-		return -1;
-	}
+	path = NIH_MUST( nih_sprintf(NULL, "%s/%s", rcgpath, cgroup) );
 	if (realpath_escapes(path, rcgpath)) {
 		nih_error("Invalid path %s", path);
 		return -1;
@@ -466,32 +455,20 @@ int remove_main (const char *controller, const char *cgroup, struct ucred r,
 		return -1;
 	}
 
-	if (!(wcgroup = nih_strdup(NULL, cgroup))) {
-		nih_error("Out of memory");
-		return -1;
-	}
+	wcgroup = NIH_MUST( nih_strdup(NULL, cgroup) );
 	if (!normalize_path(wcgroup))
 		return -1;
 
-	if (!(working = nih_strdup(NULL, rcgpath))) {
-		nih_error("Out of memory");
-		return -1;
-	}
-	if (!nih_strcat(&working, NULL, "/")) {
-		nih_error("Out of memory");
-		return -1;
-	}
-	if (!nih_strcat(&working, NULL, wcgroup)) {
-		nih_error("Out of memory");
-		return -1;
-	}
+	working = NIH_MUST( nih_strdup(NULL, rcgpath) );
+	NIH_MUST( nih_strcat(&working, NULL, "/") );
+	NIH_MUST( nih_strcat(&working, NULL, wcgroup) );
+
 	if (!dir_exists(working)) {
 		*existed = -1;
 		return 0;
 	}
 	// must have write access to the parent dir
-	if (!(copy = nih_strdup(NULL, working)))
-		return -1;
+	copy = NIH_MUST( nih_strdup(NULL, working) );
 	if (!(p = strrchr(copy, '/')))
 		return -1;
 	*p = '\0';
