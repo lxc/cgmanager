@@ -39,7 +39,7 @@ struct scm_sock_data *alloc_scm_sock_data(int fd, enum req_type t)
 				"Failed to set passcred: %s", strerror(errno));
 		return NULL;
 	}
-	NIH_MUST( nih_alloc(NULL, sizeof(*d)) );
+	d = NIH_MUST( nih_alloc(NULL, sizeof(*d)) );
 	memset(d, 0, sizeof(*d));
 	d->fd = fd;
 	d->type = t;
