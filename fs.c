@@ -329,6 +329,9 @@ bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer)
  *
  * uid and gid are passed in to avoid recomputation.  uid
  * and gid are the host uids, not mapped into the ns.
+ *
+ * TODO should we use acls
+ * TODO should we be checking for x access over each directory along the path
  */
 bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 {
@@ -342,7 +345,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 		return false;
 	}
 
-	/* TODO - we should check capability set as well */
+	// TODO should we check capabilities in case of (host) root?
 	if (uid == 0)
 		return true;
 
@@ -641,6 +644,24 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 	}
 
 out:
+	return true;
+}
+
+/*
+ * Given a directory path, chmod it.
+ *
+ * Caller has already checked for permission
+ *
+ * Return true so long as we could chown the directory itself.
+ */
+bool chmod_cgroup_path(const char *path, int mode)
+{
+	nih_assert (path);
+	if (chmod(path, mode) < 0) {
+		nih_error("Failed to chown tasks file %s", path);
+		return false;
+	}
+
 	return true;
 }
 

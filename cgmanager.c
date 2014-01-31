@@ -269,6 +269,61 @@ int chown_main (const char *controller, const char *cgroup,
 	return 0;
 }
 
+int chmod_main (const char *controller, const char *cgroup, const char *file,
+		struct ucred r, int mode)
+{
+	char rcgpath[MAXPATHLEN];
+	nih_local char *path = NULL;
+
+	if (cgroup[0] == '/' || cgroup[0] == '.') {
+		// We could try to be accomodating, but let's not fool around right now
+		nih_error("Bad requested cgroup path: %s", cgroup);
+		return -1;
+	}
+
+	if (file && ( strchr(file, '/') || strchr(file, '.') ||
+			strchr(file, '\\')) ) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"invalid file");
+		return -1;
+	}
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+		nih_error("Could not determine the requested cgroup");
+		return -1;
+	}
+
+	path = NIH_MUST( nih_sprintf(NULL, "%s/%s", rcgpath, cgroup) );
+	if (file)
+		NIH_MUST( nih_strcat_sprintf(&path, NULL, "/%s", file) );
+	if (realpath_escapes(path, rcgpath)) {
+		nih_error("Invalid path %s", path);
+		return -1;
+	}
+	// is r allowed to descend under the parent dir?
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
+		nih_error("pid %d (uid %u gid %u) may not read under %s",
+			r.pid, r.uid, r.gid, path);
+		return -1;
+	}
+
+	// does r have privilege over the cgroup dir?
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
+		nih_error("Pid %d may not chmod %s\n", r.pid, path);
+		return -1;
+	}
+
+	// go ahead and chmod it.
+	if (!chmod_cgroup_path(path, mode)) {
+		nih_error("Failed to change mode on %s to %d",
+			path, mode);
+		return -1;
+	}
+
+	return 0;
+}
+
 int get_value_main (void *parent, const char *controller, const char *req_cgroup,
 		const char *key, struct ucred r, char **value)
 {

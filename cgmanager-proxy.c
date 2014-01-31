@@ -350,6 +350,56 @@ out:
 	return ret;
 }
 
+int chmod_main (const char *controller, const char *cgroup, const char *file,
+		struct ucred r, int mode)
+{
+	DBusMessage *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1;
+	char buf[1];
+
+	if (!(message = start_dbus_request("ChmodScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(message, &iter);
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &file)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &mode)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+
+	if (!complete_dbus_request(message, sv, &r, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
+		goto out;
+	}
+
+	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
+		ret = 0;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	if (message)
+		dbus_message_unref(message);
+	return ret;
+}
+
 int get_value_main (void *parent, const char *controller, const char *req_cgroup,
 		 const char *key, struct ucred r, char **value)
 {

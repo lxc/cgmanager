@@ -85,6 +85,8 @@ struct scm_sock_data {
 	struct ucred rcred, vcred;
 	int fd;
 	int recursive;
+	int mode;
+	char *file;
 };
 
 enum req_type {
@@ -96,6 +98,7 @@ enum req_type {
 	REQ_TYPE_SET_VALUE,
 	REQ_TYPE_REMOVE,
 	REQ_TYPE_GET_TASKS,
+	REQ_TYPE_CHMOD,
 };
 
 int get_pid_cgroup_main(void *parent, const char *controller,
@@ -110,6 +113,9 @@ void create_scm_complete(struct scm_sock_data *data);
 int chown_main(const char *controller, const char *cgroup,
 		struct ucred r, struct ucred v);
 void chown_scm_complete(struct scm_sock_data *data);
+int chmod_main(const char *controller, const char *cgroup, const char *file,
+		struct ucred r, int mode);
+void chmod_scm_complete(struct scm_sock_data *data);
 int get_value_main(void *parent, const char *controller,
 		const char *req_cgroup, const char *key, struct ucred ucred,
 		char **value);

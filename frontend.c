@@ -57,6 +57,7 @@ const char *req_type_to_str(enum req_type r)
 		case REQ_TYPE_SET_VALUE: return "set_value";
 		case REQ_TYPE_REMOVE: return "remove";
 		case REQ_TYPE_GET_TASKS: return "get_tasks";
+		case REQ_TYPE_CHMOD: return "chmod";
 		default: return "invalid";
 	}
 }
@@ -128,6 +129,7 @@ void sock_scm_reader(struct scm_sock_data *data,
 	case REQ_TYPE_MOVE_PID: move_pid_scm_complete(data); break;
 	case REQ_TYPE_CREATE: create_scm_complete(data); break;
 	case REQ_TYPE_CHOWN: chown_scm_complete(data); break;
+	case REQ_TYPE_CHMOD: chmod_scm_complete(data); break;
 	case REQ_TYPE_GET_VALUE: get_value_complete(data); break;
 	case REQ_TYPE_SET_VALUE: set_value_complete(data); break;
 	case REQ_TYPE_REMOVE: remove_scm_complete(data); break;
@@ -505,11 +507,108 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	vcred.pid = getpid();
+	vcred.pid = getpid(); // cgmanager ignores this
 	vcred.uid = uid;
 	vcred.gid = gid;
 
 	ret = chown_main(controller, cgroup, ucred, vcred);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+void chmod_scm_complete(struct scm_sock_data *data)
+{
+	char b = '0';
+
+	if (chmod_main(data->controller, data->cgroup, data->file, data->rcred,
+				data->mode) == 0)
+		b = '1';
+	if (write(data->fd, &b, 1) < 0)
+		nih_error("ChownScm: Error writing final result to client");
+}
+
+int cgmanager_chmod_scm (void *data, NihDBusMessage *message,
+			const char *controller, const char *cgroup,
+			const char *file, int mode, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CHMOD);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+	d->mode = mode;
+	d->file = NIH_MUST( nih_strdup(d, file) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader)  sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_get ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/*
+ * This is one of the dbus callbacks.  Caller requests chmoding a file @path in
+ * cgroup @name in controller @cgroup to a new @mode.  
+ */
+int cgmanager_chmod (void *data, NihDBusMessage *message,
+			const char *controller, const char *cgroup,
+			const char *file, int mode)
+{
+	int fd = 0, ret;
+	struct ucred ucred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+
+	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, ucred.pid, ucred.uid, ucred.gid);
+
+	// XXX what are the ramifications if we ignore this?
+	if (!setns_pid_supported || !setns_user_supported) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"kernel too old, use ChmodScm");
+		return -1;
+	}
+	if (!is_same_pidns(ucred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"chmod called from different pid namespace");
+		return -1;
+	}
+	if (!is_same_userns(ucred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"chmod called from different user namespace");
+		return -1;
+	}
+
+	ret = chmod_main(controller, cgroup, file, ucred, mode);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");

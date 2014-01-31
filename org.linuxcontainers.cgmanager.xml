@@ -67,6 +67,21 @@
       <arg name="gid" type="i" direction="in" />
       <!-- caller must be in manager's pid and user namespaces -->
     </method>
+    <method name="ChmodScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="file" type="s" direction="in" />
+      <arg name="mode" type="i" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <!-- new mode is passed as scm_cred over sockfd-->
+      <!-- 1/0 (pass/fail) return value comes over sockfd -->
+    </method>
+    <method name="Chmod">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="file" type="s" direction="in" />
+      <arg name="mode" type="i" direction="in" />
+    </method>
     <method name="MovePidScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
