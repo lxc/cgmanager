@@ -186,7 +186,7 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 				(NihIoReader) sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -281,7 +281,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 				(NihIoReader) sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -361,7 +361,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 				(NihIoReader) sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -441,7 +441,7 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 				(NihIoReader)  sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -547,7 +547,7 @@ int cgmanager_chmod_scm (void *data, NihDBusMessage *message,
 				(NihIoReader)  sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -646,7 +646,7 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 				(NihIoReader) sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -733,7 +733,7 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 				(NihIoReader) sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -818,7 +818,7 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 				(NihIoReader) sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
@@ -913,7 +913,7 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 				(NihIoReader) sock_scm_reader,
 				(NihIoCloseHandler) scm_sock_close,
 				scm_sock_error_handler, d)) {
-		NihError *error = nih_error_get ();
+		NihError *error = nih_error_steal ();
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 			"Failed queue scm message: %s", error->message);
 		nih_free(error);
