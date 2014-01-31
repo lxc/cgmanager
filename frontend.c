@@ -29,10 +29,12 @@ unsigned long mypidns;
 bool setns_user_supported = false;
 unsigned long myuserns;
 
-struct scm_sock_data *alloc_scm_sock_data(int fd, enum req_type t)
+static struct scm_sock_data *alloc_scm_sock_data(NihDBusMessage *message,
+		int fd, enum req_type t)
 {
 	struct scm_sock_data *d;
-	int optval = -1;
+	int optval = -1, dbusfd;
+	socklen_t len;
 
 	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -43,10 +45,25 @@ struct scm_sock_data *alloc_scm_sock_data(int fd, enum req_type t)
 	memset(d, 0, sizeof(*d));
 	d->fd = fd;
 	d->type = t;
+
+	if (!dbus_connection_get_socket(message->connection, &dbusfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return NULL;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(dbusfd, SOL_SOCKET, SO_PEERCRED, &d->pcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return NULL;
+	}
+
 	return d;
 }
 
-const char *req_type_to_str(enum req_type r)
+static const char *req_type_to_str(enum req_type r)
 {
 	switch(r) {
 		case REQ_TYPE_GET_PID: return "get_pid";
@@ -62,7 +79,7 @@ const char *req_type_to_str(enum req_type r)
 	}
 }
 
-bool need_two_creds(enum req_type t)
+static bool need_two_creds(enum req_type t)
 {
 	switch (t) {
 	case REQ_TYPE_GET_PID:
@@ -74,7 +91,7 @@ bool need_two_creds(enum req_type t)
 	}
 }
 
-void scm_sock_error_handler (void *data, NihIo *io)
+static void scm_sock_error_handler (void *data, NihIo *io)
 {
 	struct scm_sock_data *d = data;
 	NihError *error = nih_error_get ();
@@ -83,7 +100,7 @@ void scm_sock_error_handler (void *data, NihIo *io)
 	nih_free(error);
 }
 
-void scm_sock_close (struct scm_sock_data *data, NihIo *io)
+static void scm_sock_close (struct scm_sock_data *data, NihIo *io)
 {
 	nih_assert (data);
 	nih_assert (io);
@@ -92,7 +109,7 @@ void scm_sock_close (struct scm_sock_data *data, NihIo *io)
 	nih_free (io);
 }
 
-bool kick_fd_client(int fd)
+static bool kick_fd_client(int fd)
 {
 	char buf = '1';
 	if (write(fd, &buf, 1) != 1) {
@@ -103,7 +120,7 @@ bool kick_fd_client(int fd)
 	return true;
 }
 
-void sock_scm_reader(struct scm_sock_data *data,
+static void sock_scm_reader(struct scm_sock_data *data,
 			NihIo *io, const char *buf, size_t len)
 {
 	struct ucred ucred;
@@ -157,8 +174,8 @@ void get_pid_scm_complete(struct scm_sock_data *data)
 	char *output = NULL;
 	int ret;
 
-	ret = get_pid_cgroup_main(data, data->controller, data->rcred,
-				data->vcred, &output);
+	ret = get_pid_cgroup_main(data, data->controller, data->pcred,
+			data->rcred, data->vcred, &output);
 	if (ret == 0)
 		ret = write(data->fd, output, strlen(output)+1);
 	else
@@ -177,7 +194,7 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_PID);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_PID);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -226,7 +243,12 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("GetPidCgroup: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, rcred.pid, rcred.uid, rcred.gid);
@@ -245,7 +267,7 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	vcred.uid = 0;
 	vcred.gid = 0;
 	vcred.pid = plain_pid;
-	ret = get_pid_cgroup_main(message, controller, rcred, vcred, output);
+	ret = get_pid_cgroup_main(message, controller, rcred, rcred, vcred, output);
 	if (ret) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
@@ -258,8 +280,8 @@ void move_pid_scm_complete(struct scm_sock_data *data)
 {
 	char b = '0';
 
-	if (move_pid_main(data->controller, data->cgroup, data->rcred,
-			  data->vcred) == 0)
+	if (move_pid_main(data->controller, data->cgroup, data->pcred,
+				data->rcred, data->vcred) == 0)
 		b = '1';
 	if (write(data->fd, &b, 1) < 0)
 		nih_error("MovePidScm: Error writing final result to client");
@@ -271,7 +293,7 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_MOVE_PID);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_MOVE_PID);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -304,7 +326,7 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup, int plain_pid)
 {
 	int fd = 0, ret;
-	struct ucred ucred, vcred;
+	struct ucred rcred, vcred;
 	socklen_t len;
 
 	if (message == NULL) {
@@ -320,15 +342,20 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
 	vcred.uid = 0;
 	vcred.gid = 0;
 	vcred.pid = plain_pid;
-	ret = move_pid_main(controller, cgroup, ucred, vcred);
+	ret = move_pid_main(controller, cgroup, rcred, rcred, vcred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");
@@ -340,7 +367,8 @@ void create_scm_complete(struct scm_sock_data *data)
 	char b = '0';
 	int32_t existed;
 
-	if (create_main(data->controller, data->cgroup, data->rcred, &existed) == 0)
+	if (create_main(data->controller, data->cgroup, data->pcred,
+				data->rcred, &existed) == 0)
 		b = existed == 1 ? '2' : '1';
 	if (write(data->fd, &b, 1) < 0)
 		nih_error("createScm: Error writing final result to client");
@@ -351,7 +379,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CREATE);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_CREATE);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -385,7 +413,7 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 			 const char *controller, const char *cgroup, int32_t *existed)
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred rcred;
 	socklen_t len;
 
 	*existed = -1;
@@ -402,12 +430,17 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("Create: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	ret = create_main(controller, cgroup, ucred, existed);
+	ret = create_main(controller, cgroup, rcred, rcred, existed);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
@@ -419,8 +452,8 @@ void chown_scm_complete(struct scm_sock_data *data)
 {
 	char b = '0';
 
-	if (chown_main(data->controller, data->cgroup, data->rcred, data->vcred)
-			== 0)
+	if (chown_main(data->controller, data->cgroup, data->pcred,
+				data->rcred, data->vcred) == 0)
 		b = '1';
 	if (write(data->fd, &b, 1) < 0)
 		nih_error("ChownScm: Error writing final result to client");
@@ -431,7 +464,7 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CHOWN);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_CHOWN);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -469,7 +502,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 			const char *controller, const char *cgroup, int uid, int gid)
 {
 	int fd = 0, ret;
-	struct ucred ucred, vcred;
+	struct ucred rcred, vcred;
 	socklen_t len;
 
 	if (message == NULL) {
@@ -485,10 +518,15 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
 	// XXX what are the ramifications if we ignore this?
 	if (!setns_pid_supported || !setns_user_supported) {
@@ -496,12 +534,12 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 			"kernel too old, use ChownScm");
 		return -1;
 	}
-	if (!is_same_pidns(ucred.pid)) {
+	if (!is_same_pidns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"chown called from different pid namespace");
 		return -1;
 	}
-	if (!is_same_userns(ucred.pid)) {
+	if (!is_same_userns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"chown called from different user namespace");
 		return -1;
@@ -511,7 +549,7 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 	vcred.uid = uid;
 	vcred.gid = gid;
 
-	ret = chown_main(controller, cgroup, ucred, vcred);
+	ret = chown_main(controller, cgroup, rcred, rcred, vcred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");
@@ -522,8 +560,8 @@ void chmod_scm_complete(struct scm_sock_data *data)
 {
 	char b = '0';
 
-	if (chmod_main(data->controller, data->cgroup, data->file, data->rcred,
-				data->mode) == 0)
+	if (chmod_main(data->controller, data->cgroup, data->file,
+				data->pcred, data->rcred, data->mode) == 0)
 		b = '1';
 	if (write(data->fd, &b, 1) < 0)
 		nih_error("ChownScm: Error writing final result to client");
@@ -535,7 +573,7 @@ int cgmanager_chmod_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_CHMOD);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_CHMOD);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -570,7 +608,7 @@ int cgmanager_chmod (void *data, NihDBusMessage *message,
 			const char *file, int mode)
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred rcred;
 	socklen_t len;
 
 	if (message == NULL) {
@@ -586,10 +624,15 @@ int cgmanager_chmod (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
 	// XXX what are the ramifications if we ignore this?
 	if (!setns_pid_supported || !setns_user_supported) {
@@ -597,18 +640,18 @@ int cgmanager_chmod (void *data, NihDBusMessage *message,
 			"kernel too old, use ChmodScm");
 		return -1;
 	}
-	if (!is_same_pidns(ucred.pid)) {
+	if (!is_same_pidns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"chmod called from different pid namespace");
 		return -1;
 	}
-	if (!is_same_userns(ucred.pid)) {
+	if (!is_same_userns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"chmod called from different user namespace");
 		return -1;
 	}
 
-	ret = chmod_main(controller, cgroup, file, ucred, mode);
+	ret = chmod_main(controller, cgroup, file, rcred, rcred, mode);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");
@@ -621,7 +664,7 @@ void get_value_complete(struct scm_sock_data *data)
 	int ret;
 
 	if (!get_value_main(data, data->controller, data->cgroup, data->key,
-			data->rcred, &output))
+			data->pcred, data->rcred, &output))
 		ret = write(data->fd, output, strlen(output)+1);
 	else
 		ret = write(data->fd, &data->rcred, 0);  // kick the client
@@ -635,7 +678,7 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_VALUE);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_VALUE);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -677,7 +720,7 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred rcred;
 	socklen_t len;
 
 	if (message == NULL) {
@@ -693,12 +736,17 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("GetValue: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	ret = get_value_main(message, controller, req_cgroup, key, ucred, value);
+	ret = get_value_main(message, controller, req_cgroup, key, rcred, rcred, value);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");
@@ -709,7 +757,7 @@ void set_value_complete(struct scm_sock_data *data)
 {
 	char b = '0';
 	if (set_value_main(data->controller, data->cgroup, data->key,
-			data->value, data->rcred) == 0)
+				data->value, data->pcred, data->rcred) == 0)
 		b = '1';
 	if (write(data->fd, &b, 1) < 0)
 		nih_error("SetValueScm: Error writing final result to client");
@@ -721,7 +769,7 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_SET_VALUE);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_SET_VALUE);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -760,7 +808,7 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred rcred;
 	socklen_t len;
 
 	if (message == NULL) {
@@ -776,12 +824,17 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("SetValue: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	ret = set_value_main(controller, req_cgroup, key, value, ucred);
+	ret = set_value_main(controller, req_cgroup, key, value, rcred, rcred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");
@@ -794,8 +847,8 @@ void remove_scm_complete(struct scm_sock_data *data)
 	int ret;
 	int32_t existed = -1;
 
-	ret = remove_main(data->controller, data->cgroup, data->rcred,
-			data->recursive, &existed);
+	ret = remove_main(data->controller, data->cgroup, data->pcred,
+			data->rcred, data->recursive, &existed);
 	if (ret == 0)
 		b = existed == 1 ? '2' : '1';
 	if (write(data->fd, &b, 1) < 0)
@@ -807,7 +860,7 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_REMOVE);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_REMOVE);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -842,7 +895,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 			const char *cgroup, int recursive, int32_t *existed)
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred rcred;
 	socklen_t len;
 
 	*existed = -1;
@@ -859,12 +912,17 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("Remove: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	ret = remove_main(controller, cgroup, ucred, recursive, existed);
+	ret = remove_main(controller, cgroup, rcred, rcred, recursive, existed);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");
@@ -877,7 +935,7 @@ void get_tasks_scm_complete(struct scm_sock_data *data)
 	int i, ret;
 	int32_t *pids, nrpids;
 	ret = get_tasks_main(data, data->controller, data->cgroup,
-			data->rcred, &pids);
+			data->pcred, data->rcred, &pids);
 	if (ret < 0) {
 		nih_error("Error getting nrtasks for %s:%s for pid %d",
 			data->controller, data->cgroup, data->rcred.pid);
@@ -903,7 +961,7 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	d = alloc_scm_sock_data(sockfd, REQ_TYPE_GET_TASKS);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_TASKS);
 	if (!d)
 		return -1;
 	d->controller = NIH_MUST( nih_strdup(d, controller) );
@@ -936,7 +994,7 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 			const char *cgroup, int32_t **pids, size_t *nrpids)
 {
 	int fd = 0, ret;
-	struct ucred ucred;
+	struct ucred rcred;
 	socklen_t len;
 	int32_t *tmp;
 
@@ -953,12 +1011,17 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 	}
 
 	len = sizeof(struct ucred);
-	NIH_MUST (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &ucred, &len) != -1);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
 
 	nih_info (_("GetTasks: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
-			fd, ucred.pid, ucred.uid, ucred.gid);
+			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	ret = get_tasks_main(message, controller, cgroup, ucred, &tmp);
+	ret = get_tasks_main(message, controller, cgroup, rcred, rcred, &tmp);
 	if (ret >= 0) {
 		*nrpids = ret;
 		*pids = tmp;

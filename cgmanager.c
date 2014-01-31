@@ -20,7 +20,7 @@
 #include <frontend.h>
 
 /* GetPidCgroup */
-int get_pid_cgroup_main (void *parent, const char *controller,
+int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 			 struct ucred r, struct ucred v, char **output)
 {
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
@@ -52,7 +52,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	return 0;
 }
 
-int move_pid_main (const char *controller, const char *cgroup,
+int move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, struct ucred v)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
@@ -119,14 +119,14 @@ int move_pid_main (const char *controller, const char *cgroup,
 	return 0;
 }
 
-int create_main (const char *controller, const char *cgroup, struct ucred r,
-		int32_t *existed)
+int create_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, int32_t *existed)
 {
 	int ret;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], dirpath[MAXPATHLEN];
 	nih_local char *copy = NULL;
 	size_t cgroup_len;
-	char *p, *p2, oldp2;
+	char *p1, *p2, oldp2;
 
 	*existed = 1;
 	if (!cgroup || ! *cgroup)  // nothing to do
@@ -155,17 +155,17 @@ int create_main (const char *controller, const char *cgroup, struct ucred r,
 
 	strcpy(path, rcgpath);
 	strcpy(dirpath, rcgpath);
-	for (p=copy; *p; p = p2) {
+	for (p1=copy; *p1; p1 = p2) {
 		*existed = -1;
-		for (p2=p; *p2 && *p2 != '/'; p2++);
+		for (p2=p1; *p2 && *p2 != '/'; p2++);
 		oldp2 = *p2;
 		*p2 = '\0';
-		if (strcmp(p, "..") == 0) {
+		if (strcmp(p1, "..") == 0) {
 			nih_error("Out of memory copying cgroup name");
 			return -1;
 		}
 		strncat(path, "/", MAXPATHLEN-1);
-		strncat(path, p, MAXPATHLEN-1);
+		strncat(path, p1, MAXPATHLEN-1);
 		if (dir_exists(path)) {
 			*existed = 1;
 			// TODO - properly use execute perms
@@ -199,7 +199,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred r,
 		*existed = -1;
 next:
 		strncat(dirpath, "/", MAXPATHLEN-1);
-		strncat(dirpath, p, MAXPATHLEN-1);
+		strncat(dirpath, p1, MAXPATHLEN-1);
 		*p2 = oldp2;
 		if (*p2)
 			p2++;
@@ -211,7 +211,7 @@ next:
 	return 0;
 }
 
-int chown_main (const char *controller, const char *cgroup,
+int chown_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, struct ucred v)
 {
 	char rcgpath[MAXPATHLEN];
@@ -269,8 +269,8 @@ int chown_main (const char *controller, const char *cgroup,
 	return 0;
 }
 
-int chmod_main (const char *controller, const char *cgroup, const char *file,
-		struct ucred r, int mode)
+int chmod_main(const char *controller, const char *cgroup, const char *file,
+		struct ucred p, struct ucred r, int mode)
 {
 	char rcgpath[MAXPATHLEN];
 	nih_local char *path = NULL;
@@ -323,8 +323,8 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 	return 0;
 }
 
-int get_value_main (void *parent, const char *controller, const char *req_cgroup,
-		const char *key, struct ucred r, char **value)
+int get_value_main(void *parent, const char *controller, const char *req_cgroup,
+		const char *key, struct ucred p, struct ucred r, char **value)
 {
 	char path[MAXPATHLEN];
 
@@ -365,8 +365,9 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 	return 0;
 }
 
-int set_value_main (const char *controller, const char *req_cgroup,
-		const char *key, const char *value, struct ucred r)
+int set_value_main(const char *controller, const char *req_cgroup,
+		const char *key, const char *value, struct ucred p,
+		struct ucred r)
 
 {
 	char path[MAXPATHLEN];
@@ -479,13 +480,13 @@ static int recursive_rmdir(char *path)
 	return failed ? -1 : 0;
 }
 
-int remove_main (const char *controller, const char *cgroup, struct ucred r,
-		 int recursive, int32_t *existed)
+int remove_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, int recursive, int32_t *existed)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	size_t cgroup_len;
 	nih_local char *working = NULL, *copy = NULL, *wcgroup = NULL;
-	char *p;
+	char *p1;
 
 	*existed = 1;
 	if (!cgroup || ! *cgroup)  // nothing to do
@@ -523,9 +524,9 @@ int remove_main (const char *controller, const char *cgroup, struct ucred r,
 	}
 	// must have write access to the parent dir
 	copy = NIH_MUST( nih_strdup(NULL, working) );
-	if (!(p = strrchr(copy, '/')))
+	if (!(p1 = strrchr(copy, '/')))
 		return -1;
-	*p = '\0';
+	*p1 = '\0';
 	if (!may_access(r.pid, r.uid, r.gid, copy, O_WRONLY)) {
 		nih_error("pid %d (%u:%u) may not remove %s",
 			r.pid, r.uid, r.gid, copy);
@@ -545,8 +546,8 @@ int remove_main (const char *controller, const char *cgroup, struct ucred r,
 	return 0;
 }
 
-int get_tasks_main (void *parent, const char *controller, const char *cgroup,
-			struct ucred r, int32_t **pids)
+int get_tasks_main(void *parent, const char *controller, const char *cgroup,
+			struct ucred p, struct ucred r, int32_t **pids)
 {
 	char path[MAXPATHLEN];
 	const char *key = "tasks";

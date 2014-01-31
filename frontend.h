@@ -82,7 +82,9 @@ struct scm_sock_data {
 	char *key;
 	char *value;
 	int step;
-	struct ucred rcred, vcred;
+	struct ucred	pcred, // proxy credential
+			rcred, // requestor credential
+			vcred; // victim credential
 	int fd;
 	int recursive;
 	int mode;
@@ -102,41 +104,35 @@ enum req_type {
 };
 
 int get_pid_cgroup_main(void *parent, const char *controller,
-		struct ucred r, struct ucred v, char **output);
+		struct ucred p, struct ucred r, struct ucred v, char **output);
 void get_pid_scm_complete(struct scm_sock_data *data);
 int move_pid_main(const char *controller, const char *cgroup,
-		struct ucred r, struct ucred v);
+		struct ucred p, struct ucred r, struct ucred v);
 void move_pid_scm_complete(struct scm_sock_data *data);
 int create_main(const char *controller, const char *cgroup,
-		struct ucred ucred, int32_t *existed);
+		struct ucred p, struct ucred r, int32_t *existed);
 void create_scm_complete(struct scm_sock_data *data);
 int chown_main(const char *controller, const char *cgroup,
-		struct ucred r, struct ucred v);
+		struct ucred p, struct ucred r, struct ucred v);
 void chown_scm_complete(struct scm_sock_data *data);
 int chmod_main(const char *controller, const char *cgroup, const char *file,
-		struct ucred r, int mode);
+		struct ucred p, struct ucred r, int mode);
 void chmod_scm_complete(struct scm_sock_data *data);
 int get_value_main(void *parent, const char *controller,
-		const char *req_cgroup, const char *key, struct ucred ucred,
-		char **value);
+		const char *req_cgroup, const char *key,
+		struct ucred p, struct ucred r, char **value);
 void get_value_complete(struct scm_sock_data *data);
 int set_value_main(const char *controller, const char *req_cgroup,
-		const char *key, const char *value, struct ucred ucred);
+		const char *key, const char *value,
+		struct ucred p, struct ucred r);
 void set_value_complete(struct scm_sock_data *data);
-int remove_main(const char *controller, const char *cgroup, struct ucred ucred,
-		 int recursive, int32_t *existed);
+int remove_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, int recursive, int32_t *existed);
 void remove_scm_complete(struct scm_sock_data *data);
 int get_tasks_main (void *parent, const char *controller, const char *cgroup,
-			struct ucred ucred, int32_t **pids);
+		struct ucred p, struct ucred r, int32_t **pids);
 void get_tasks_scm_complete(struct scm_sock_data *data);
 
-struct scm_sock_data *alloc_scm_sock_data(int fd, enum req_type t);
-bool need_two_creds(enum req_type t);
-void scm_sock_error_handler (void *data, NihIo *io);
-void scm_sock_close (struct scm_sock_data *data, NihIo *io);
-bool kick_fd_client(int fd);
-void sock_scm_reader(struct scm_sock_data *data,
-		NihIo *io, const char *buf, size_t len);
 int cgmanager_ping (void *data, NihDBusMessage *message, int junk);
 
 int client_connect (DBusServer *server, DBusConnection *conn);

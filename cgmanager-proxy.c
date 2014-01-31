@@ -183,12 +183,17 @@ static bool complete_dbus_request(DBusMessage *message,
 }
 
 int get_pid_cgroup_main (void *parent, const char *controller,
-		struct ucred r, struct ucred v, char **output)
+		struct ucred p, struct ucred r, struct ucred v, char **output)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char s[MAXPATHLEN] = { 0 };
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("GetPidCgroupScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -227,12 +232,17 @@ out:
 }
 
 int move_pid_main (const char *controller, const char *cgroup,
-		struct ucred r, struct ucred v)
+		struct ucred p, struct ucred r, struct ucred v)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char buf[1];
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("MovePidScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -267,13 +277,18 @@ out:
 	return ret;
 }
 
-int create_main (const char *controller, const char *cgroup, struct ucred r,
-		 int32_t *existed)
+int create_main (const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, int32_t *existed)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char buf[1];
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("CreateScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -309,12 +324,17 @@ out:
 }
 
 int chown_main (const char *controller, const char *cgroup,
-		struct ucred r, struct ucred v)
+		struct ucred p, struct ucred r, struct ucred v)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char buf[1];
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("ChownScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -349,12 +369,17 @@ out:
 }
 
 int chmod_main (const char *controller, const char *cgroup, const char *file,
-		struct ucred r, int mode)
+		struct ucred p, struct ucred r, int mode)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char buf[1];
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("ChmodScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -397,12 +422,17 @@ out:
 }
 
 int get_value_main (void *parent, const char *controller, const char *req_cgroup,
-		 const char *key, struct ucred r, char **value)
+		 const char *key, struct ucred p, struct ucred r, char **value)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char output[MAXPATHLEN] = { 0 };
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("GetValueScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -446,12 +476,18 @@ out:
 }
 
 int set_value_main (const char *controller, const char *req_cgroup,
-		 const char *key, const char *value, struct ucred r)
+		 const char *key, const char *value, struct ucred p,
+		 struct ucred r)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char buf[1];
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("SetValueScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -493,13 +529,18 @@ out:
 	return ret;
 }
 
-int remove_main (const char *controller, const char *cgroup, struct ucred r,
-		 int recursive, int32_t *existed)
+int remove_main (const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, int recursive, int32_t *existed)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
 	int sv[2], ret = -1;
 	char buf[1];
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("RemoveScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
@@ -539,7 +580,7 @@ out:
 }
 
 int get_tasks_main (void *parent, const char *controller, const char *cgroup,
-		    struct ucred r, int32_t **pids)
+		    struct ucred p, struct ucred r, int32_t **pids)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
@@ -547,6 +588,11 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	uint32_t nrpids;
 	struct ucred tcred;
 	int i;
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
 
 	if (!(message = start_dbus_request("GetTasksScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
