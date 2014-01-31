@@ -345,8 +345,6 @@ int chown_main (const char *controller, const char *cgroup,
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
@@ -395,8 +393,6 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
@@ -596,8 +592,6 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 out:
 	close(sv[0]);
 	close(sv[1]);
-	if (message)
-		dbus_message_unref(message);
 	return ret;
 }
 
