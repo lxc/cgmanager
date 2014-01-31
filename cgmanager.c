@@ -281,8 +281,7 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 		return -1;
 	}
 
-	if (file && ( strchr(file, '/') || strchr(file, '.') ||
-			strchr(file, '\\')) ) {
+	if (file && ( strchr(file, '/') || strchr(file, '\\')) ) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid file");
 		return -1;
@@ -295,7 +294,7 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 	}
 
 	path = NIH_MUST( nih_sprintf(NULL, "%s/%s", rcgpath, cgroup) );
-	if (file)
+	if (file && strlen(file))
 		NIH_MUST( nih_strcat_sprintf(&path, NULL, "/%s", file) );
 	if (realpath_escapes(path, rcgpath)) {
 		nih_error("Invalid path %s", path);
