@@ -138,4 +138,6 @@ int cgmanager_ping (void *data, NihDBusMessage *message, int junk);
 int client_connect (DBusServer *server, DBusConnection *conn);
 void client_disconnect (DBusConnection *conn);
 
+#define API_VERSION 1
+
 #endif

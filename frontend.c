@@ -1032,6 +1032,15 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 	return ret;
 }
 
+int
+cgmanager_get_api_version(void *data, NihDBusMessage *message, int *version)
+{
+	nih_assert(message);
+	nih_assert(version);
+	*version = API_VERSION;
+	return 0;
+}
+
 static dbus_bool_t allow_user(DBusConnection *connection, unsigned long uid, void *data)
 {
 	return TRUE;
@@ -1063,4 +1072,3 @@ void client_disconnect (DBusConnection *conn)
 
 	nih_info (_("Disconnected from private client"));
 }
-
