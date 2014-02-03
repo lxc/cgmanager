@@ -29,6 +29,17 @@ unsigned long mypidns;
 bool setns_user_supported = false;
 unsigned long myuserns;
 
+bool sane_cgroup(const char *cgroup)
+{
+	if (!cgroup)
+		return false;
+	if (strstr(cgroup, ".."))
+		return false;
+	if (strchr(cgroup, '\\'))
+		return false;
+	return true;
+}
+
 static struct scm_sock_data *alloc_scm_sock_data(NihDBusMessage *message,
 		int fd, enum req_type t)
 {

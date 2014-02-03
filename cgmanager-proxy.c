@@ -245,6 +245,11 @@ int do_move_pid_main (const char *controller, const char *cgroup,
 		return -1;
 	}
 
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
 	if (!(message = start_dbus_request(cmd, sv))) {
 		nih_error("%s: error starting dbus request", __func__);
 		return -1;
@@ -281,8 +286,14 @@ out:
 int move_pid_main (const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, struct ucred v)
 {
-	if (!cgroup || cgroup[0] == '/')
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
+	}
+	if (cgroup[0] == '/') {
+		nih_error("uid %u tried to escape its cgroup", r.uid);
+		return -1;
+	}
 
 	return do_move_pid_main(controller, cgroup, p, r, v, "MovePidScm");
 }
@@ -292,6 +303,10 @@ int move_pid_abs_main (const char *controller, const char *cgroup,
 {
 	if (r.uid) {
 		nih_error("uid %u tried to escape", r.uid);
+		return -1;
+	}
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 	return do_move_pid_main(controller, cgroup, p, r, v, "MovePidAbsScm");
@@ -307,6 +322,11 @@ int create_main (const char *controller, const char *cgroup, struct ucred p,
 
 	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
 		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 
@@ -356,6 +376,11 @@ int chown_main (const char *controller, const char *cgroup,
 		return -1;
 	}
 
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
 	if (!(message = start_dbus_request("ChownScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
 		return -1;
@@ -398,6 +423,11 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 
 	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
 		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 
@@ -451,6 +481,11 @@ int get_value_main (void *parent, const char *controller, const char *cgroup,
 
 	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
 		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 
@@ -509,6 +544,11 @@ int set_value_main (const char *controller, const char *cgroup,
 		return -1;
 	}
 
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
 	if (!(message = start_dbus_request("SetValueScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
 		return -1;
@@ -562,6 +602,11 @@ int remove_main (const char *controller, const char *cgroup, struct ucred p,
 		return -1;
 	}
 
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
 	if (!(message = start_dbus_request("RemoveScm", sv))) {
 		nih_error("%s: error starting dbus request", __func__);
 		return -1;
@@ -611,6 +656,11 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 
 	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
 		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 

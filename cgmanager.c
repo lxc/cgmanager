@@ -59,8 +59,11 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	FILE *f;
 	pid_t query = r.pid;
 
-	if (!cgroup || cgroup[0] == '.')
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
+	}
+
 	// verify that ucred.pid may move target pid
 	if (!may_move_pid(r.pid, r.uid, v.pid)) {
 		nih_error("%d may not move %d", r.pid, v.pid);
@@ -148,13 +151,11 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 	*existed = 1;
 	if (!cgroup || ! *cgroup)  // nothing to do
 		return 0;
-	if (cgroup[0] == '/' || cgroup[0] == '.') {
-		// We could try to be accomodating, but let's not fool around right now
-		nih_error("Bad requested cgroup path: %s", cgroup);
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
-
-	// TODO - support comma-separated list of controllers?  Not sure it's worth it
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
@@ -242,9 +243,8 @@ int chown_main(const char *controller, const char *cgroup, struct ucred p,
 		return -1;
 	}
 
-	if (cgroup[0] == '/' || cgroup[0] == '.') {
-		// We could try to be accomodating, but let's not fool around right now
-		nih_error("Bad requested cgroup path: %s", cgroup);
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 
@@ -292,9 +292,8 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 	char rcgpath[MAXPATHLEN];
 	nih_local char *path = NULL;
 
-	if (cgroup[0] == '/' || cgroup[0] == '.') {
-		// We could try to be accomodating, but let's not fool around right now
-		nih_error("Bad requested cgroup path: %s", cgroup);
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 
@@ -345,6 +344,11 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 {
 	char path[MAXPATHLEN];
 
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
 	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
@@ -388,6 +392,11 @@ int set_value_main(const char *controller, const char *cgroup,
 
 {
 	char path[MAXPATHLEN];
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
 
 	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
 		nih_error("Could not determine the requested cgroup");
@@ -506,11 +515,9 @@ int remove_main(const char *controller, const char *cgroup, struct ucred p,
 	char *p1;
 
 	*existed = 1;
-	if (!cgroup || ! *cgroup)  // nothing to do
-		return 0;
-	if (cgroup[0] == '/' || cgroup[0] == '.') {
-		// We could try to be accomodating, but let's not fool around right now
-		nih_error("Bad requested cgroup path: %s", cgroup);
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
 		return -1;
 	}
 
@@ -569,8 +576,11 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 	char path[MAXPATHLEN];
 	const char *key = "tasks";
 
-	if (!cgroup || ! *cgroup)  // nothing to do
-		return 0;
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
 	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
