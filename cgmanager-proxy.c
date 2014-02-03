@@ -441,7 +441,7 @@ out:
 	return ret;
 }
 
-int get_value_main (void *parent, const char *controller, const char *req_cgroup,
+int get_value_main (void *parent, const char *controller, const char *cgroup,
 		 const char *key, struct ucred p, struct ucred r, char **value)
 {
 	DBusMessage *message;
@@ -464,7 +464,7 @@ int get_value_main (void *parent, const char *controller, const char *req_cgroup
 		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
-	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
@@ -495,7 +495,7 @@ out:
 	return ret;
 }
 
-int set_value_main (const char *controller, const char *req_cgroup,
+int set_value_main (const char *controller, const char *cgroup,
 		 const char *key, const char *value, struct ucred p,
 		 struct ucred r)
 {
@@ -519,7 +519,7 @@ int set_value_main (const char *controller, const char *req_cgroup,
 		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
-	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &req_cgroup)) {
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
 		goto out;
 	}

@@ -340,12 +340,12 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 	return 0;
 }
 
-int get_value_main(void *parent, const char *controller, const char *req_cgroup,
+int get_value_main(void *parent, const char *controller, const char *cgroup,
 		const char *key, struct ucred p, struct ucred r, char **value)
 {
 	char path[MAXPATHLEN];
 
-	if (!compute_pid_cgroup(r.pid, controller, req_cgroup, path)) {
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -382,14 +382,14 @@ int get_value_main(void *parent, const char *controller, const char *req_cgroup,
 	return 0;
 }
 
-int set_value_main(const char *controller, const char *req_cgroup,
+int set_value_main(const char *controller, const char *cgroup,
 		const char *key, const char *value, struct ucred p,
 		struct ucred r)
 
 {
 	char path[MAXPATHLEN];
 
-	if (!compute_pid_cgroup(r.pid, controller, req_cgroup, path)) {
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
