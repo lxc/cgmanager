@@ -79,10 +79,10 @@ libcgmanager_la_LIBADD = \
 	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
 
 cgmanager.8: cgmanager.c
-	help2man -I cgmanager.man.add -N ./cgmanager > cgmanager.8
+	$(HELP2MAN) -s 8 -I cgmanager.man.add -N ./cgmanager > cgmanager.8
 
 cgproxy.8: cgmanager-proxy.c
-	help2man -I cgproxy.man.add -N ./cgproxy > cgproxy.8
+	$(HELP2MAN) -s 8 -I cgproxy.man.add -N ./cgproxy > cgproxy.8
 
 install-exec-local:
 	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests
