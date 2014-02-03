@@ -25,6 +25,16 @@ bool master_running(void)
 {
 	NihError *err;
 
+	/* is manager already running under cgmanager.lower */
+	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
+	if (server_conn) {
+		dbus_connection_unref (server_conn);
+		return true;
+	}
+	err = nih_error_get();
+	nih_free(err);
+
+	/* is manager running under cgmanager */
 	server_conn = nih_dbus_connect(CGMANAGER_DBUS_PATH, NULL);
 	if (server_conn) {
 		dbus_connection_unref (server_conn);
