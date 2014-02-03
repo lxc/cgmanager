@@ -20,4 +20,6 @@ PKG_CHECK_MODULES([NIH], [libnih >= 1.0.2])
 PKG_CHECK_MODULES([NIH_DBUS], [libnih-dbus >= 1.0.0])
 PKG_CHECK_MODULES([DBUS], [dbus-1 >= 1.2.16])
 
+AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
+
 AC_OUTPUT

@@ -748,14 +748,14 @@ main (int argc, char *argv[])
 	nih_option_set_synopsis (_("Control group proxy"));
 	nih_option_set_help (_("The cgroup manager proxy"));
 
+	args = nih_option_parser (NULL, argc, argv, options, FALSE);
+	if (! args)
+		exit (1);
+
 	if (geteuid() != 0) {
 		nih_error(_("Cgmanager proxy must be run as root"));
 		exit(1);
 	}
-
-	args = nih_option_parser (NULL, argc, argv, options, FALSE);
-	if (! args)
-		exit (1);
 
 	/*
 	 * If we are called with checkmaster, then only check whether

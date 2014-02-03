@@ -1,0 +1,25 @@
+[DESCRIPTION]
+
+cgmanager is a daemon to manage cgroups.  Programs and users can
+make D-Bus requests to administer cgroups over which they have
+privilege.  To ensure that users may not exceed their privilege
+in manipulating cgroups, the cgroup manager accepts regular D-Bus
+requests only from tasks within its own process-id and user
+namespaces.  For tasks in private namespaces (such as containers),
+SCM-enhanced D-Bus calls are available.  Using these manually is
+not recommended.  Rather, each container is advised to run a
+cgproxy, which will forward plain D-Bus requests as SCM-enhanced
+D-Bus requests to the host cgmanager.
+
+[EXAMPLES]
+.P
+To create a new memory cgroup called 'compute', you can use:
+.br
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"compute" > /dev/null 2>&1
+.br
+To set a limit of 100000,
+.br
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.SetValue string:'memory' string:"compute" string:memory.limit_in_bytes int32:100000 > /dev/null 2>&1
+
+[SEE ALSO]
+cgproxy(1), credentials(7), dbus-send(1)

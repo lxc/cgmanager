@@ -1,0 +1,14 @@
+[DESCRIPTION]
+
+cgproxy is the D-Bus proxy for cgmanager.  Since a process in a
+non-initial process-id or user namespace will refer to tasks,
+user-ids or group-ids which are wrong in the initial namespace,
+the proxy will send these as SCM credentials to the cgmanager,
+relying on the kernel to translate the identifiers.  In this way,
+programs and users in a container can make cgroup administration
+requests using the same simply D-Bus calls over a proxy as they
+would on the base host to the cgmanager directly.
+
+[SEE ALSO]
+
+cgmanager(1)

@@ -28,6 +28,8 @@ lib_LTLIBRARIES = libcgmanager.la
 
 include_HEADERS = cgmanager-client.h
 
+man_MANS = cgproxy.8 cgmanager.8
+
 libcgmanager.pc: libcgmanager.pc.in
 	sed -e 's|[@]LIBCGMANAGER_VERSION_DOTTED[@]|$(LIBCGMANAGER_VERSION_DOTTED)|g' \
 		$< > $@
@@ -75,6 +77,12 @@ libcgmanager_la_LDFLAGS = -E \
 	-version-info $(LIBCGMANAGER_VERSION)
 libcgmanager_la_LIBADD = \
 	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
+
+cgmanager.8: cgmanager.c
+	help2man -I cgmanager.man.add -N ./cgmanager > cgmanager.8
+
+cgproxy.8: cgmanager-proxy.c
+	help2man -I cgproxy.man.add -N ./cgproxy > cgproxy.8
 
 install-exec-local:
 	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests
