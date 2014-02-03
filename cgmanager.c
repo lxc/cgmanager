@@ -418,7 +418,7 @@ static bool normalize_path(char *path)
 		char *p2 = path+1;
 		while (*p2 == '/')
 			p2++;
-		memcpy(path, p2, strlen(p2)+1);
+		memmove(path, p2, strlen(p2)+1);
 		path++;
 	}
 	return true;
