@@ -41,3 +41,4 @@ unsigned long read_user_ns_link(int pid);
 bool realpath_escapes(char *path, char *safety);
 bool file_exists(const char *path);
 bool dir_exists(const char *path);
+bool move_self_to_root(void);

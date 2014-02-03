@@ -95,6 +95,19 @@
       <arg name="pid" type="i" direction="in" />
       <!-- task must be in manager's pidns -->
     </method>
+    <method name="MovePidAbsScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <!-- Pid is passed as a scm_cred over sockfd -->
+      <!-- 1/0 (pass/fail) return value comes over sockfd -->
+    </method>
+    <method name="MovePidAbs">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="pid" type="i" direction="in" />
+      <!-- task must be in manager's pidns -->
+    </method>
     <method name="GetValueScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />

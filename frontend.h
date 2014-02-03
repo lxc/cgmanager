@@ -101,6 +101,7 @@ enum req_type {
 	REQ_TYPE_REMOVE,
 	REQ_TYPE_GET_TASKS,
 	REQ_TYPE_CHMOD,
+	REQ_TYPE_MOVE_PID_ABS,
 };
 
 int get_pid_cgroup_main(void *parent, const char *controller,
@@ -109,6 +110,9 @@ void get_pid_scm_complete(struct scm_sock_data *data);
 int move_pid_main(const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, struct ucred v);
 void move_pid_scm_complete(struct scm_sock_data *data);
+int move_pid_abs_main(const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r, struct ucred v);
+void move_pid_abs_scm_complete(struct scm_sock_data *data);
 int create_main(const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, int32_t *existed);
 void create_scm_complete(struct scm_sock_data *data);

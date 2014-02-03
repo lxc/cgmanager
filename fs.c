@@ -782,3 +782,30 @@ bool dir_exists(const char *path)
 		return false;
 	return true;
 }
+
+/*
+ * move_self_to_root: called by cgmanager at startup to make sure
+ * it starts in /
+ */
+bool move_self_to_root(void)
+{
+	char path[MAXPATHLEN];
+	int i, ret;
+	pid_t me = getpid();
+	FILE *f;
+
+	for (i = 0; i < num_controllers; i++) {
+		ret = snprintf(path, MAXPATHLEN, "%s/tasks", all_mounts[i].path);
+		if (ret < 0 || ret >= MAXPATHLEN)
+			return false;
+		if ((f = fopen(path, "w")) == NULL)
+			return false;
+		if (fprintf(f, "%d\n", me) <= 0) {
+			fclose(f);
+			return false;
+		}
+		if (fclose(f) != 0)
+			return false;
+	}
+	return true;
+}

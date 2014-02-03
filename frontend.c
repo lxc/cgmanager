@@ -68,6 +68,7 @@ static const char *req_type_to_str(enum req_type r)
 	switch(r) {
 		case REQ_TYPE_GET_PID: return "get_pid";
 		case REQ_TYPE_MOVE_PID: return "move_pid";
+		case REQ_TYPE_MOVE_PID_ABS: return "move_pid";
 		case REQ_TYPE_CREATE: return "create";
 		case REQ_TYPE_CHOWN: return "chown";
 		case REQ_TYPE_GET_VALUE: return "get_value";
@@ -84,6 +85,7 @@ static bool need_two_creds(enum req_type t)
 	switch (t) {
 	case REQ_TYPE_GET_PID:
 	case REQ_TYPE_MOVE_PID:
+	case REQ_TYPE_MOVE_PID_ABS:
 	case REQ_TYPE_CHOWN:
 		return true;
 	default:
@@ -144,6 +146,7 @@ static void sock_scm_reader(struct scm_sock_data *data,
 	switch (data->type) {
 	case REQ_TYPE_GET_PID: get_pid_scm_complete(data); break;
 	case REQ_TYPE_MOVE_PID: move_pid_scm_complete(data); break;
+	case REQ_TYPE_MOVE_PID_ABS: move_pid_abs_scm_complete(data); break;
 	case REQ_TYPE_CREATE: create_scm_complete(data); break;
 	case REQ_TYPE_CHOWN: chown_scm_complete(data); break;
 	case REQ_TYPE_CHMOD: chmod_scm_complete(data); break;
@@ -356,6 +359,107 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	vcred.gid = 0;
 	vcred.pid = plain_pid;
 	ret = move_pid_main(controller, cgroup, rcred, rcred, vcred);
+	if (ret)
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+void move_pid_abs_scm_complete(struct scm_sock_data *data)
+{
+	char b = '0';
+
+	if (move_pid_abs_main(data->controller, data->cgroup, data->pcred,
+				data->rcred, data->vcred) == 0)
+		b = '1';
+	if (write(data->fd, &b, 1) < 0)
+		nih_error("MovePidScm: Error writing final result to client");
+}
+
+int cgmanager_move_pid_abs_scm (void *data, NihDBusMessage *message,
+			const char *controller, const char *cgroup,
+			int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_MOVE_PID_ABS);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+int cgmanager_move_pid_abs (void *data, NihDBusMessage *message,
+			const char *controller, const char *cgroup, int plain_pid)
+{
+	int fd = 0, ret;
+	struct ucred rcred, vcred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	vcred.uid = 0;
+	vcred.gid = 0;
+	vcred.pid = plain_pid;
+#ifdef CGMANAGER
+	if (!is_same_pidns(rcred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Escape request from %u",
+					     rcred.uid);
+		return -1;
+	}
+	/*
+	 * A plain dbus request to escape cgroup root was made by a root
+	 * owned task in our namespace.  We will send ourselves as the
+	 * proxy.
+	 */
+	struct ucred mycred = {
+		.pid = getpid(),
+		.uid = getuid(),
+		.gid = getgid()
+	};
+#else
+#define mycred rcred
+#endif
+	ret = move_pid_abs_main(controller, cgroup, mycred, rcred, vcred);
 	if (ret)
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");

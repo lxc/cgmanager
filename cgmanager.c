@@ -52,26 +52,25 @@ int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 	return 0;
 }
 
-int move_pid_main(const char *controller, const char *cgroup, struct ucred p,
-		struct ucred r, struct ucred v)
+int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, struct ucred v, bool escape)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
+	pid_t query = r.pid;
 
+	if (!cgroup || cgroup[0] == '.')
+		return -1;
 	// verify that ucred.pid may move target pid
 	if (!may_move_pid(r.pid, r.uid, v.pid)) {
 		nih_error("%d may not move %d", r.pid, v.pid);
 		return -1;
 	}
 
-	if (cgroup[0] == '/' || cgroup[0] == '.') {
-		// We could try to be accomodating, but let's not fool around right now
-		nih_error("Bad requested cgroup path: %s", cgroup);
-		return -1;
-	}
-
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+	if (escape)
+		query = p.pid;
+	if (!compute_pid_cgroup(query, controller, "", rcgpath)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -117,6 +116,24 @@ int move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	nih_info(_("%d moved to %s:%s by %d's request"), v.pid,
 		controller, cgroup, r.pid);
 	return 0;
+}
+
+int move_pid_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, struct ucred v)
+{
+	if (cgroup[0] == '/') {
+		// We could try to be accomodating, but let's not fool around right now
+		nih_error("Bad requested cgroup path: %s", cgroup);
+		return -1;
+	}
+
+	return do_move_pid_main(controller, cgroup, p, r, v, false);
+}
+
+int move_pid_abs_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, struct ucred v)
+{
+	return do_move_pid_main(controller, cgroup, p, r, v, true);
 }
 
 int create_main(const char *controller, const char *cgroup, struct ucred p,
@@ -683,6 +700,11 @@ main (int argc, char *argv[])
 
 	if (setup_cgroup_mounts() < 0) {
 		nih_fatal ("Failed to set up cgroup mounts");
+		exit(1);
+	}
+
+	if (!move_self_to_root()) {
+		nih_fatal ("Failed to move self to root cgroup");
 		exit(1);
 	}
 

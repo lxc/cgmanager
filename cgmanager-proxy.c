@@ -231,8 +231,9 @@ out:
 	return ret;
 }
 
-int move_pid_main (const char *controller, const char *cgroup,
-		struct ucred p, struct ucred r, struct ucred v)
+int do_move_pid_main (const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r, struct ucred v,
+		const char *cmd)
 {
 	DBusMessage *message;
 	DBusMessageIter iter;
@@ -244,7 +245,7 @@ int move_pid_main (const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!(message = start_dbus_request("MovePidScm", sv))) {
+	if (!(message = start_dbus_request(cmd, sv))) {
 		nih_error("%s: error starting dbus request", __func__);
 		return -1;
 	}
@@ -275,6 +276,25 @@ out:
 	close(sv[0]);
 	close(sv[1]);
 	return ret;
+}
+
+int move_pid_main (const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r, struct ucred v)
+{
+	if (!cgroup || cgroup[0] == '/')
+		return -1;
+
+	return do_move_pid_main(controller, cgroup, p, r, v, "MovePidScm");
+}
+
+int move_pid_abs_main (const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r, struct ucred v)
+{
+	if (r.uid) {
+		nih_error("uid %u tried to escape", r.uid);
+		return -1;
+	}
+	return do_move_pid_main(controller, cgroup, p, r, v, "MovePidAbsScm");
 }
 
 int create_main (const char *controller, const char *cgroup, struct ucred p,

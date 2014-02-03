@@ -59,6 +59,8 @@ cgmanager_SOURCES = cgmanager.c \
 	fs.c fs.h cgmanager.h \
 	frontend.c frontend.h
 
+cgmanager_CFLAGS = $(AM_CFLAGS) -DCGMANAGER
+
 cgproxy_SOURCES = cgmanager-proxy.c \
 	$(manager_files_OUTPUTS) \
 	access_checks.c access_checks.h \
