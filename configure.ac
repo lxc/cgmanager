@@ -5,7 +5,7 @@ AC_INIT([cgmanager], [0.19], [cgmanager-devel@lists.linuxcontainers.org])
 
 AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
-AC_CONFIG_FILES([Makefile libcgmanager.pc.in])
+AC_CONFIG_FILES([Makefile libcgmanager.pc.in cgmanager.spec])
 
 AM_INIT_AUTOMAKE
 

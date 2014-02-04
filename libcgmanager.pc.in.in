@@ -6,5 +6,6 @@ includedir=@includedir@
 Name: libcgmanager
 Description: cgroup manager library
 Version: @LIBCGMANAGER_VERSION_DOTTED@
+Requires: libnih libnih-dbus
 Libs: -L${libdir} -lcgmanager
 Cflags: -I${includedir}

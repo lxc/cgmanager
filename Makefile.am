@@ -26,7 +26,7 @@ sbin_PROGRAMS = cgmanager cgproxy
 
 lib_LTLIBRARIES = libcgmanager.la
 
-include_HEADERS = cgmanager-client.h
+pkginclude_HEADERS = cgmanager-client.h
 
 man_MANS = cgproxy.8 cgmanager.8
 
@@ -34,9 +34,9 @@ libcgmanager.pc: libcgmanager.pc.in
 	sed -e 's|[@]LIBCGMANAGER_VERSION_DOTTED[@]|$(LIBCGMANAGER_VERSION_DOTTED)|g' \
 		$< > $@
 
-EXTRA_DIST = libcgmanager.pc.in.in tests
+EXTRA_DIST = libcgmanager.pc.in.in cgmanager.spec tests
 
-pkgconfigdir = $(prefix)/lib/pkgconfig
+pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libcgmanager.pc
 
 $(manager_files_OUTPUTS): org.linuxcontainers.cgmanager.xml
@@ -78,10 +78,10 @@ libcgmanager_la_LDFLAGS = -E \
 libcgmanager_la_LIBADD = \
 	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
 
-cgmanager.8: cgmanager.c
+cgmanager.8: cgmanager.c cgmanager
 	$(HELP2MAN) -s 8 -I cgmanager.man.add -N ./cgmanager > cgmanager.8
 
-cgproxy.8: cgmanager-proxy.c
+cgproxy.8: cgmanager-proxy.c cgproxy
 	$(HELP2MAN) -s 8 -I cgproxy.man.add -N ./cgproxy > cgproxy.8
 
 install-exec-local:
@@ -90,3 +90,6 @@ install-exec-local:
 	for f in *.sh; do \
 	install -c -m 755 $$f $(DESTDIR)/usr/share/cgmanager/tests; \
 	done
+
+rpm: dist
+	rpmbuild --clean -ta ${distdir}.tar.gz

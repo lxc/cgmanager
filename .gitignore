@@ -17,6 +17,7 @@ Makefile
 
 aclocal.m4
 autom4te.cache
+cgmanager.spec
 configure
 config.log
 config.status
@@ -42,3 +43,6 @@ cgproxy
 
 org.linuxcontainers.cgmanager.c
 org.linuxcontainers.cgmanager.h
+
+cgmanager.8
+cgproxy.8
