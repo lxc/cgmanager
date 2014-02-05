@@ -4,7 +4,7 @@ compiler:
  - clang
 before_install:
  - sudo apt-get update -qq
- - sudo apt-get install -qq libnih-dbus-dev libdbus-1-dev 
+ - sudo apt-get install -qq libnih-dbus-dev libdbus-1-dev help2man
 script: ./bootstrap.sh && ./configure && make -j4
 notifications:
   email:
