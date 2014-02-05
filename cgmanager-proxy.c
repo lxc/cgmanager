@@ -88,8 +88,14 @@ int setup_proxy(void)
 			return -1;
 		}
 		if (mount(CGMANAGER_DIR, CGPROXY_DIR, "none", MS_MOVE, 0) < 0) {
-			nih_fatal("unable to rename the socket");
-			return -1;
+			if (rename(CGMANAGER_DIR, CGPROXY_DIR) < 0) {
+				nih_fatal("unable to rename the socket");
+				return -1;
+			}
+			if (mkdir(CGMANAGER_DIR, 0755) < 0) {
+				nih_fatal("unable to create socket dir");
+				return -1;
+			}
 		}
 	}
 	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
