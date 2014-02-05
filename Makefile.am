@@ -26,7 +26,7 @@ sbin_PROGRAMS = cgmanager cgproxy
 
 lib_LTLIBRARIES = libcgmanager.la
 
-pkginclude_HEADERS = cgmanager-client.h
+pkginclude_HEADERS = cgmanager-client.h cgmanager.h
 
 man_MANS = cgproxy.8 cgmanager.8
 
