@@ -25,7 +25,9 @@
 
 <node name="/org/linuxcontainers/cgmanager">
   <interface name="org.linuxcontainers.cgmanager0_0">
-    <!-- Example function -->
+
+    <!-- Every Scm call sends requestor's creds as a first
+	 scm credential over the passed-in fd -->
 
     <method name="Ping">
       <arg name="junk" type="i" direction="in" />
@@ -73,7 +75,6 @@
       <arg name="file" type="s" direction="in" />
       <arg name="mode" type="i" direction="in" />
       <arg name="sockfd" type="h" direction="in" />
-      <!-- new mode is passed as scm_cred over sockfd-->
       <!-- 1/0 (pass/fail) return value comes over sockfd -->
     </method>
     <method name="Chmod">
@@ -160,7 +161,6 @@
       <arg name="output" type="ai" direction="out" />
     </method>
     <!-- still to add: low priority,
-	 Remove
 	 Prune (remove all empty decendents)
 	 removeWhenEmpty
 	 listChildren
