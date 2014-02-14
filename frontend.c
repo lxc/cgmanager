@@ -40,6 +40,7 @@ bool sane_cgroup(const char *cgroup)
 	return true;
 }
 
+/* This function is done at the start of every Scm-enhanced transaction */
 static struct scm_sock_data *alloc_scm_sock_data(NihDBusMessage *message,
 		int fd, enum req_type t)
 {
@@ -63,6 +64,7 @@ static struct scm_sock_data *alloc_scm_sock_data(NihDBusMessage *message,
 		return NULL;
 	}
 
+	/* Read the proxy's credentials from dbus fd */
 	len = sizeof(struct ucred);
 	if (getsockopt(dbusfd, SOL_SOCKET, SO_PEERCRED, &d->pcred, &len) < 0) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -91,6 +93,11 @@ static const char *req_type_to_str(enum req_type r)
 	}
 }
 
+/*
+ * All Scm-enhanced transactions take at least one SCM cred,
+ * the requestor's.  Some require a second SCM cred to identify
+ * a pid or uid/gid:
+ */
 static bool need_two_creds(enum req_type t)
 {
 	switch (t) {
@@ -122,6 +129,10 @@ static void scm_sock_close (struct scm_sock_data *data, NihIo *io)
 	nih_free (io);
 }
 
+/*
+ * Write a char over the socket to tell the client we're ready for
+ * the next SCM credential.
+ */
 static bool kick_fd_client(int fd)
 {
 	char buf = '1';
@@ -133,6 +144,12 @@ static bool kick_fd_client(int fd)
 	return true;
 }
 
+/*
+ * Called when an scm credential has been received.  If this was
+ * the first of two expected creds, then kick the client again
+ * and wait (async) for the next credential.  Otherwise, call
+ * the appropriate completion function to finish the transaction.
+ */
 static void sock_scm_reader(struct scm_sock_data *data,
 			NihIo *io, const char *buf, size_t len)
 {
@@ -193,7 +210,8 @@ void get_pid_scm_complete(struct scm_sock_data *data)
 	if (ret == 0)
 		ret = write(data->fd, output, strlen(output)+1);
 	else
-		ret = write(data->fd, &data->rcred, 0);  // kick the client
+		// Let the client know it failed
+		ret = write(data->fd, &data->rcred, 0);
 	if (ret < 0)
 		nih_error("GetPidCgroupScm: Error writing final result to client: %s",
 			strerror(errno));
