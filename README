@@ -1,0 +1,157 @@
+=== Intro ===
+
+This is a motivation, description and explanation of the cgmanager
+design.  The original design RFC was described here:
+
+http://lwn.net/Articles/575672/
+http://lwn.net/Articles/575683/
+
+And much of it still holds (and is cut-pasted, though edited, here).
+
+===  Cgmanager Design ===
+
+One of the driving goals is to enable nested lxc as simply and safely as
+possible.  If this project is a success, then a large chunk of code can
+be removed from lxc.  I'm considering this project a part of the larger
+lxc project, but given how central it is to systems management that
+doesn't mean that I'll consider anyone else's needs as less important
+than our own.
+
+This document consists of two parts.  The first describes how I
+intend the daemon (cgmanager) to be structured and how it will
+enforce the safety requirements.  The second describes the commands 
+which clients will be able to send to the manager.  The list of
+controller keys which can be set is very incomplete at this point,
+serving mainly to show the approach I was thinking of taking.
+
+=== Summary ===
+
+Each 'host' (identified by a separate instance of the linux kernel) has
+exactly one running daemon to manage control groups.  This daemon
+answers cgroup management requests over a dbus socket, located at
+/sys/fs/cgroup/cgmanager/sock.  The /sys/fs/cgroup/cgmanager directory
+can be bind-mounted into various containers, so that one daemon can support the
+whole system.  (Bind-mounting the directory rather than the socket itself
+allows a container to proceed if the cgmanager is restarted, creating a
+new socket.)
+
+Outline:
+  . A single manager, cgmanager, is started on the host, very early
+    during boot.  It has very few dependencies, and requires only
+    /proc, /run, and /sys to be mounted, with /etc ro.  It mounts
+    the cgroup hierarchies in a private namespace and set defaults for
+    clone_children and use_hierarchy.  It opens a Unix socket at
+    /sys/fs/cgroup/cgmanager/sock.
+  . A client (requestor 'r') can make cgroup requests over
+    /sys/fs/cgroup/cgmanager/sock using dbus calls.  Detailed privilege
+    requirements for r are listed below.
+  . The client request will pertain an existing or new cgroup A.  r's
+    privilege over the cgroup must be checked.  r is said to have
+    privilege over A if A is owned by r's uid, or if A's owner is mapped
+    into r's user namespace, and r is root in that user namespace.
+  . The client request may pertain a victim task v, which may be moved
+    to a new cgroup.  In that case r's privilege over both the cgroup
+    and v must be checked.  r is said to have privilege over v if v
+    is mapped in r's pid namespace, v's uid is mapped into r's user ns,
+    and r is root in its userns.  Or if r and v have the same uid
+    and v is mapped in r's pid namespace.
+  . r's credentials will be taken from socket's peercred, ensuring that
+    pid and uid are translated.
+  . A request to chown a cgroup requires a uid U and gid G.
+  . If r is in the same pid and user namespaces as the cgmanager, then
+    v, U and G can be passed as integer arguments over the D-Bus requests.
+  . If r is not in the same namespaces as the cgmanager, then V, U and G
+    must be passed as SCM_CREDENTIALs so that the cgmanager receives the
+    translated global pid/uid/gid.  Since D-Bus does not support
+    sending SCM_CREDENTIALs as part of a D-Bus message, the D-Bus arguments
+    include a file descriptor.  The SCM_CREDENTIALs are sent over the
+    file descriptor after the D-Bus transaction completes, and the final
+    result is sent over the same file descriptor.
+  . It is desirable that all transactions can be accomplished with simple
+    D-Bus transactions.  Therefore a cgroup manager proxy (cgproxy) is
+    provided.  This will move /sys/fs/cgroup/cgmanager to
+    /sys/fs/cgroup/cgmanager.lower, then serve as a proxy translating
+    D-Bus requests received on /sys/fs/cgroup/cgmanager/sock into
+    SCM-enhanced D-Bus requests on /sys/fs/cgmanager/cgmanager.lower/sock.
+  . In plain D-Bus transactions, the requestor r's credentials are read
+    from the socket.
+  . In SCM-enhanced D-Bus transactions, the proxy p's credentials are read
+    from the socket.  The requestor's credential is sent as an SCM_CREDENTIAL.
+
+Privilege requirements by action:
+    * Requestor of an action (r) over a socket may only make
+      changes to cgroups over which it has privilege.
+    * Requestors may be limited to a certain #/depth of cgroups
+      (to limit memory usage).  This is not yet implemented.
+    * Cgroup hierarchy is responsible for resource limits.  To this end,
+      a request to chown cgroup A to uid U will only chown the directory
+      itself (allowing child cgroup creation) and the tasks and cgroup.procs
+      file.
+    * A requestor must either be uid 0 in its userns with victim mapped
+      ito its userns, or the same uid and in same/ancestor pidns as the
+      victim
+    * If r requests creation of cgroup '/x', /x will be interpreted
+      as relative to r's cgroup.  r cannot make changes to cgroups not
+      under its own current cgroup.
+    * Root in the cgmanager's pid namespace may 'escape' to the cgmanager's
+      cgroup with a special MovePidAbs command.
+    * A proxy may move a task over which it has privilege to the proxy's
+      own cgroup.  This allows the proxy to mimic the cgmanager's special
+      root-may-escape semantics in its own container.
+    * If r requests creation of cgroup '/x', it must have write access
+      to its own cgroup.
+    * if r requests setting a limit under /x, then
+      . either r must be root in its own userns, and UID(/x) be mapped
+        into its userns, or else UID(r) == UID(/x)
+      . /x must not be / (not strictly necessary, all users know to
+        ensure an extra cgroup layer above '/')
+      . setns(UIDNS(r)) would not work, due to in-kernel capable() checks
+        which won't be satisfied.  Therefore we'll need to do privilege
+        checks ourselves, then perform the write as the host root user.
+        (see devices.allow/deny).  Further we need to support older kernels
+        which don't support setns for pid.
+
+Types of requests:
+  * r requests creating cgroup A'/A
+    . lmctfy/cli/commands/create.cc
+    . Verify that UID(r) mapped to 0 in r's userns
+    . R=cgroup_of(r)
+    . Verify that UID(R) is mapped into r's userns
+    . Create R/A'/A
+    . chown R/A'/A to UID(r)
+  * r requests to move task x to cgroup A.
+    . lmctfy/cli/commands/enter.cc
+    . r must send PID(x) as ancillary message
+    . Verify that UID(r) mapped to 0 in r's userns, and UID(x) is mapped into
+      that userns
+      (is it safe to allow if UID(x) == UID(r))?
+    . R=cgroup_of(r)
+    . Verify that R/A is owned by UID(r) or UID(x)?  (not sure that's needed)
+    . echo PID(x) >> /R/A/tasks
+  * r requests chown of cgroup A to uid X
+    . X is passed in ancillary message
+      * ensures it is valid in r's userns
+      * maps the userid to host for us
+    . Verify that UID(r) mapped to 0 in r's userns
+    . R=cgroup_of(r)
+    . Chown R/A to X
+  * r requests cgroup A's 'property=value'
+    . Verify that either
+      * A != ''
+      * UID(r) == 0 on host
+      In other words, r in a userns may not set root cgroup settings.
+    . Verify that UID(r) mapped to 0 in r's userns
+    . R=cgroup_of(r)
+    . Set property=value for R/A
+      * Expect kernel to guarantee hierarchical constraints
+  * r requests deletion of cgroup A
+    . lmctfy/cli/commands/destroy.cc (without -f)
+    . same requirements as setting 'property=value'
+  * r requests purge of cgroup A
+    . lmctfy/cli/commands/destroy.cc (with -f)
+    . same requirements as setting 'property=value'
+
+Long-term we will want the cgroup manager to become more intelligent -
+to place its own limits on clients, to address cpu and device hotplug,
+etc.  Since we will not be doing that in the first prototype, the daemon
+will not keep any state about the clients.
