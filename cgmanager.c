@@ -604,6 +604,15 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 	return file_read_pids(parent, path, pids);
 }
 
+char *extra_cgroup_mounts;
+
+static int
+my_setter (NihOption *option, const char *arg)
+{
+	extra_cgroup_mounts = NIH_MUST( strdup(arg) );
+
+	return 0;
+}
 
 /**
  * options:
@@ -611,6 +620,8 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
  * Command-line options accepted by this program.
  **/
 static NihOption options[] = {
+	{ 'm', "mount", N_("Extra subsystems to mount"),
+		NULL, "subsystems to mount", NULL, my_setter },
 	{ 0, "daemon", N_("Detach and run in the background"),
 		NULL, NULL, &daemonise, NULL },
 
@@ -708,7 +719,7 @@ main (int argc, char *argv[])
 				  client_disconnect);
 	nih_assert (server != NULL);
 
-	if (setup_cgroup_mounts() < 0) {
+	if (setup_cgroup_mounts(extra_cgroup_mounts) < 0) {
 		nih_fatal ("Failed to set up cgroup mounts");
 		exit(1);
 	}

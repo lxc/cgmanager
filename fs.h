@@ -24,7 +24,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-int setup_cgroup_mounts(void);
+int setup_cgroup_mounts(char *extra_mounts);
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup, char *path);
 bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode);
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid);

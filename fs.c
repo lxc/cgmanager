@@ -122,6 +122,79 @@ static void set_use_hierarchy(const char *path)
 	fclose(f);
 }
 
+static bool do_mount_subsys(char *s)
+{
+	struct controller_mounts *tmp;
+	char *src, dest[MAXPATHLEN], *controller;
+	int ret;
+	size_t len = strlen(s);
+
+	if (len > MAXPATHLEN) {
+		nih_fatal("bad controller type: %s", s);
+		return false;
+	}
+	if ((controller = strchr(s, '='))) {
+		/* this is something like 'name=systemd' */
+		src = alloca(len+6);
+		/* so for controller we want 'systemd' */
+		controller++;
+		/* and for source we want "none,name=systemd" */
+		snprintf(src, len+6, "none,%s", s);
+	} else {
+		controller = s;
+		src = s;
+	}
+
+	ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, src);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		nih_fatal("Error calculating pathname for %s and %s", base_path, src);
+		ret = -1;
+		goto out;
+	}
+	if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
+		nih_fatal("Failed to create %s: %s", dest, strerror(errno));
+		ret = -1;
+		goto out;
+	}
+	if ((ret = mount(src, dest, "cgroup", 0, src)) < 0) {
+		nih_fatal("Failed mounting %s: %s", s, strerror(errno));
+		goto out;
+	}
+	ret = -1;
+	tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
+	if (!tmp) {
+		nih_fatal("Out of memory mounting controllers");
+		goto out;
+	}
+	all_mounts = tmp;
+	all_mounts[num_controllers].controller = strdup(controller);
+	if (!all_mounts[num_controllers].controller) {
+		nih_fatal("Out of memory mounting controllers");
+		goto out;
+	}
+	all_mounts[num_controllers].options = NULL;
+	all_mounts[num_controllers].path = strdup(dest);
+	if (!all_mounts[num_controllers].path) {
+		nih_fatal("Out of memory mounting controllers");
+		goto out;
+	}
+	nih_info(_("Mounted %s onto %s"),
+			all_mounts[num_controllers].controller,
+			all_mounts[num_controllers].path);
+	if (strcmp(all_mounts[num_controllers].controller, "cpuset") == 0) {
+		set_clone_children(dest); // TODO make this optional?
+		nih_info(_("set clone_children"));
+	} else if (strcmp(all_mounts[num_controllers].controller, "memory") == 0) {
+		set_use_hierarchy(dest);  // TODO make this optional?
+		nih_info(_("set memory.use_hierarchy"));
+	}
+	num_controllers++;
+	return true;
+
+out:
+	return false;
+}
+
 /**
  * Mount the cgroup filesystems and record the information.
  * This should take configuration data from /etc.  For now,
@@ -134,7 +207,7 @@ static void set_use_hierarchy(const char *path)
  * . any mount options (per-controller)
  * . values for sane_behavior, use_hierarchy, and clone_children
  */
-int setup_cgroup_mounts(void)
+int setup_cgroup_mounts(char *extra_mounts)
 {
 	FILE *cgf;
 	int ret;
@@ -148,14 +221,23 @@ int setup_cgroup_mounts(void)
 		nih_fatal("Error setting up base cgroup path");
 		return -1;
 	}
+
+	if (extra_mounts) {
+		char *e;
+		for (e = strtok(extra_mounts, ","); e; e = strtok(NULL, ",")) {
+			if (!do_mount_subsys(e)) {
+				nih_fatal("Error loading subsystem \"%s\"", e);
+				return -1;
+			}
+		}
+	}
+
 	if ((cgf = fopen("/proc/cgroups", "r")) == NULL) {
 		nih_fatal ("Error opening /proc/cgroups: %s", strerror(errno));
 		return -1;
 	}
 	while (fgets(line, 400, cgf)) {
 		char *p;
-		struct controller_mounts *tmp;
-		char dest[MAXPATHLEN];
 		unsigned long h;
 
 		if (line[0] == '#')
@@ -172,50 +254,12 @@ int setup_cgroup_mounts(void)
 			goto out;
 #endif
 		}
-		ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, line);
-		if (ret < 0 || ret >= MAXPATHLEN) {
-			nih_fatal("Error calculating pathname for %s and %s", base_path, line);
+
+		if (!do_mount_subsys(line)) {
+			nih_fatal("Error mounting subsystem %s", line);
 			ret = -1;
 			goto out;
 		}
-		if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
-			nih_fatal("Failed to create %s: %s", dest, strerror(errno));
-			ret = -1;
-			goto out;
-		}
-		if ((ret = mount(line, dest, "cgroup", 0, line)) < 0) {
-			nih_fatal("Failed mounting %s: %s", line, strerror(errno));
-			goto out;
-		}
-		ret = -1;
-		tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
-		if (!tmp) {
-			nih_fatal("Out of memory mounting controllers");
-			goto out;
-		}
-		all_mounts = tmp;
-		all_mounts[num_controllers].controller = strdup(line);
-		if (!all_mounts[num_controllers].controller) {
-			nih_fatal("Out of memory mounting controllers");
-			goto out;
-		}
-		all_mounts[num_controllers].options = NULL;
-		all_mounts[num_controllers].path = strdup(dest);
-		if (!all_mounts[num_controllers].path) {
-			nih_fatal("Out of memory mounting controllers");
-			goto out;
-		}
-		nih_info(_("Mounted %s onto %s"),
-			all_mounts[num_controllers].controller,
-			all_mounts[num_controllers].path);
-		if (strcmp(all_mounts[num_controllers].controller, "cpuset") == 0) {
-			set_clone_children(dest); // TODO make this optional?
-			nih_info(_("set clone_children"));
-		} else if (strcmp(all_mounts[num_controllers].controller, "memory") == 0) {
-			set_use_hierarchy(dest);  // TODO make this optional?
-			nih_info(_("set memory.use_hierarchy"));
-		}
-		num_controllers++;
 	}
 	nih_info(_("mounted %d controllers"), num_controllers);
 	ret = 0;
@@ -230,6 +274,21 @@ static inline void drop_newlines(char *s)
 
 	for (l=strlen(s); l>0 && s[l-1] == '\n'; l--)
 		s[l-1] = '\0';
+}
+
+/*
+ * The user will pass in 'cpuset' or 'systemd'.  /proc/self/cgroup will
+ * show 'cpuset:' or 'name=systemd:'.  We have to account for that.
+ */
+static bool is_same_controller(const char *cmp, const char *cnt)
+{
+	if (strcmp(cmp, cnt) == 0)
+		return true;
+	if (strncmp(cmp, "name=", 5) != 0)
+		return false;
+	if (strcmp(cmp+5, cnt) == 0)
+		return true;
+	return false;
 }
 
 /*
@@ -258,7 +317,7 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 			continue;
 		*c2 = '\0';
 		for (; (token = strtok_r(c1, ",", &saveptr)); c1 = NULL) {
-			if (strcmp(token, controller) != 0)
+			if (!is_same_controller(token, controller))
 				continue;
 			if (strlen(c2+1) + 1 > MAXPATHLEN) {
 				nih_error("cgroup name too long");
