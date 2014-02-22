@@ -93,7 +93,7 @@ int setup_proxy(void)
 			if (unlink(CGPROXY_SOCK) && errno != ENOENT)
 				nih_warn("failed to remove %s: %s", CGPROXY_SOCK,
 					strerror(errno));
-			if (unlink(CGPROXY_DIR) && errno != ENOENT)
+			if (rmdir(CGPROXY_DIR) && errno != ENOENT)
 				nih_warn("failed to remove %s: %s", CGPROXY_DIR,
 					strerror(errno));
 			if (rename(CGMANAGER_DIR, CGPROXY_DIR) < 0) {
