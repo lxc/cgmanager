@@ -88,6 +88,14 @@ int setup_proxy(void)
 			return -1;
 		}
 		if (mount(CGMANAGER_DIR, CGPROXY_DIR, "none", MS_MOVE, 0) < 0) {
+			/* it wasn't a mount, meaning we are at the host
+			 * level on an old kernel.  So rename it */
+			if (unlink(CGPROXY_SOCK) && errno != ENOENT)
+				nih_warn("failed to remove %s: %s", CGPROXY_SOCK,
+					strerror(errno));
+			if (unlink(CGPROXY_DIR) && errno != ENOENT)
+				nih_warn("failed to remove %s: %s", CGPROXY_DIR,
+					strerror(errno));
 			if (rename(CGMANAGER_DIR, CGPROXY_DIR) < 0) {
 				nih_fatal("unable to rename the socket");
 				return -1;
