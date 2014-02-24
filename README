@@ -155,3 +155,63 @@ Long-term we will want the cgroup manager to become more intelligent -
 to place its own limits on clients, to address cpu and device hotplug,
 etc.  Since we will not be doing that in the first prototype, the daemon
 will not keep any state about the clients.
+
+===  Another look at the safety of requests  ===
+
+Notes:
+
+1. In a plain D-Bus call, the proxy is the requestor.
+2. If a client does an SCM call to the cgmanager socket,
+   then the proxy is the requestor.
+3. In any call over a proxy, the proxy won't be able to
+   make changes outside its own cgroups.  If it misbehaves,
+   damage is contained so it only damages itself..
+4. Chained proxying is not supported.  If a proxy gets a
+   request where proxy != requestor, the call is rejected.
+5. The identity of the proxy (which may be the requestor) cannot
+   be forged;  it is taken from the socket credential.  A more
+   privileged user must not allow a less privileged task to
+   have access to the opened DBus socket, as the credential will
+   be that at the time of connect().
+
+On newer kernels, cgmanager can tell whether a proxy or requestor
+is in the same namespace as itself.  On older kernels, it cannot.
+
+ . for Create, this is ok.  We have the proxy's real pid and
+   can constrain create under its cgroup.
+ . for getPidCgroup, we can ensure that only results under the
+   parent's cgroup are returned.
+   we can NOT ensure that results will make sense for plain
+   DBus calls, as we cannot guarantee that proxy is in the same
+   ns as cgmanager.  However, this is not unsafe.
+   When we can and do detect that p is in a different pid namespace,
+   then we reject the call, because the result cannot be sensible.
+ . for chmod: We constrain under proxy's cgroup, so this is safe.
+ . for chown: on older kernel we cannot guarantee that the
+   uid/gid make sense on the host;  However
+     . root on the root host - no translation necessary
+     . root in a non-user-ns container: no translation necessary
+     . root in a unprivileged container: won't have privilege
+       to do any chown without going through a proxy.
+   Therefore rejecting calls from another namespace is not
+   necessary.  The worst it will do is to give -EPERM for calls
+   which for root in a unprivileged container otherwise would be
+   allowed to do.
+ . movepid:
+     . root on root host - fine
+     . root in a non-user-ns container: we can only ensure that
+       the victim be under the proxy's cgroup.  If that is the
+       case, then root (which is also root on the host) is allowed
+       to move the task.
+   When we can and do detect a different pid namespace, then we
+   reject the call because the results cannot make sense.
+ . MovePidAbs: On an older kernel, or if the task is in a different
+   namespace, then this requires a proxy.  The cgmanager will only
+   allow escaping up to the level of the proxy.
+     . root on root host - allowed to escape.
+     . root in a non-user-ns container: allowed to escape up to the
+       proxy's level.  If the host misconfigures the container so
+       that the host's proxy is in the container, then root can
+       escape completely.
+     . if root tries to mimick a proxy, then it can only escape to
+       the proxy's level - it's own.  So it cannot escape at all.
