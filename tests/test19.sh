@@ -24,11 +24,11 @@ if [ "$orig_cg" = "$new_cg" ]; then
 fi
 
 cgmescape / $$
-new_cg=`awk -F: '/memory/ { print $3 }' /proc/$$/cgroup`
+new2_cg=`awk -F: '/memory/ { print $3 }' /proc/$$/cgroup`
 
-if [ "$orig_cg" != "$new_cg" ]; then
+if [ "$new_cg" = "$new2_cg" ]; then
 	echo "root was not able to escape his cgroup"
-	echo "orig_cg $orig_cg new-cg $new_cg"
+	echo "orig_cg $orig_cg new-cg $new_cg final cg $new2_cg"
 	exit 1
 fi
 
