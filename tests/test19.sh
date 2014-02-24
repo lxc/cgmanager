@@ -14,12 +14,19 @@ cgmescape() {
 }
 
 orig_cg=`awk -F: '/memory/ { print $3 }' /proc/$$/cgroup`
-delme=`echo I am $$`
-echo $delme
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:memory string:'escapetest'
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:memory string:'escapetest' int32:$$
+new_cg=`awk -F: '/memory/ { print $3 }' /proc/$$/cgroup`
+if [ "$orig_cg" = "$new_cg" ]; then
+	echo "root was not able to enter the escapetest cgroup"
+	echo "orig_cg $orig_cg new-cg $new_cg"
+	exit 1
+fi
+
 cgmescape / $$
 new_cg=`awk -F: '/memory/ { print $3 }' /proc/$$/cgroup`
 
-if [ "$orig_cg" = "$new_cg" ]; then
+if [ "$orig_cg" != "$new_cg" ]; then
 	echo "root was not able to escape his cgroup"
 	echo "orig_cg $orig_cg new-cg $new_cg"
 	exit 1
