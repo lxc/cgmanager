@@ -259,9 +259,11 @@ int chown_main(const char *controller, const char *cgroup, struct ucred p,
 
 	/* If caller is not root in his userns, then he can't chown, as
 	 * that requires privilege over two uids */
-	if (!hostuid_to_ns(r.uid, r.pid, &uid)|| uid != 0) {
-		nih_error("Chown requested by non-root uid %u", r.uid);
-		return -1;
+	if (r.uid) {
+		if (!hostuid_to_ns(r.uid, r.pid, &uid) || uid != 0) {
+			nih_error("Chown requested by non-root uid %u", r.uid);
+			return -1;
+		}
 	}
 
 	if (!sane_cgroup(cgroup)) {
