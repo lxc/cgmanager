@@ -220,7 +220,7 @@ int send_pid(int sock, int pid)
 bool is_same_pidns(int pid)
 {
 	if (!setns_pid_supported)
-		return false;
+		return true;
 	if (read_pid_ns_link(pid) != mypidns)
 		return false;
 	return true;
@@ -233,7 +233,7 @@ bool is_same_pidns(int pid)
 bool is_same_userns(int pid)
 {
 	if (!setns_user_supported)
-		return false;
+		return true;
 	if (read_user_ns_link(pid) != myuserns)
 		return false;
 	return true;

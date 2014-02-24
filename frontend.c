@@ -285,12 +285,12 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	nih_info (_("GetPidCgroup: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	// XXX can we safely ignore this?
-	if (!setns_pid_supported) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"kernel too old, use GetPidCgroupScm");
-		return -1;
-	}
+	/*
+	 * getpidcgroup results cannot make sense as the pid is not
+	 * translated.  Note that on an old enough kernel we cannot detect
+	 * this situation.  In that case we allow it - it will confuse the
+	 * caller, but cause no harm
+	 */
 	if (!is_same_pidns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"GetPidCgroup called from non-init namespace");
@@ -384,6 +384,20 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, rcred.pid, rcred.uid, rcred.gid);
 
+	/* On an older kernel, require a proxy */
+	if (!setns_pid_supported) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "A proxy is required");
+		return -1;
+	}
+
+	/* If task is in a different namespace, require a proxy */
+	if (!is_same_pidns(rcred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			     "Escape request from different namespace requires a proxy");
+		return -1;
+	}
+
 	vcred.uid = 0;
 	vcred.gid = 0;
 	vcred.pid = plain_pid;
@@ -468,16 +482,29 @@ int cgmanager_move_pid_abs (void *data, NihDBusMessage *message,
 	vcred.uid = 0;
 	vcred.gid = 0;
 	vcred.pid = plain_pid;
+
 #ifdef CGMANAGER
-	if (!is_same_pidns(rcred.pid)) {
+	/*
+	 * On an older kernel, require a proxy
+	 */
+	if (!setns_pid_supported) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					     "Escape request from %u",
-					     rcred.uid);
+					     "A proxy is required");
 		return -1;
 	}
+#endif
+
+	/* If task is in a different namespace, require a proxy */
+	if (!is_same_pidns(rcred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			     "Escape request from different namespace requires a proxy");
+		return -1;
+	}
+
+#ifdef CGMANAGER
 	/*
 	 * A plain dbus request to escape cgroup root was made by a root
-	 * owned task in our namespace.  We will send ourselves as the
+	 * owned task in cgmanager's namespace.  We will send ourselves as the
 	 * proxy.
 	 */
 	struct ucred mycred = {
@@ -486,6 +513,12 @@ int cgmanager_move_pid_abs (void *data, NihDBusMessage *message,
 		.gid = getgid()
 	};
 #else
+	/*
+	 * This is the !CGMANAGER case.  We are in the proxy.  We don't
+	 * support chained proxying anyway, so it is simple - the requestor
+	 * is the proxy at this point;  then we will proxy the call on to
+	 * the cgmanager
+	 */
 #define mycred rcred
 #endif
 	ret = move_pid_abs_main(controller, cgroup, mycred, rcred, vcred);
@@ -661,17 +694,13 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	// XXX what are the ramifications if we ignore this?
-	if (!setns_pid_supported || !setns_user_supported) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"kernel too old, use ChownScm");
-		return -1;
-	}
-	if (!is_same_pidns(rcred.pid)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"chown called from different pid namespace");
-		return -1;
-	}
+	/*
+	 * If chown is called from a different user namespace, then the
+	 * results cannot make sense.  Note that on an old enough kernel
+	 * we cannot detect this.  However, in that case the caller will
+	 * not have privilege so will simply get a confusing -EPERM.  In
+	 * other words, we are doing this as a courtesy when possible
+	 */
 	if (!is_same_userns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"chown called from different user namespace");
@@ -766,23 +795,6 @@ int cgmanager_chmod (void *data, NihDBusMessage *message,
 
 	nih_info (_("Chown: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, rcred.pid, rcred.uid, rcred.gid);
-
-	// XXX what are the ramifications if we ignore this?
-	if (!setns_pid_supported || !setns_user_supported) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"kernel too old, use ChmodScm");
-		return -1;
-	}
-	if (!is_same_pidns(rcred.pid)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"chmod called from different pid namespace");
-		return -1;
-	}
-	if (!is_same_userns(rcred.pid)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"chmod called from different user namespace");
-		return -1;
-	}
 
 	ret = chmod_main(controller, cgroup, file, rcred, rcred, mode);
 	if (ret)
