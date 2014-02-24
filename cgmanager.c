@@ -52,6 +52,20 @@ int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 	return 0;
 }
 
+static bool victim_under_proxy_cgroup(char *rcgpath, pid_t v,
+		const char *controller)
+{
+	char vcgpath[MAXPATHLEN];
+
+	if (!compute_pid_cgroup(v, controller, "", vcgpath)) {
+		nih_error("Could not determine the victim's cgroup");
+		return false;
+	}
+	if (strncmp(vcgpath, rcgpath, strlen(rcgpath)) != 0)
+		return false;
+	return true;
+}
+
 int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, struct ucred v, bool escape)
 {
@@ -77,6 +91,13 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
+
+	// If the victim is not under proxy's cgroup, refuse
+	if (!victim_under_proxy_cgroup(rcgpath, v.pid, controller)) {
+		nih_error("victim's cgroup is not under proxy's (p.uid %u)", p.uid);
+		return -1;
+	}
+
 	/* rcgpath + / + cgroup + /tasks + \0 */
 	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN - 8) {
 		nih_error("Path name too long");

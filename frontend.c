@@ -384,13 +384,6 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 	nih_info (_("MovePid: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	/* On an older kernel, require a proxy */
-	if (!setns_pid_supported) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-					     "A proxy is required");
-		return -1;
-	}
-
 	/* If task is in a different namespace, require a proxy */
 	if (!is_same_pidns(rcred.pid)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
