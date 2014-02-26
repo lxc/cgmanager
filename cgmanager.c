@@ -19,6 +19,14 @@
 
 #include <frontend.h>
 
+/*
+ * Maximum depth of directories we allow in Create
+ * Default is 16.  Figure 4 directories per level of container
+ * nesting (/user/1000.user/c2.session/c1), that lets us nest
+ * 4 containers deep.
+ * */
+static int maxdepth = 16;
+
 /* GetPidCgroup */
 int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 			 struct ucred r, struct ucred v, char **output)
@@ -26,13 +34,13 @@ int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("Could not determine the requestor cgroup");
 		return -1;
 	}
 
 	// Get v's cgroup in vcgpath
-	if (!compute_pid_cgroup(v.pid, controller, "", vcgpath)) {
+	if (!compute_pid_cgroup(v.pid, controller, "", vcgpath, NULL)) {
 		nih_error("Could not determine the victim cgroup");
 		return -1;
 	}
@@ -57,7 +65,7 @@ static bool victim_under_proxy_cgroup(char *rcgpath, pid_t v,
 {
 	char vcgpath[MAXPATHLEN];
 
-	if (!compute_pid_cgroup(v, controller, "", vcgpath)) {
+	if (!compute_pid_cgroup(v, controller, "", vcgpath, NULL)) {
 		nih_error("Could not determine the victim's cgroup");
 		return false;
 	}
@@ -87,7 +95,7 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	// Get r's current cgroup in rcgpath
 	if (escape)
 		query = p.pid;
-	if (!compute_pid_cgroup(query, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(query, controller, "", rcgpath, NULL)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -163,7 +171,7 @@ int move_pid_abs_main(const char *controller, const char *cgroup, struct ucred p
 int create_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, int32_t *existed)
 {
-	int ret;
+	int ret, depth;
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN], dirpath[MAXPATHLEN];
 	nih_local char *copy = NULL;
 	size_t cgroup_len;
@@ -179,8 +187,14 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 	}
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, &depth)) {
 		nih_error("Could not determine the requested cgroup");
+		return -1;
+	}
+
+	depth += get_path_depth(cgroup);
+	if (depth > maxdepth) {
+		nih_error("Cgroup too deep: %s/%s", rcgpath, cgroup);
 		return -1;
 	}
 
@@ -200,7 +214,7 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 		oldp2 = *p2;
 		*p2 = '\0';
 		if (strcmp(p1, "..") == 0) {
-			nih_error("Out of memory copying cgroup name");
+			nih_error("Invalid cgroup path at create: %s", p1);
 			return -1;
 		}
 		strncat(path, "/", MAXPATHLEN-1);
@@ -272,7 +286,7 @@ int chown_main(const char *controller, const char *cgroup, struct ucred p,
 	}
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -327,7 +341,7 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 	}
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -372,7 +386,7 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -421,7 +435,7 @@ int set_value_main(const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -545,7 +559,7 @@ int remove_main(const char *controller, const char *cgroup, struct ucred p,
 	}
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath)) {
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -604,7 +618,7 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path)) {
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("Could not determine the requested cgroup");
 		return -1;
 	}
@@ -643,6 +657,8 @@ my_setter (NihOption *option, const char *arg)
  * Command-line options accepted by this program.
  **/
 static NihOption options[] = {
+	{ 0, "max-depth", N_("Maximum cgroup depth"),
+		NULL, NULL, &maxdepth, NULL },
 	{ 'm', "mount", N_("Extra subsystems to mount"),
 		NULL, "subsystems to mount", NULL, my_setter },
 	{ 0, "daemon", N_("Detach and run in the background"),
