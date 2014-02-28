@@ -735,6 +735,88 @@ out:
 	return ret;
 }
 
+int list_children_main (void *parent, const char *controller, const char *cgroup,
+		    struct ucred p, struct ucred r, char ***output)
+{
+	DBusMessage *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1;
+	uint32_t len;
+	int32_t nrkids;
+	nih_local char * paths = NULL;
+	char *s;
+	int i;
+
+	*output = NULL;
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
+	if (!(message = start_dbus_request("ListChildrenScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(message, &iter);
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+
+	if (!complete_dbus_request(message, sv, &r, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
+		goto out;
+	}
+
+	if (recv(sv[0], &nrkids, sizeof(int32_t), 0) != sizeof(int32_t))
+		goto out;
+	if (nrkids == 0) {
+		ret = 0;
+		goto out;
+	}
+	if (nrkids < 0) {
+		nih_error("Server encountered an error: bad cgroup?");
+		ret = -1;
+		goto out;
+	}
+	if (recv(sv[0], &len, sizeof(uint32_t), 0) != sizeof(uint32_t))
+		goto out;
+
+	paths = nih_alloc(NULL, len);
+	if (read(sv[0], paths, len) != len) {
+		nih_error("%s: Failed getting paths from server", __func__);
+		goto out;
+	}
+
+	*output = NIH_MUST( nih_alloc(parent, sizeof( char*)*(nrkids+1)) );
+
+	s = paths;
+	(*output)[nrkids] = NULL;
+	for (i=0; i<nrkids; i++) {
+		(*output)[i] = NIH_MUST( nih_strdup(parent, s) );
+		s += strlen(s) + 1;
+	}
+	ret = nrkids;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	return ret;
+}
+
 /**
  * options:
  *

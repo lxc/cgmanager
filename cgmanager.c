@@ -641,6 +641,31 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 	return file_read_pids(parent, path, pids);
 }
 
+int list_children_main(void *parent, const char *controller, const char *cgroup,
+			struct ucred p, struct ucred r, char ***output)
+{
+	char path[MAXPATHLEN];
+
+	*output = NULL;
+	if (!sane_cgroup(cgroup)) {
+		nih_error("unsafe cgroup");
+		return -1;
+	}
+
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+		nih_error("Could not determine the requested cgroup");
+		return -1;
+	}
+
+	/* Check access rights to the cgroup directory */
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
+		nih_error("Pid %d may not access %s\n", r.pid, path);
+		return -1;
+	}
+
+	return get_child_directories(parent, path, output);
+}
+
 char *extra_cgroup_mounts;
 
 static int

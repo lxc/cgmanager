@@ -89,6 +89,7 @@ static const char *req_type_to_str(enum req_type r)
 		case REQ_TYPE_REMOVE: return "remove";
 		case REQ_TYPE_GET_TASKS: return "get_tasks";
 		case REQ_TYPE_CHMOD: return "chmod";
+		case REQ_TYPE_LIST_CHILDREN: return "list_children";
 		default: return "invalid";
 	}
 }
@@ -182,6 +183,7 @@ static void sock_scm_reader(struct scm_sock_data *data,
 	case REQ_TYPE_SET_VALUE: set_value_complete(data); break;
 	case REQ_TYPE_REMOVE: remove_scm_complete(data); break;
 	case REQ_TYPE_GET_TASKS: get_tasks_scm_complete(data); break;
+	case REQ_TYPE_LIST_CHILDREN: list_children_scm_complete(data); break;
 	default:
 		nih_fatal("%s: bad req_type %d", __func__, data->type);
 		exit(1);
@@ -1165,6 +1167,132 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 		*pids = tmp;
 		ret = 0;
 	} else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+void list_children_scm_complete(struct scm_sock_data *data)
+{
+	int i, ret;
+	uint32_t len = 0, remainlen;
+	int32_t nrkids;
+	char **output; // nih_alloced with data as parent; freed at io_shutdown
+	nih_local char * path = NULL;
+	char *p;
+
+	nrkids = list_children_main(data, data->controller, data->cgroup,
+			data->pcred, data->rcred, &output);
+	if (write(data->fd, &nrkids, sizeof(int32_t)) != sizeof(int32_t)) {
+		nih_error("%s: error writing results", __func__);
+		return;
+	}
+	if (nrkids < 0) {
+		nih_error("Error getting children for %s:%s for pid %d",
+			data->controller, data->cgroup, data->rcred.pid);
+		return;
+	}
+	if (nrkids == 0)  /* no names to write, we are done */
+		return;
+
+	for (i=0; i < nrkids; i++)
+		len += strlen(output[i]) + 1;
+	path = nih_alloc(NULL, len);
+	if (!path) {
+		nih_error("Out of memory");
+		return;
+	}
+	p = path;
+	remainlen = len;
+	for (i=0; i < nrkids; i++) {
+		ret = snprintf(p, remainlen, "%s", output[i]);
+		if (ret < 0 || ret >= remainlen) // bogus
+			return;
+		p += ret + 1;
+		remainlen -= ret + 1;
+	}
+
+	if (write(data->fd, &len, sizeof(uint32_t)) != sizeof(uint32_t)) {
+		nih_error("%s: error writing results", __func__);
+		return;
+	}
+
+	if (write(data->fd, path, len) != len) {
+		nih_error("list_children_scm: Error writing final result to client");
+		return;
+	}
+}
+
+int cgmanager_list_children_scm (void *data, NihDBusMessage *message,
+		 const char *controller, const char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_LIST_CHILDREN);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests the number of tasks in @cgroup in @controller
+ * returns nrpids, or -1 on error.
+ */
+int cgmanager_list_children (void *data, NihDBusMessage *message,
+		const char *controller, const char *cgroup, char ***output)
+{
+	int fd = 0, ret;
+	struct ucred rcred;
+	socklen_t len;
+
+	nih_assert(output);
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("ListChildren: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	ret = list_children_main(message, controller, cgroup, rcred, rcred, output);
+	if (ret >= 0)
+		ret = 0;
+	else
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "invalid request");
 	return ret;

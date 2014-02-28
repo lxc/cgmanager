@@ -887,3 +887,59 @@ bool move_self_to_root(void)
 	}
 	return true;
 }
+
+/*
+ * get_child_directories:
+ *
+ * @parent: parent which will be given a reference to the returned string
+ * (to allow the returned value to be freed automatically when @parent is
+ * freed).
+ * @path: Full path whose child directories to list.
+ * output: pointer to which the list of directory names will be stored.
+ *
+ * Read all child directories under @path.
+ *
+ * Returns: Number of directories read.  The names will be placed in the
+ * null-terminated array @output.
+ */
+int get_child_directories(void *parent, const char *path, char ***output)
+{
+	int used = 0, alloced = 5;
+	DIR *d;
+	struct dirent dirent, *direntp;
+
+	nih_assert(output);
+	d = opendir(path);
+	if (!d) {
+		nih_error("%s: failed to open directory %s: %s",
+			__func__, path, strerror(errno));
+		return -1;
+	}
+	*output = NIH_MUST( nih_alloc(parent, alloced * sizeof(char *)) );
+	(*output)[0] = NULL;
+	while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
+		if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
+			continue;
+		if (DT_DIR != direntp->d_type)
+			continue;
+		if (used+1 >= alloced) {
+			char **tmp;
+			alloced += 5;
+			tmp = nih_realloc(*output, parent, alloced * sizeof(char *));
+			if (!tmp) {
+				if (*output)
+					nih_free(*output);
+				output = NULL;
+				nih_error("%s: Out of memory", __func__);
+				closedir(d);
+				return -1;
+			}
+			*output = tmp;
+		}
+		(*output)[used] = NIH_MUST( nih_strdup(parent, direntp->d_name) );
+		(*output)[used+1] = NULL;
+		used++;
+	}
+	closedir(d);
+	return used;
+}
