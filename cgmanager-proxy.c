@@ -270,7 +270,7 @@ int do_move_pid_main (const char *controller, const char *cgroup,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -311,11 +311,11 @@ int move_pid_main (const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, struct ucred v)
 {
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 	if (cgroup[0] == '/') {
-		nih_error("uid %u tried to escape its cgroup", r.uid);
+		nih_error("%s: uid %u tried to escape its cgroup", __func__, r.uid);
 		return -1;
 	}
 
@@ -326,11 +326,11 @@ int move_pid_abs_main (const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, struct ucred v)
 {
 	if (r.uid) {
-		nih_error("uid %u tried to escape", r.uid);
+		nih_error("%s: uid %u tried to escape", __func__, r.uid);
 		return -1;
 	}
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 	return do_move_pid_main(controller, cgroup, p, r, v, "MovePidAbsScm");
@@ -350,7 +350,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred p,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -401,7 +401,7 @@ int chown_main (const char *controller, const char *cgroup,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -451,7 +451,7 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -509,7 +509,7 @@ int get_value_main (void *parent, const char *controller, const char *cgroup,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -569,7 +569,7 @@ int set_value_main (const char *controller, const char *cgroup,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -627,7 +627,7 @@ int remove_main (const char *controller, const char *cgroup, struct ucred p,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -684,7 +684,7 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -754,7 +754,7 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -789,7 +789,7 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 		goto out;
 	}
 	if (nrkids < 0) {
-		nih_error("Server encountered an error: bad cgroup?");
+		nih_error("%s: Server encountered an error: bad cgroup?", __func__);
 		ret = -1;
 		goto out;
 	}
@@ -849,7 +849,7 @@ main (int argc, char *argv[])
 		exit (1);
 
 	if (geteuid() != 0) {
-		nih_error(_("Cgmanager proxy must be run as root"));
+		nih_error("%s: Cgmanager proxy must be run as root", __func__);
 		exit(1);
 	}
 

@@ -35,20 +35,20 @@ int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
-		nih_error("Could not determine the requestor cgroup");
+		nih_error("%s: Could not determine the requestor cgroup", __func__);
 		return -1;
 	}
 
 	// Get v's cgroup in vcgpath
 	if (!compute_pid_cgroup(v.pid, controller, "", vcgpath, NULL)) {
-		nih_error("Could not determine the victim cgroup");
+		nih_error("%s: Could not determine the victim cgroup", __func__);
 		return -1;
 	}
 
 	// Make sure v's cgroup is under r's
 	int rlen = strlen(rcgpath);
 	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
-		nih_error("v (%d)'s cgroup is not below r (%d)'s",
+		nih_error("%s: v (%d)'s cgroup is not below r (%d)'s", __func__,
 			v.pid, r.pid);
 		return -1;
 	}
@@ -66,7 +66,7 @@ static bool victim_under_proxy_cgroup(char *rcgpath, pid_t v,
 	char vcgpath[MAXPATHLEN];
 
 	if (!compute_pid_cgroup(v, controller, "", vcgpath, NULL)) {
-		nih_error("Could not determine the victim's cgroup");
+		nih_error("%s: Could not determine the victim's cgroup", __func__);
 		return false;
 	}
 	if (strncmp(vcgpath, rcgpath, strlen(rcgpath)) != 0)
@@ -82,13 +82,13 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	pid_t query = r.pid;
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	// verify that ucred.pid may move target pid
 	if (!may_move_pid(r.pid, r.uid, v.pid)) {
-		nih_error("%d may not move %d", r.pid, v.pid);
+		nih_error("%s: %d may not move %d", __func__, r.pid, v.pid);
 		return -1;
 	}
 
@@ -96,53 +96,53 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	if (escape)
 		query = p.pid;
 	if (!compute_pid_cgroup(query, controller, "", rcgpath, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
 	// If the victim is not under proxy's cgroup, refuse
 	if (!victim_under_proxy_cgroup(rcgpath, v.pid, controller)) {
-		nih_error("victim's cgroup is not under proxy's (p.uid %u)", p.uid);
+		nih_error("%s: victim's cgroup is not under proxy's (p.uid %u)", __func__, p.uid);
 		return -1;
 	}
 
 	/* rcgpath + / + cgroup + /tasks + \0 */
 	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN - 8) {
-		nih_error("Path name too long");
+		nih_error("%s: Path name too long", __func__);
 		return -1;
 	}
 	strcpy(path, rcgpath);
 	strncat(path, "/", MAXPATHLEN-1);
 	strncat(path, cgroup, MAXPATHLEN-1);
 	if (realpath_escapes(path, rcgpath)) {
-		nih_error("Invalid path %s", path);
+		nih_error("%s: Invalid path %s", __func__, path);
 		return -1;
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("pid %d (uid %u gid %u) may not read under %s",
+		nih_error("%s: pid %d (uid %u gid %u) may not read under %s", __func__,
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 	// is r allowed to write to tasks file?
 	strncat(path, "/tasks", MAXPATHLEN-1);
 	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
-		nih_error("pid %d (uid %u gid %u) may not write to %s",
+		nih_error("%s: pid %d (uid %u gid %u) may not write to %s", __func__,
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 	f = fopen(path, "w");
 	if (!f) {
-		nih_error("Failed to open %s", path);
+		nih_error("%s: Failed to open %s", __func__, path);
 		return -1;
 	}
 	if (fprintf(f, "%d\n", v.pid) < 0) {
 		fclose(f);
-		nih_error("Failed to open %s", path);
+		nih_error("%s: Failed to open %s", __func__, path);
 		return -1;
 	}
 	if (fclose(f) != 0) {
-		nih_error("Failed to write %d to %s", v.pid, path);
+		nih_error("%s: Failed to write %d to %s", __func__, v.pid, path);
 		return -1;
 	}
 	nih_info(_("%d moved to %s:%s by %d's request"), v.pid,
@@ -155,7 +155,7 @@ int move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 {
 	if (cgroup[0] == '/') {
 		// We could try to be accomodating, but let's not fool around right now
-		nih_error("Bad requested cgroup path: %s", cgroup);
+		nih_error("%s: Bad requested cgroup path: %s", __func__, cgroup);
 		return -1;
 	}
 
@@ -182,26 +182,26 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 		return 0;
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, &depth)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
 	depth += get_path_depth(cgroup);
 	if (depth > maxdepth) {
-		nih_error("Cgroup too deep: %s/%s", rcgpath, cgroup);
+		nih_error("%s: Cgroup too deep: %s/%s", __func__, rcgpath, cgroup);
 		return -1;
 	}
 
 	cgroup_len = strlen(cgroup);
 
 	if (strlen(rcgpath) + cgroup_len > MAXPATHLEN) {
-		nih_error("Path name too long");
+		nih_error("%s: Path name too long", __func__);
 		return -1;
 	}
 	copy = NIH_MUST( nih_strndup(NULL, cgroup, cgroup_len) );
@@ -214,7 +214,7 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 		oldp2 = *p2;
 		*p2 = '\0';
 		if (strcmp(p1, "..") == 0) {
-			nih_error("Invalid cgroup path at create: %s", p1);
+			nih_error("%s: Invalid cgroup path at create: %s", __func__, p1);
 			return -1;
 		}
 		strncat(path, "/", MAXPATHLEN-1);
@@ -223,14 +223,14 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 			*existed = 1;
 			// TODO - properly use execute perms
 			if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-				nih_error("pid %d (uid %u gid %u) may not look under %s",
+				nih_error("%s: pid %d (uid %u gid %u) may not look under %s", __func__,
 					r.pid, r.uid, r.gid, path);
 				return -1;
 			}
 			goto next;
 		}
 		if (!may_access(r.pid, r.uid, r.gid, dirpath, O_RDWR)) {
-			nih_error("pid %d (uid %u gid %u) may not create under %s",
+			nih_error("%s: pid %d (uid %u gid %u) may not create under %s", __func__,
 				r.pid, r.uid, r.gid, dirpath);
 			return -1;
 		}
@@ -240,11 +240,11 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 				*existed = 1;
 				goto next;
 			}
-			nih_error("failed to create %s", path);
+			nih_error("%s: failed to create %s", __func__, path);
 			return -1;
 		}
 		if (!chown_cgroup_path(path, r.uid, r.gid, true)) {
-			nih_error("Failed to change ownership on %s to %u:%u",
+			nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
 				path, r.uid, r.gid);
 			rmdir(path);
 			return -1;
@@ -275,47 +275,47 @@ int chown_main(const char *controller, const char *cgroup, struct ucred p,
 	 * that requires privilege over two uids */
 	if (r.uid) {
 		if (!hostuid_to_ns(r.uid, r.pid, &uid) || uid != 0) {
-			nih_error("Chown requested by non-root uid %u", r.uid);
+			nih_error("%s: Chown requested by non-root uid %u", __func__, r.uid);
 			return -1;
 		}
 	}
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 	/* rcgpath + / + cgroup + \0 */
 	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN+2) {
-		nih_error("Path name too long");
+		nih_error("%s: Path name too long", __func__);
 		return -1;
 	}
 	path = NIH_MUST( nih_sprintf(NULL, "%s/%s", rcgpath, cgroup) );
 	if (realpath_escapes(path, rcgpath)) {
-		nih_error("Invalid path %s", path);
+		nih_error("%s: Invalid path %s", __func__, path);
 		return -1;
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("pid %d (uid %u gid %u) may not read under %s",
+		nih_error("%s: pid %d (uid %u gid %u) may not read under %s", __func__,
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 
 	// does r have privilege over the cgroup dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
-		nih_error("Pid %d may not chown %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not chown %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	// go ahead and chown it.
 	if (!chown_cgroup_path(path, v.uid, v.gid, false)) {
-		nih_error("Failed to change ownership on %s to %u:%u",
+		nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
 			path, v.uid, v.gid);
 		return -1;
 	}
@@ -330,7 +330,7 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 	nih_local char *path = NULL;
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
@@ -342,7 +342,7 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
@@ -350,25 +350,25 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 	if (file && strlen(file))
 		NIH_MUST( nih_strcat_sprintf(&path, NULL, "/%s", file) );
 	if (realpath_escapes(path, rcgpath)) {
-		nih_error("Invalid path %s", path);
+		nih_error("%s: Invalid path %s", __func__, path);
 		return -1;
 	}
 	// is r allowed to descend under the parent dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("pid %d (uid %u gid %u) may not read under %s",
+		nih_error("%s: pid %d (uid %u gid %u) may not read under %s", __func__,
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
 
 	// does r have privilege over the cgroup dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
-		nih_error("Pid %d may not chmod %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not chmod %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	// go ahead and chmod it.
 	if (!chmod_cgroup_path(path, mode)) {
-		nih_error("Failed to change mode on %s to %d",
+		nih_error("%s: Failed to change mode on %s to %d", __func__,
 			path, mode);
 		return -1;
 	}
@@ -382,24 +382,24 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 	char path[MAXPATHLEN];
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	/* append the filename */
 	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_error("filename too long for cgroup %s key %s", path, key);
+		nih_error("%s: filename too long for cgroup %s key %s", __func__, path, key);
 		return -1;
 	}
 
@@ -408,14 +408,14 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 
 	/* Check access rights to the file itself */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	/* read and return the value */
 	*value = file_read_string(parent, path);
 	if (!*value) {
-		nih_error("Failed to read value from %s", path);
+		nih_error("%s: Failed to read value from %s", __func__, path);
 		return -1;
 	}
 
@@ -431,24 +431,24 @@ int set_value_main(const char *controller, const char *cgroup,
 	char path[MAXPATHLEN];
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	/* append the filename */
 	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_error("filename too long for cgroup %s key %s", path, key);
+		nih_error("%s: filename too long for cgroup %s key %s", __func__, path, key);
 		return -1;
 	}
 
@@ -457,13 +457,13 @@ int set_value_main(const char *controller, const char *cgroup,
 
 	/* Check access rights to the file itself */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
-		nih_error("Pid %d may not access %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	/* read and return the value */
 	if (!set_value(path, value)) {
-		nih_error("Failed to set value %s to %s", path, value);
+		nih_error("%s: Failed to set value %s to %s", __func__, path, value);
 		return -1;
 	}
 
@@ -506,7 +506,7 @@ static int recursive_rmdir(char *path)
 
 	dir = opendir(path);
 	if (!dir) {
-		nih_error("Failed to open dir %s for recursive deletion", path);
+		nih_error("%s: Failed to open dir %s for recursive deletion", __func__, path);
 		return -1;
 	}
 
@@ -554,20 +554,20 @@ int remove_main(const char *controller, const char *cgroup, struct ucred p,
 	*existed = 1;
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
 	cgroup_len = strlen(cgroup);
 
 	if (strlen(rcgpath) + cgroup_len > MAXPATHLEN) {
-		nih_error("Path name too long");
+		nih_error("%s: Path name too long", __func__);
 		return -1;
 	}
 
@@ -589,14 +589,14 @@ int remove_main(const char *controller, const char *cgroup, struct ucred p,
 		return -1;
 	*p1 = '\0';
 	if (!may_access(r.pid, r.uid, r.gid, copy, O_WRONLY)) {
-		nih_error("pid %d (%u:%u) may not remove %s",
+		nih_error("%s: pid %d (%u:%u) may not remove %s", __func__,
 			r.pid, r.uid, r.gid, copy);
 		return -1;
 	}
 
 	if (!recursive) {
 		if (rmdir(working) < 0) {
-			nih_error("Failed to remove %s: %s", working, strerror(errno));
+			nih_error("%s: Failed to remove %s: %s", __func__, working, strerror(errno));
 			return -1;
 		}
 	} else if (recursive_rmdir(working) < 0)
@@ -614,24 +614,24 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 	const char *key = "tasks";
 
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	/* append the filename */
 	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_error("filename too long for cgroup %s key %s", path, key);
+		nih_error("%s: filename too long for cgroup %s key %s", __func__, path, key);
 		return -1;
 	}
 
@@ -648,18 +648,18 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 
 	*output = NULL;
 	if (!sane_cgroup(cgroup)) {
-		nih_error("unsafe cgroup");
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
 	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
-		nih_error("Could not determine the requested cgroup");
+		nih_error("%s: Could not determine the requested cgroup", __func__);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("Pid %d may not access %s\n", r.pid, path);
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
@@ -695,7 +695,7 @@ static NihOption options[] = {
 static inline int mkdir_cgmanager_dir(void)
 {
 	if (mkdir(CGMANAGER_DIR, 0755) == -1 && errno != EEXIST) {
-		nih_error("Could not create %s", CGMANAGER_DIR);
+		nih_error("%s: Could not create %s", __func__, CGMANAGER_DIR);
 		return false;
 	}
 	return true;
@@ -729,12 +729,12 @@ static bool setup_cgroup_dir(void)
 		return false;
 	}
 	if (daemon_running()) {
-		nih_error("cgmanager is already running");
+		nih_error("%s: cgmanager is already running", __func__);
 		return false;
 	}
 	if (file_exists(CGMANAGER_SOCK)) {
 		if (unlink(CGMANAGER_SOCK) < 0) {
-			nih_error("failed to delete stale cgmanager socket");
+			nih_error("%s: failed to delete stale cgmanager socket", __func__);
 			return false;
 		}
 	}
