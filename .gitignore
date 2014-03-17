@@ -46,3 +46,7 @@ org.linuxcontainers.cgmanager.h
 
 cgmanager.8
 cgproxy.8
+
+tests/*.o
+tests/cgm-concurrent
+00*

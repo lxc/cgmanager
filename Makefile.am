@@ -93,3 +93,14 @@ install-exec-local:
 
 rpm: dist
 	rpmbuild --clean -ta ${distdir}.tar.gz
+
+tests/cgm-concurrent.o: tests/cgm-concurrent.c
+	@echo NIH_CFLAGS is $$(NIH_CFLAGS)
+	$(CC) -I. $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS) $(DBUS_CFLAGS)  -c \
+		-fPIC -DPIC -o tests/cgm-concurrent.o tests/cgm-concurrent.c
+
+TESTS_CGM_CONCURRENT: tests/cgm-concurrent.o
+	$(CCLD) -o tests/cgm-concurrent tests/cgm-concurrent.o \
+		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lpthread -lcgmanager
+
+tests: TESTS_CGM_CONCURRENT
