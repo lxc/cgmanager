@@ -456,7 +456,7 @@ int set_value_main(const char *controller, const char *cgroup,
 	strncat(path, key, MAXPATHLEN-1);
 
 	/* Check access rights to the file itself */
-	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
+	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
 		nih_error("Pid %d may not access %s\n", r.pid, path);
 		return -1;
 	}
