@@ -133,18 +133,24 @@ static void do_function(void *arguments)
 	int existed;
 	char *value;
 
-	cgm_dbus_connect();
+	if (!cgm_dbus_connect()) {
+		fprintf(stderr, "Error connecting to dbus\n");
+		return;
+	}
 
 	sprintf(path, "cgmtest-%d", gettid());
 
 	if (connect_only) {
 		if (cgmanager_create_sync(NULL, cgroup_manager, "freezer", path, &existed) != 0) {
+			fprintf(stderr, "Error creating freezer cgroup\n");
 			exit(1);
 		}
 		if (cgmanager_get_value_sync(NULL, cgroup_manager, "freezer", path, "freezer.state", &value) != 0) {
+			fprintf(stderr, "Error querying freezer cgroup\n");
 			exit(1);
 		}
 		if (cgmanager_remove_sync(NULL, cgroup_manager, "freezer", path, 1, &existed) != 0) {
+			fprintf(stderr, "Error removing freezer cgroup\n");
 			exit(1);
 		}
 	}
