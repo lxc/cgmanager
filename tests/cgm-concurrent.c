@@ -58,6 +58,7 @@ static __thread DBusConnection *connection = NULL;
 static const struct option options[] = {
 	{ "threads",     required_argument, NULL, 'j' },
 	{ "iterations",  required_argument, NULL, 'i' },
+	{ "connect-only",  no_argument, NULL, 'c' },
 	{ 0, 0, 0, 0 },
 };
 
@@ -124,6 +125,8 @@ static inline int gettid(void)
 	return (int)syscall(__NR_gettid);
 }
 
+bool connect_only = false;
+
 static void do_function(void *arguments)
 {
 	char path[100];
@@ -133,14 +136,17 @@ static void do_function(void *arguments)
 	cgm_dbus_connect();
 
 	sprintf(path, "cgmtest-%d", gettid());
-	if (cgmanager_create_sync(NULL, cgroup_manager, "freezer", path, &existed) != 0) {
-		exit(1);
-	}
-	if (cgmanager_get_value_sync(NULL, cgroup_manager, "freezer", path, "freezer.state", &value) != 0) {
-		exit(1);
-	}
-	if (cgmanager_remove_sync(NULL, cgroup_manager, "freezer", path, 1, &existed) != 0) {
-		exit(1);
+
+	if (connect_only) {
+		if (cgmanager_create_sync(NULL, cgroup_manager, "freezer", path, &existed) != 0) {
+			exit(1);
+		}
+		if (cgmanager_get_value_sync(NULL, cgroup_manager, "freezer", path, "freezer.state", &value) != 0) {
+			exit(1);
+		}
+		if (cgmanager_remove_sync(NULL, cgroup_manager, "freezer", path, 1, &existed) != 0) {
+			exit(1);
+		}
 	}
 	cgm_dbus_disconnect();
 }
@@ -167,7 +173,7 @@ int main(int argc, char *argv[]) {
     pthread_attr_init(&attr);
     int i, j, nthreads = 5, iterations=5, opt;
 
-    while ((opt = getopt_long(argc, argv, "j:i:", options, NULL)) != -1) {
+    while ((opt = getopt_long(argc, argv, "j:i:c", options, NULL)) != -1) {
         switch(opt) {
             case 'j':
                 nthreads = atoi(optarg);
@@ -175,6 +181,9 @@ int main(int argc, char *argv[]) {
             case 'i':
                 iterations = atoi(optarg);
                 break;
+	    case 'c':
+	    	connect_only = true;
+		break;
             default:
                 usage(argv[0]);
                 exit(1);
