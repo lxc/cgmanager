@@ -45,6 +45,8 @@ bool master_running(void)
 	return false;
 }
 
+static void cgm_dbus_disconnected(DBusConnection *connection);
+
 int setup_proxy(void)
 {
 	bool exists_upper = false, exists_lower = false;
@@ -66,7 +68,7 @@ int setup_proxy(void)
 		err = nih_error_get();
 		nih_free(err);
 	}
-	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
+	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, cgm_dbus_disconnected);
 	if (server_conn) {
 		exists_lower = true;
 	} else {
@@ -106,7 +108,7 @@ int setup_proxy(void)
 			}
 		}
 	}
-	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, NULL);
+	server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, cgm_dbus_disconnected);
 	if (!server_conn) {
 		err = nih_error_get();
 		nih_fatal("Failed to open connection to %s: %s",
@@ -114,6 +116,24 @@ int setup_proxy(void)
 		nih_free(err);
 	}
 	return 0;
+}
+
+static void cgm_dbus_disconnected(DBusConnection *connection)
+{
+	NihError *err;
+
+	dbus_connection_unref(connection);
+	while (1) {
+		server_conn = nih_dbus_connect(CGPROXY_DBUS_PATH, cgm_dbus_disconnected);
+		if (server_conn)
+			return;
+		err = nih_error_get();
+		nih_error("Failed to re-open connection to %s: %s",
+				CGPROXY_DBUS_PATH, err->message);
+		nih_free(err);
+		nih_error("re-trying in 5 seconds\n");
+		sleep(5);
+	}
 }
 
 static int checkmaster = FALSE;
