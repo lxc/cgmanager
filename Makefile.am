@@ -24,6 +24,8 @@ CLEANFILES = \
 
 sbin_PROGRAMS = cgmanager cgproxy
 
+bin_SCRIPTS = cgm
+
 lib_LTLIBRARIES = libcgmanager.la
 
 pkginclude_HEADERS = cgmanager-client.h cgmanager.h
