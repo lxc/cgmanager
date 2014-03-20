@@ -38,6 +38,8 @@ usage() {
 	echo ""
 	echo " Replace '<controller>' with the desired controller, i.e."
 	echo " memory, and '<cgroup>' with the desired cgroup, i.e. x1."
+	echo " For create, chown, chmod, remove, and movepid, <controller>"
+	echo " may be \"all\"."
 	echo " To refer to the current cgroup, use ''."
 	exit 1
 }
@@ -62,28 +64,52 @@ case "$1" in
 		if [ $# -lt 3 ]; then
 			usage $0
 		fi
-		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:$2 string:$3 int32:1
+		if [ "$2" = "all" ]; then
+			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:$cg string:$3 int32:1
+			done
+		else
+			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:$2 string:$3 int32:1
+		fi
 		exit $?
 	;;
 	create)
 		if [ $# -lt 3 ]; then
 			usage $0
 		fi
-		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:$2 string:$3
+		if [ "$2" = "all" ]; then
+			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:$cg string:$3
+			done
+		else
+			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:$2 string:$3
+		fi
 		exit $?
 	;;
 	chown)
 		if [ $# -lt 5 ]; then
 			usage $0
 		fi
-		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:$2 string:$3 int32:$4 int32:$5
+		if [ "$2" = "all" ]; then
+			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:$cg string:$3 int32:$4 int32:$5
+			done
+		else
+			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:$2 string:$3 int32:$4 int32:$5
+		fi
 		exit $?
 	;;
 	chmod)
 		if [ $# -lt 4 ]; then
 			usage $0
 		fi
-		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chmod string:$2 string:$3 int32:$4
+		if [ "$2" = "all" ]; then
+			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chmod string:$cg string:$3 int32:$4
+			done
+		else
+			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chmod string:$2 string:$3 int32:$4
+		fi
 		exit $?
 	;;
 	getpidcgroup)
@@ -97,7 +123,13 @@ case "$1" in
 		if [ $# -lt 4 ]; then
 			usage $0
 		fi
-		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:$2 string:$3 int32:$4
+		if [ "$2" = "all" ]; then
+			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:$cg string:$3 int32:$4
+			done
+		else
+			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:$2 string:$3 int32:$4
+		fi
 		exit $?
 	;;
 	setvalue)
