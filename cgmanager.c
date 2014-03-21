@@ -138,7 +138,7 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	}
 	if (fprintf(f, "%d\n", v.pid) < 0) {
 		fclose(f);
-		nih_error("%s: Failed to open %s", __func__, path);
+		nih_error("%s: Failed to write %d to %s", __func__, v.pid, path);
 		return -1;
 	}
 	if (fclose(f) != 0) {

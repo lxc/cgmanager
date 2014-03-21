@@ -69,18 +69,20 @@ static char *base_path;
 static bool setup_base_path(void)
 {
 	base_path = strdup("/run/cgmanager/fs");
-	if (!base_path)
+	if (!base_path) {
+		nih_fatal("%s: out of memory opening base path", __func__);
 		return false;
+	}
 	if (mkdir("/run", 0755) < 0 && errno != EEXIST) {
-		nih_fatal("failed to create /run");
+		nih_fatal("%s: failed to create /run", __func__);
 		return false;
 	}
 	if (mkdir("/run/cgmanager", 0755) < 0 && errno != EEXIST) {
-		nih_fatal("failed to create /run/cgmanager");
+		nih_fatal("%s: failed to create /run/cgmanager", __func__);
 		return false;
 	}
 	if (mkdir("/run/cgmanager/fs", 0755) < 0 && errno != EEXIST) {
-		nih_fatal("failed to create /run/cgmanager/fs");
+		nih_fatal("%s: failed to create /run/cgmanager/fs", __func__);
 		return false;
 	}
 	return true;
@@ -93,11 +95,13 @@ static void set_clone_children(const char *path)
 	int ret;
 
 	ret = snprintf(p, MAXPATHLEN, "%s/cgroup.clone_children", path);
-	if (ret < 0 || ret >= MAXPATHLEN)
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		nih_fatal("%s: Error writing clone_children path", __func__);
 		return;
+	}
 	f = fopen(p, "w");
 	if (!f) {
-		nih_fatal("Failed to set clone_children");
+		nih_fatal("%s: Failed to set clone_children", __func__);
 		return;
 	}
 	fprintf(f, "1\n");
@@ -111,11 +115,13 @@ static void set_use_hierarchy(const char *path)
 	int ret;
 
 	ret = snprintf(p, MAXPATHLEN, "%s/memory.use_hierarchy", path);
-	if (ret < 0 || ret >= MAXPATHLEN)
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		nih_fatal("%s: Error writing use_hierarchy path", __func__);
 		return;
+	}
 	f = fopen(p, "w");
 	if (!f) {
-		nih_fatal("Failed to set memory.use_hierarchy");
+		nih_fatal("%s: Failed to set memory.use_hierarchy", __func__);
 		return;
 	}
 	fprintf(f, "1\n");
