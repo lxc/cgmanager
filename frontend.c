@@ -204,6 +204,8 @@ int cgmanager_ping (void *data, NihDBusMessage *message, int junk)
 
 void get_pid_scm_complete(struct scm_sock_data *data)
 {
+	// output will be nih_alloced with data as parent, and therefore
+	// freed when data is freed.
 	char *output = NULL;
 	int ret;
 
