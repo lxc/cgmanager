@@ -36,7 +36,7 @@ libcgmanager.pc: libcgmanager.pc.in
 	sed -e 's|[@]LIBCGMANAGER_VERSION_DOTTED[@]|$(LIBCGMANAGER_VERSION_DOTTED)|g' \
 		$< > $@
 
-EXTRA_DIST = libcgmanager.pc.in.in cgmanager.spec tests
+EXTRA_DIST = libcgmanager.pc.in.in cgmanager.spec tests cgm
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = libcgmanager.pc
