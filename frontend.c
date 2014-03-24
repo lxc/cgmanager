@@ -119,13 +119,15 @@ static void scm_sock_error_handler (void *data, NihIo *io)
 	nih_error("got an error, type %s", req_type_to_str(d->type));
 	nih_error("error %s", strerror(error->number));
 	nih_free(error);
+	d->fd = -1;
 }
 
 static void scm_sock_close (struct scm_sock_data *data, NihIo *io)
 {
 	nih_assert (data);
 	nih_assert (io);
-	close (data->fd);
+	if (data->fd != -1)
+		close (data->fd);
 	nih_free (data);
 	nih_free (io);
 }
