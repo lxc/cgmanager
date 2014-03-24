@@ -29,7 +29,7 @@ Summary: Linux cgroup manager
 Group: Applications/System
 License: LGPLv2+
 BuildRoot: %{_tmppath}/%{name}-%{version}-build
-Requires: dbus libnih libnih-dbus
+Requires: dbus libnih
 BuildRequires: libnih-devel dbus-devel help2man
 
 %description
@@ -89,6 +89,9 @@ rm -rf %{buildroot}
 %{_libdir}/pkgconfig/*
 
 %changelog
+* Mon Mar 24 2014 Dwight Engen <dwight.engen@oracle.com> - 0.23
+remove libnih-dbus Requires since there is no such package, libnih is sufficient
+
 * Mon Mar 24 2014 Dwight Engen <dwight.engen@oracle.com> - 0.22
 add cgm script
 
