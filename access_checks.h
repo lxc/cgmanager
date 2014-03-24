@@ -24,7 +24,7 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-bool get_nih_io_creds(NihIo *io, struct ucred *ucred);
+bool get_nih_io_creds(void *parent, NihIo *io, struct ucred *ucred);
 int send_creds(int sock, struct ucred *cred);
 void get_scm_creds_sync(int sock, struct ucred *cred);
 bool is_same_pidns(int pid);

@@ -55,9 +55,9 @@
 extern bool setns_pid_supported, setns_user_supported;
 extern unsigned long mypidns, myuserns;
 
-bool get_nih_io_creds(NihIo *io, struct ucred *ucred)
+bool get_nih_io_creds(void *parent, NihIo *io, struct ucred *ucred)
 {
-	NihIoMessage *msg = nih_io_read_message(NULL, io);
+	NihIoMessage *msg = nih_io_read_message(parent, io);
 	if (!msg) {
 		nih_error("failed reading msg for ucred");
 		return false;

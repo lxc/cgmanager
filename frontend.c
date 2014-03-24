@@ -158,7 +158,7 @@ static void sock_scm_reader(struct scm_sock_data *data,
 {
 	struct ucred ucred;
 
-	if (!get_nih_io_creds(io, &ucred)) {
+	if (!get_nih_io_creds(data, io, &ucred)) {
 		nih_error("failed to read ucred");
 		nih_io_shutdown(io);
 		return;
