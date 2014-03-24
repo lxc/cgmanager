@@ -72,6 +72,7 @@ rm -rf %{buildroot}
 
 %files
 %defattr(-,root,root)
+%{_bindir}/*
 %{_sbindir}/*
 %{_mandir}/man8/*
 %{_datadir}/%{name}/*
@@ -88,5 +89,8 @@ rm -rf %{buildroot}
 %{_libdir}/pkgconfig/*
 
 %changelog
+* Mon Mar 24 2014 Dwight Engen <dwight.engen@oracle.com> - 0.22
+add cgm script
+
 * Tue Feb 04 2014 Dwight Engen <dwight.engen@oracle.com> - 0.19
 - created
