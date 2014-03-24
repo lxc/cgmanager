@@ -24,16 +24,27 @@ usage() {
 	me=`basename $1`
 	echo "Usage:"
 	echo "   $me ping"
-	echo "   $me create <controller<>> cgroup"
+	echo
+	echo "   $me create <controller> cgroup"
+	echo
 	echo "   $me chown <controller> <cgroup> uid gid"
+	echo
 	echo "   $me chmod <controller> <cgroup> mode"
+	echo
 	echo "   $me remove <controller> <cgroup>"
+	echo
 	echo "   $me getpidcgroup <controller> pid"
+	echo
 	echo "   $me movepid <controller> <cgroup> pid"
+	echo
 	echo "   $me getvalue <controller> <cgroup> file"
+	echo
 	echo "   $me setvalue <controller> <cgroup> file value"
+	echo
 	echo "   $me gettasks <controller> <cgroup>"
+	echo
 	echo "   $me listchildren <controller> <cgroup>"
+	echo
 	echo "   $me apiversion"
 	echo ""
 	echo " Replace '<controller>' with the desired controller, i.e."
@@ -49,6 +60,10 @@ if [ $# -lt 1 ]; then
 fi
 
 case "$1" in
+	--version)
+		echo 0.22
+		exit 0
+	;;
 	ping)
 		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Ping int32:0
 		exit $?

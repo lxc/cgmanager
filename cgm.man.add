@@ -1,0 +1,25 @@
+[DESCRIPTION]
+
+cgm is a client script to simplify making requests of the cgroup
+manager.  It simply calls dbus\-send to send requests to the running
+cgmanager or cgproxy.
+
+[EXAMPLES]
+.P
+To create a new cgroup called foo and move your shell into it, you could do:
+.P
+.br
+sudo cgm create all foo
+.br
+sudo cgm chown all foo $(id \-u) $(id \-g)
+.br
+cgm movepid all foo $$
+.br
+.P
+Then to freeze that cgroup,
+.P
+.br
+cgm setvalue freezer foo freezer.state FROZEN
+
+[SEE ALSO]
+cgmanager(1)
