@@ -116,8 +116,10 @@ static void scm_sock_error_handler (void *data, NihIo *io)
 {
 	struct scm_sock_data *d = data;
 	NihError *error = nih_error_get ();
-	nih_error("got an error, type %s", req_type_to_str(d->type));
-	nih_error("error %s", strerror(error->number));
+#if 0
+	nih_info("got an error, type %s", req_type_to_str(d->type));
+	nih_info("error %s", strerror(error->number));
+#endif
 	nih_free(error);
 	d->fd = -1;
 }
