@@ -666,6 +666,58 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 	return get_child_directories(parent, path, output);
 }
 
+int remove_on_empty_main(const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r)
+{
+	char rcgpath[MAXPATHLEN];
+	size_t cgroup_len;
+	nih_local char *working = NULL, *wcgroup = NULL;
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+		nih_error("%s: Could not determine the requested cgroup", __func__);
+		return -1;
+	}
+
+	cgroup_len = strlen(cgroup);
+
+	if (strlen(rcgpath) + cgroup_len > MAXPATHLEN) {
+		nih_error("%s: Path name too long", __func__);
+		return -1;
+	}
+
+	wcgroup = NIH_MUST( nih_strdup(NULL, cgroup) );
+	if (!normalize_path(wcgroup))
+		return -1;
+
+	working = NIH_MUST( nih_strdup(NULL, rcgpath) );
+	NIH_MUST( nih_strcat(&working, NULL, "/") );
+	NIH_MUST( nih_strcat(&working, NULL, wcgroup) );
+
+	if (!dir_exists(working)) {
+		return -1;
+	}
+	// must have write access
+	if (!may_access(r.pid, r.uid, r.gid, working, O_WRONLY)) {
+		nih_error("%s: pid %d (%u:%u) may not remove %s", __func__,
+			r.pid, r.uid, r.gid, working);
+		return -1;
+	}
+
+	NIH_MUST( nih_strcat(&working, NULL, "/notify_on_release") );
+
+	if (!set_value_trusted(working, "1\n")) {
+		nih_error("Failed to set remove_on_empty for %s:%s", controller, working);
+		return -1;
+	}
+
+	return 0;
+}
 char *extra_cgroup_mounts;
 
 static int
@@ -783,7 +835,23 @@ main (int argc, char *argv[])
 				  client_disconnect);
 	nih_assert (server != NULL);
 
-	if (setup_cgroup_mounts(extra_cgroup_mounts) < 0) {
+	if (!setup_base_run_path()) {
+		nih_fatal("Error setting up base cgroup path");
+		return -1;
+	}
+
+	if (collect_subsystems(extra_cgroup_mounts) < 0)
+	{
+		nih_fatal("failed to collect cgroup subsystems");
+		exit(1);
+	}
+
+	if (!create_agent_symlinks()) {
+		nih_fatal("Error creating release agent symlinks");
+		exit(1);
+	}
+
+	if (setup_cgroup_mounts() < 0) {
 		nih_fatal ("Failed to set up cgroup mounts");
 		exit(1);
 	}

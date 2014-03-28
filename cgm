@@ -45,6 +45,8 @@ usage() {
 	echo
 	echo "   $me listchildren <controller> <cgroup>"
 	echo
+	echo "   $me removeonempty <controller> <cgroup>"
+	echo
 	echo "   $me apiversion"
 	echo ""
 	echo " Replace '<controller>' with the desired controller, i.e."
@@ -166,6 +168,19 @@ case "$1" in
 			usage $0
 		fi
 		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.ListChildren string:$2 string:$3
+		exit $?
+	;;
+	removeonempty)
+		if [ $# -lt 3 ]; then
+			usage $0
+		fi
+		if [ "$2" = "all" ]; then
+			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.RemoveOnEmpty string:$cg string:$3
+			done
+		else
+			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.RemoveOnEmpty string:$2 string:$3
+		fi
 		exit $?
 	;;
 	apiversion)

@@ -837,6 +837,57 @@ out:
 	return ret;
 }
 
+int remove_on_empty_main (const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r)
+{
+	DBusMessage *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1;
+	char buf[1];
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!(message = start_dbus_request("RemoveOnEmptyScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(message, &iter);
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+
+	if (!complete_dbus_request(message, sv, &r, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
+		goto out;
+	}
+
+	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1'))
+		ret = 0;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	return ret;
+}
+
+
 /**
  * options:
  *

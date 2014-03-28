@@ -24,7 +24,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
-int setup_cgroup_mounts(char *extra_mounts);
+int collect_subsystems(char *extra_mounts);
+int setup_cgroup_mounts(void);
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		char *path, int *depth);
 int get_path_depth(const char *path);
@@ -38,6 +39,7 @@ bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer);
 bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children);
 bool chmod_cgroup_path(const char *path, int mode);
 bool set_value(const char *path, const char *value);
+bool set_value_trusted(const char *path, const char *value);
 unsigned long read_pid_ns_link(int pid);
 unsigned long read_user_ns_link(int pid);
 bool realpath_escapes(char *path, char *safety);
@@ -45,3 +47,5 @@ bool file_exists(const char *path);
 bool dir_exists(const char *path);
 bool move_self_to_root(void);
 int get_child_directories(void *parent, const char *path, char ***output);
+bool setup_base_run_path(void);
+bool create_agent_symlinks(void);

@@ -103,6 +103,7 @@ enum req_type {
 	REQ_TYPE_CHMOD,
 	REQ_TYPE_MOVE_PID_ABS,
 	REQ_TYPE_LIST_CHILDREN,
+	REQ_TYPE_REMOVE_ON_EMPTY,
 };
 
 int get_pid_cgroup_main(void *parent, const char *controller,
@@ -140,6 +141,10 @@ void get_tasks_scm_complete(struct scm_sock_data *data);
 int list_children_main (void *parent, const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, char ***output);
 void list_children_scm_complete(struct scm_sock_data *data);
+
+int remove_on_empty_main (const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r);
+void remove_on_empty_scm_complete(struct scm_sock_data *data);
 
 int cgmanager_ping (void *data, NihDBusMessage *message, int junk);
 

@@ -49,16 +49,39 @@
 #include <nih-dbus/dbus_connection.h>
 #include <nih-dbus/dbus_proxy.h>
 
+/* defines relating to the release agent */
+#define AGENT SBINDIR "/cgm-release-agent"
+#define AGENT_LINK_PATH "/run/cgmanager/agents"
+
 struct controller_mounts {
 	char *controller;
 	char *options;
 	char *path;
+	char *src;
+	char *agent;
 };
 
 static struct controller_mounts *all_mounts;
 static int num_controllers;
 
 static char *base_path;
+
+bool file_exists(const char *path)
+{
+	struct stat sb;
+	if (stat(path, &sb) < 0)
+		return false;
+	return true;
+}
+
+bool dir_exists(const char *path)
+{
+	struct stat sb;
+	if (stat(path, &sb) < 0 || !S_ISDIR(sb.st_mode))
+		return false;
+	return true;
+}
+
 /*
  * Where do we want to mount the controllers?  We used to mount
  * them under a tmpfs under /sys/fs/cgroup, for all to share.  Now
@@ -66,7 +89,7 @@ static char *base_path;
  * TODO read this from configuration file too
  * TODO do we want to create these in a tmpfs?
  */
-static bool setup_base_path(void)
+bool setup_base_run_path(void)
 {
 	base_path = strdup("/run/cgmanager/fs");
 	if (!base_path) {
@@ -83,6 +106,10 @@ static bool setup_base_path(void)
 	}
 	if (mkdir("/run/cgmanager/fs", 0755) < 0 && errno != EEXIST) {
 		nih_fatal("%s: failed to create /run/cgmanager/fs", __func__);
+		return false;
+	}
+	if (mkdir(AGENT_LINK_PATH, 0755) < 0 && errno != EEXIST) {
+		nih_fatal("%s: failed to create %s", __func__, AGENT_LINK_PATH);
 		return false;
 	}
 	return true;
@@ -128,7 +155,7 @@ static void set_use_hierarchy(const char *path)
 	fclose(f);
 }
 
-static bool do_mount_subsys(char *s)
+static bool save_mount_subsys(char *s)
 {
 	struct controller_mounts *tmp;
 	char *src, dest[MAXPATHLEN], *controller;
@@ -157,15 +184,6 @@ static bool do_mount_subsys(char *s)
 		ret = -1;
 		goto out;
 	}
-	if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
-		nih_fatal("Failed to create %s: %s", dest, strerror(errno));
-		ret = -1;
-		goto out;
-	}
-	if ((ret = mount(src, dest, "cgroup", 0, src)) < 0) {
-		nih_fatal("Failed mounting %s: %s", s, strerror(errno));
-		goto out;
-	}
 	ret = -1;
 	tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
 	if (!tmp) {
@@ -180,20 +198,15 @@ static bool do_mount_subsys(char *s)
 	}
 	all_mounts[num_controllers].options = NULL;
 	all_mounts[num_controllers].path = strdup(dest);
-	if (!all_mounts[num_controllers].path) {
+	all_mounts[num_controllers].src = strdup(src);
+	if (!all_mounts[num_controllers].path ||
+			!all_mounts[num_controllers].src) {
 		nih_fatal("Out of memory mounting controllers");
 		goto out;
 	}
 	nih_info(_("Mounted %s onto %s"),
 			all_mounts[num_controllers].controller,
 			all_mounts[num_controllers].path);
-	if (strcmp(all_mounts[num_controllers].controller, "cpuset") == 0) {
-		set_clone_children(dest); // TODO make this optional?
-		nih_info(_("set clone_children"));
-	} else if (strcmp(all_mounts[num_controllers].controller, "memory") == 0) {
-		set_use_hierarchy(dest);  // TODO make this optional?
-		nih_info(_("set memory.use_hierarchy"));
-	}
 	num_controllers++;
 	return true;
 
@@ -201,37 +214,83 @@ out:
 	return false;
 }
 
-/**
- * Mount the cgroup filesystems and record the information.
- * This should take configuration data from /etc.  For now,
- * Just mount all controllers, separately just as cgroup-lite
- * does, and set the use_hierarchy and clone_children options.
- *
- * Things which should go into configuration file:
- * . which controllers to mount
- * . which controllers to co-mount
- * . any mount options (per-controller)
- * . values for sane_behavior, use_hierarchy, and clone_children
- */
-int setup_cgroup_mounts(char *extra_mounts)
+static bool set_release_agent(struct controller_mounts *m)
+{
+	FILE *f;
+	char path[MAXPATHLEN];
+	int ret;
+
+	ret = snprintf(path, MAXPATHLEN, "%s/release_agent", m->path);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		nih_error("out of memory");
+		return false;
+	}
+	if ((f = fopen(path, "w")) == NULL) {
+		nih_error("failed to open %s for writing", path);
+		return false;
+	}
+	if (fprintf(f, "%s\n", m->agent) < 0) {
+		nih_error("failed to set release agent for %s",
+				m->controller);
+		fclose(f);
+		return false;
+	}
+	if (fclose(f) != 0) {
+		nih_error("failed to set release agent for %s",
+				m->controller);
+		return false;
+	}
+	return true;
+}
+
+static bool do_mount_subsys(int i)
+{
+	char *src, *dest, *controller;
+	int ret;
+
+	dest = all_mounts[i].path;
+	controller = all_mounts[i].controller;
+	src = all_mounts[i].src;
+
+	if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
+		nih_fatal("Failed to create %s: %s", dest, strerror(errno));
+		ret = -1;
+		goto out;
+	}
+	if ((ret = mount(src, dest, "cgroup", 0, src)) < 0) {
+		nih_fatal("Failed mounting %s: %s", dest, strerror(errno));
+		goto out;
+	}
+	nih_info(_("Mounted %s onto %s"), controller, dest);
+	if (strcmp(controller, "cpuset") == 0) {
+		set_clone_children(dest); // TODO make this optional?
+		nih_info(_("set clone_children"));
+	} else if (strcmp(controller, "memory") == 0) {
+		set_use_hierarchy(dest);  // TODO make this optional?
+		nih_info(_("set memory.use_hierarchy"));
+	}
+
+	if (!set_release_agent(&all_mounts[i])) {
+		nih_error("failed to set release agent for %s",
+				all_mounts[i].controller);
+		return false;
+	}
+	return true;
+
+out:
+	return false;
+}
+
+int collect_subsystems(char *extra_mounts)
 {
 	FILE *cgf;
 	int ret;
 	char line[400];
 
-	if (unshare(CLONE_NEWNS) < 0) {
-		nih_fatal("Failed to unshare a private mount ns: %s", strerror(errno));
-		return -1;
-	}
-	if (!setup_base_path()) {
-		nih_fatal("Error setting up base cgroup path");
-		return -1;
-	}
-
 	if (extra_mounts) {
 		char *e;
 		for (e = strtok(extra_mounts, ","); e; e = strtok(NULL, ",")) {
-			if (!do_mount_subsys(e)) {
+			if (!save_mount_subsys(e)) {
 				nih_fatal("Error loading subsystem \"%s\"", e);
 				return -1;
 			}
@@ -261,17 +320,97 @@ int setup_cgroup_mounts(char *extra_mounts)
 #endif
 		}
 
-		if (!do_mount_subsys(line)) {
-			nih_fatal("Error mounting subsystem %s", line);
+		if (!save_mount_subsys(line)) {
+			nih_fatal("Error storing subsystem %s", line);
 			ret = -1;
 			goto out;
 		}
 	}
-	nih_info(_("mounted %d controllers"), num_controllers);
+	nih_info(_("found %d controllers"), num_controllers);
 	ret = 0;
 out:
 	fclose(cgf);
 	return ret;
+}
+
+/**
+ * Mount the cgroup filesystems and record the information.
+ * This should take configuration data from /etc.  For now,
+ * Just mount all controllers, separately just as cgroup-lite
+ * does, and set the use_hierarchy and clone_children options.
+ *
+ * Things which should go into configuration file:
+ * . which controllers to mount
+ * . which controllers to co-mount
+ * . any mount options (per-controller)
+ * . values for sane_behavior, use_hierarchy, and clone_children
+ */
+int setup_cgroup_mounts(void)
+{
+	int i;
+
+	if (unshare(CLONE_NEWNS) < 0) {
+		nih_fatal("Failed to unshare a private mount ns: %s", strerror(errno));
+		return 0;
+	}
+
+	for (i=0; i<num_controllers; i++) {
+		if (!do_mount_subsys(i)) {
+			nih_fatal("Failed mounting cgroups");
+			return -1;
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * In the old release agent support, the release agent is not told the
+ * controller in which the cgroup was freed.  Therefore we need to have a
+ * different binary for each mounted controller.  We will create these under
+ * /run/cgmanager/agents/ as symlinks to /sbin/cgm-release-agent, i.e.
+ * /run/cgmanager/agents/cgm-release-agent.freezer.
+ */
+bool create_agent_symlinks(void)
+{
+	struct stat statbuf;
+	char buf[MAXPATHLEN];
+	int i, ret, plen;
+
+	ret = stat(AGENT, &statbuf);
+	if (ret < 0) {
+		nih_error("release agent not found");
+		return false;
+	}
+
+	plen = snprintf(buf, MAXPATHLEN, "%s/", AGENT_LINK_PATH);
+	if (plen < 0 || plen >= MAXPATHLEN) {
+		nih_error("memory error");
+		return false;
+	}
+
+	for (i=0; i<num_controllers; i++) {
+		ret = snprintf(buf+plen, MAXPATHLEN-plen, "cgm-release-agent.%s",
+				all_mounts[i].controller);
+		if (ret < 0 || ret >= MAXPATHLEN) {
+			nih_error("path names too long");
+			return false;
+		}
+		nih_info("buf is %s", buf);
+		if (!file_exists(buf)) {
+			if (symlink(AGENT, buf) < 0) {
+				nih_error("failed to create release agent for %s",
+					all_mounts[i].controller);
+				return false;
+			}
+		}
+		if ((all_mounts[i].agent = strdup(buf)) == NULL) {
+			nih_error("out of memory");
+			return false;
+		}
+	}
+
+	return true;
 }
 
 static inline void drop_newlines(char *s)
@@ -752,12 +891,16 @@ bool chmod_cgroup_path(const char *path, int mode)
 /*
  * TODO - make this more baroque to allow ranges etc
  */
-static char *set_value_blacklist[] = { "tasks", "release-agent", "cgroup.procs" };
+static char *set_value_blacklist[] = { "tasks",
+	"release-agent",
+	"cgroup.procs",
+	"notify-on-release"
+};
 static size_t blacklist_len = sizeof(set_value_blacklist)/sizeof(char *);
 
-bool set_value(const char *path, const char *value)
+bool set_value_trusted(const char *path, const char *value)
 {
-	int i, len;
+	int len;
 	FILE *f;
 
 	nih_assert (path);
@@ -767,17 +910,6 @@ bool set_value(const char *path, const char *value)
 
 	len = strlen(value);
 
-	for (i = 0; i < blacklist_len; i++) {
-		const char *p = strrchr(path, '/');
-		if (p)
-			p++;
-		else
-			p = path;
-		if (strcmp(p, set_value_blacklist[i]) == 0) {
-			nih_error("attempted write to %s", set_value_blacklist[i]);
-			return false;
-		}
-	}
 	if ((f = fopen(path, "w")) == NULL) {
 		nih_error("Error opening %s for writing", path);
 		return false;
@@ -795,6 +927,26 @@ bool set_value(const char *path, const char *value)
 		return false;
 	}
 	return true;
+}
+bool set_value(const char *path, const char *value)
+{
+	int i;
+
+	nih_assert (path);
+
+	for (i = 0; i < blacklist_len; i++) {
+		const char *p = strrchr(path, '/');
+		if (p)
+			p++;
+		else
+			p = path;
+		if (strcmp(p, set_value_blacklist[i]) == 0) {
+			nih_error("attempted write to %s", set_value_blacklist[i]);
+			return false;
+		}
+	}
+
+	return set_value_trusted(path, value);
 }
 
 /*
@@ -849,22 +1001,6 @@ bool realpath_escapes(char *path, char *safety)
 	}
 	free(tmppath);
 	return false;
-}
-
-bool file_exists(const char *path)
-{
-	struct stat sb;
-	if (stat(path, &sb) < 0)
-		return false;
-	return true;
-}
-
-bool dir_exists(const char *path)
-{
-	struct stat sb;
-	if (stat(path, &sb) < 0 || !S_ISDIR(sb.st_mode))
-		return false;
-	return true;
 }
 
 /*

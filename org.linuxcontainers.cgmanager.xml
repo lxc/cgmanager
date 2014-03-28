@@ -171,8 +171,16 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="output" type="as" direction="out" />
     </method>
+    <method name="RemoveOnEmptyScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+    </method>
+    <method name="RemoveOnEmpty">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+    </method>
     <!-- still to add: low priority,
-	 Prune (remove all empty decendents)
 	 removeWhenEmpty
 	 getEventfd
 	 -->

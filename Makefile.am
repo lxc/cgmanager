@@ -7,7 +7,7 @@ VERSION_AGE      = 0
 LIBCGMANAGER_VERSION        = $(VERSION_CURRENT):$(VERSION_REVISION):$(VERSION_AGE)
 LIBCGMANAGER_VERSION_DOTTED = $(VERSION_CURRENT).$(VERSION_REVISION).$(VERSION_AGE)
 
-AM_CFLAGS = -Wall -ggdb -D_GNU_SOURCE
+AM_CFLAGS = -Wall -ggdb -D_GNU_SOURCE -DSBINDIR=\"$(SBINDIR)\"
 AM_CFLAGS += $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
 AM_LDFLAGS = $(DBUS_LIBS) $(NIH_LIBS) $(NIH_DBUS_LIBS)
 client_files_OUTPUTS = cgmanager-client.c cgmanager-client.h
@@ -19,10 +19,11 @@ CLEANFILES = \
 	$(manager_files_OUTPUTS) \
 	$(client_files_OUTPUTS) \
 	cgmanager cgproxy \
+	cgm-release-agent  \
 	*.o *.so \
 	libcgmanager.pc.in
 
-sbin_PROGRAMS = cgmanager cgproxy
+sbin_PROGRAMS = cgmanager cgproxy cgm-release-agent
 
 bin_SCRIPTS = cgm
 
@@ -71,6 +72,9 @@ cgproxy_SOURCES = cgmanager-proxy.c \
 	access_checks.c access_checks.h \
 	fs.c fs.h cgmanager.h \
 	frontend.c frontend.h
+
+cgm_release_agent_SOURCES = cgm-release-agent.c
+cgm_release_agent_LDADD = -lcgmanager
 
 libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \

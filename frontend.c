@@ -76,6 +76,7 @@ static struct scm_sock_data *alloc_scm_sock_data(NihDBusMessage *message,
 	return d;
 }
 
+#if 0
 static const char *req_type_to_str(enum req_type r)
 {
 	switch(r) {
@@ -90,9 +91,11 @@ static const char *req_type_to_str(enum req_type r)
 		case REQ_TYPE_GET_TASKS: return "get_tasks";
 		case REQ_TYPE_CHMOD: return "chmod";
 		case REQ_TYPE_LIST_CHILDREN: return "list_children";
+		case REQ_TYPE_REMOVE_ON_EMPTY: return "remove_on_empty";
 		default: return "invalid";
 	}
 }
+#endif
 
 /*
  * All Scm-enhanced transactions take at least one SCM cred,
@@ -188,6 +191,7 @@ static void sock_scm_reader(struct scm_sock_data *data,
 	case REQ_TYPE_REMOVE: remove_scm_complete(data); break;
 	case REQ_TYPE_GET_TASKS: get_tasks_scm_complete(data); break;
 	case REQ_TYPE_LIST_CHILDREN: list_children_scm_complete(data); break;
+	case REQ_TYPE_REMOVE_ON_EMPTY: remove_on_empty_scm_complete(data); break;
 	default:
 		nih_fatal("%s: bad req_type %d", __func__, data->type);
 		exit(1);
@@ -570,7 +574,7 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 	return 0;
 }
 
-/* 
+/*
  * This is one of the dbus callbacks.
  * Caller requests creating a new @cgroup name of type @controller.
  * @name is taken to be relative to the caller's cgroup and may not
@@ -1296,6 +1300,91 @@ int cgmanager_list_children (void *data, NihDBusMessage *message,
 			fd, rcred.pid, rcred.uid, rcred.gid);
 
 	ret = list_children_main(message, controller, cgroup, rcred, rcred, output);
+	if (ret >= 0)
+		ret = 0;
+	else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+void remove_on_empty_scm_complete(struct scm_sock_data *data)
+{
+	char b = '0';
+
+	if (remove_on_empty_main(data->controller, data->cgroup, data->pcred,
+				data->rcred) == 0)
+		b = '1';
+	if (write(data->fd, &b, 1) < 0)
+		nih_error("RemoveOnEmptyScm: Error writing final result to client");
+}
+
+int cgmanager_remove_on_empty_scm (void *data, NihDBusMessage *message,
+		 const char *controller, const char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_REMOVE_ON_EMPTY);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests that cgroup @cgroup in controller @controller be
+ * marked to be removed when it becomes empty, meaning there are no
+ * more sub-cgroups and no tasks.
+ */
+int cgmanager_remove_on_empty (void *data, NihDBusMessage *message,
+		const char *controller, const char *cgroup)
+{
+	int fd = 0, ret;
+	struct ucred rcred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("RemoveOnEmpty: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	ret = remove_on_empty_main(controller, cgroup, rcred, rcred);
 	if (ret >= 0)
 		ret = 0;
 	else

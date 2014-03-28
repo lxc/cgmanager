@@ -22,4 +22,6 @@ PKG_CHECK_MODULES([DBUS], [dbus-1 >= 1.2.16])
 
 AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 
+AS_AC_EXPAND(SBINDIR, "$sbindir")
+
 AC_OUTPUT
