@@ -181,7 +181,7 @@
       <arg name="cgroup" type="s" direction="in" />
     </method>
     <!-- still to add: low priority,
-	 removeWhenEmpty
+	 Prune (remove all empty decendents)
 	 getEventfd
 	 -->
     <property name="api_version" type="i" access="read" />
