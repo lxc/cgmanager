@@ -774,6 +774,11 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	}
 	if (recv(sv[0], &nrpids, sizeof(uint32_t), 0) != sizeof(uint32_t))
 		goto out;
+	if (nrpids == -1) {
+		nih_error("%s: bad cgroup: %s:%s", __func__, controller, cgroup);
+		ret = -1;
+		goto out;
+	}
 	if (nrpids == 0) {
 		ret = 0;
 		goto out;

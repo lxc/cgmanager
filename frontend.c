@@ -1089,7 +1089,7 @@ void get_tasks_scm_complete(struct scm_sock_data *data)
 	if (ret < 0) {
 		nih_error("Error getting nrtasks for %s:%s for pid %d",
 			data->controller, data->cgroup, data->rcred.pid);
-		return;
+		ret = -1;
 	}
 	nrpids = ret;
 	if (write(data->fd, &nrpids, sizeof(int32_t)) != sizeof(int32_t)) {
