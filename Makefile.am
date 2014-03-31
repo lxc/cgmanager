@@ -74,7 +74,7 @@ cgproxy_SOURCES = cgmanager-proxy.c \
 	frontend.c frontend.h
 
 cgm_release_agent_SOURCES = cgm-release-agent.c
-cgm_release_agent_LDADD = -lcgmanager
+cgm_release_agent_LDADD = -L.libs -lcgmanager
 
 libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \
