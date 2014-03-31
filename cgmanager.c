@@ -545,7 +545,7 @@ static int recursive_rmdir(char *path)
 int remove_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, int recursive, int32_t *existed)
 {
-	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	char rcgpath[MAXPATHLEN];
 	size_t cgroup_len;
 	nih_local char *working = NULL, *copy = NULL, *wcgroup = NULL;
 	char *p1;
@@ -601,7 +601,7 @@ int remove_main(const char *controller, const char *cgroup, struct ucred p,
 	} else if (recursive_rmdir(working) < 0)
 			return -1;
 
-	nih_info(_("Removed %s for %d (%u:%u)"), path, r.pid,
+	nih_info(_("Removed %s for %d (%u:%u)"), working, r.pid,
 		 r.uid, r.gid);
 	return 0;
 }
