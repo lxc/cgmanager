@@ -146,9 +146,14 @@ bool send_dummy_msg(DBusConnection *conn)
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
 			"org.linuxcontainers.cgmanager0_0", "Ping");
+	if (!message) {
+		nih_error("%s: failed to create ping message", __func__);
+		return false;
+	}
 	dbus_message_set_no_reply(message, TRUE);
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &a)) {
+		dbus_message_unref(message);
 		nih_error("%s: out of memory", __func__);
 		return false;
 	}
@@ -161,6 +166,7 @@ bool send_dummy_msg(DBusConnection *conn)
 static DBusMessage *start_dbus_request(const char *method, int *sv)
 {
 	int optval = 1;
+	DBusMessage *msg = NULL;
 
 	if (socketpair(AF_UNIX, SOCK_DGRAM, 0, sv) < 0) {
 		nih_error("%s: Error creating socketpair: %s",
@@ -176,9 +182,12 @@ static DBusMessage *start_dbus_request(const char *method, int *sv)
 		goto err;
 	}
 
-	return dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
+	msg = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
 			"/org/linuxcontainers/cgmanager",
 			"org.linuxcontainers.cgmanager0_0", method);
+	if (msg)
+		return msg;
+
 err:
 	close(sv[0]);
 	close(sv[1]);
@@ -248,10 +257,12 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 	if (!dbus_message_iter_append_basic (&iter,
 			DBUS_TYPE_STRING,
 			&controller)) {
+		dbus_message_unref(message);
 		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		dbus_message_unref(message);
 		nih_error("%s: out of memory", __func__);
 		goto out;
 	}
@@ -303,14 +314,17 @@ int do_move_pid_main (const char *controller, const char *cgroup,
 	if (!dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING,
 				&controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -382,14 +396,17 @@ int create_main (const char *controller, const char *cgroup, struct ucred p,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -433,14 +450,17 @@ int chown_main (const char *controller, const char *cgroup,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -483,22 +503,27 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &file)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &mode)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -541,18 +566,22 @@ int get_value_main (void *parent, const char *controller, const char *cgroup,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -601,22 +630,27 @@ int set_value_main (const char *controller, const char *cgroup,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &key)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &value)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -659,18 +693,22 @@ int remove_main (const char *controller, const char *cgroup, struct ucred p,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_INT32, &recursive)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -716,14 +754,17 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -786,14 +827,17 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
@@ -863,14 +907,17 @@ int remove_on_empty_main (const char *controller, const char *cgroup,
 	dbus_message_iter_init_append(message, &iter);
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
 		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
 		goto out;
 	}
 
