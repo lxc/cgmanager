@@ -604,6 +604,8 @@ int get_path_depth(const char *p)
 {
 	int depth = 0;
 
+	if (!p)
+		return 0;
 	while (*p) {
 		while (*p && *p == '/')
 			p++;
@@ -623,16 +625,26 @@ int get_path_depth(const char *p)
  * @path is the path in which to return the full cgroup path.
  *    "a/b", then we concatenate "/cgroup/for/pid" with "a/b"
  *    If @cgroup is "/a/b", then we use "/a/b"
+ * @depth, if not null, will contain the depth of the tasks's
+ * current cgroup plus the proposed new cgroup.
  */
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		char *path, int *depth)
 {
 	int ret;
-	char requestor_cgpath[MAXPATHLEN], fullpath[MAXPATHLEN], *cg;
+	char requestor_cgpath[MAXPATHLEN], fullpath[MAXPATHLEN];
+	/*
+	 * cg contains the the requestor's current cgroup, to prepend to
+	 * the requested cgroup - or "" if requesting an absolute path
+	 */
+	char *cg = "";
 	const char *cont_path;
 	bool abspath = false;
 
-	if (cgroup && cgroup[0] != '/') {
+	if (!cgroup)
+		return false;
+
+	if (cgroup[0] != '/') {
 		cg = pid_cgroup(pid, controller, requestor_cgpath);
 		if (!cg) {
 			return false;
@@ -641,7 +653,7 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		abspath = true;
 
 	if (depth)
-		*depth = get_path_depth(cg);
+		*depth = get_path_depth(cg) + get_path_depth(cgroup);
 
 	if ((cont_path = get_controller_path(controller)) == NULL) {
 		nih_error("Controller %s not mounted", controller);

@@ -192,7 +192,6 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 		return -1;
 	}
 
-	depth += get_path_depth(cgroup);
 	if (depth > maxdepth) {
 		nih_error("%s: Cgroup too deep: %s/%s", __func__, rcgpath, cgroup);
 		return -1;
