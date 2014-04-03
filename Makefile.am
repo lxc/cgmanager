@@ -112,4 +112,12 @@ TESTS_CGM_CONCURRENT: tests/cgm-concurrent.o
 	$(CCLD) -o tests/cgm-concurrent tests/cgm-concurrent.o \
 		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lpthread -lcgmanager
 
-tests: TESTS_CGM_CONCURRENT
+tests/test-timeout.o: tests/test-timeout.c
+	$(CC) -I. $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS) $(DBUS_CFLAGS)  -c \
+		-fPIC -DPIC -o tests/test-timeout.o tests/test-timeout.c
+
+TESTS_CGM_TIMEOUT: tests/test-timeout.o
+	$(CCLD) -o tests/test-timeout tests/test-timeout.o \
+		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lcgmanager
+
+tests: TESTS_CGM_CONCURRENT TESTS_CGM_TIMEOUT

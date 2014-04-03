@@ -1015,6 +1015,8 @@ main (int argc, char *argv[])
 		setns_user_supported = true;
 	}
 
+	connection_timeout_init();
+
 	/* Become daemon */
 	if (daemonise) {
 		if (nih_main_daemonise () < 0) {

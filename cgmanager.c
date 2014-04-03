@@ -18,6 +18,7 @@
  */
 
 #include <frontend.h>
+#include <sys/resource.h>
 
 /*
  * Maximum depth of directories we allow in Create
@@ -816,6 +817,7 @@ main (int argc, char *argv[])
 	int		ret;
 	DBusServer *	server;
 	struct stat sb;
+	struct rlimit newrlimit;
 
 	nih_main_init (argv[0]);
 
@@ -871,6 +873,14 @@ main (int argc, char *argv[])
 		myuserns = read_user_ns_link(getpid());
 		setns_user_supported = true;
 	}
+
+	connection_timeout_init();
+
+	newrlimit.rlim_cur = 10000;
+	newrlimit.rlim_max = 10000;
+	if (setrlimit(RLIMIT_NOFILE, &newrlimit) < 0)
+		nih_warn("Failed to increase open file limit: %s",
+			strerror(errno));
 
 	/* Become daemon */
 	if (daemonise) {
