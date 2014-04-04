@@ -24,7 +24,7 @@
  * Default is 16.  Figure 4 directories per level of container
  * nesting (/user/1000.user/c2.session/c1), that lets us nest
  * 4 containers deep.
- * */
+ */
 static int maxdepth = 16;
 
 /* GetPidCgroup */
