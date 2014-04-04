@@ -739,6 +739,8 @@ static NihOption options[] = {
 		NULL, "subsystems to mount", NULL, my_setter },
 	{ 0, "daemon", N_("Detach and run in the background"),
 		NULL, NULL, &daemonise, NULL },
+	{ 0, "sigstop", N_("Raise SIGSTOP when ready"),
+		NULL, NULL, &sigstop, NULL },
 
 	NIH_OPTION_LAST
 };
@@ -883,6 +885,9 @@ main (int argc, char *argv[])
 			exit (1);
 		}
 	}
+
+	if (sigstop)
+		raise(SIGSTOP);
 
 	ret = nih_main_loop ();
 

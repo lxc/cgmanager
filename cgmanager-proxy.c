@@ -948,6 +948,8 @@ out:
 static NihOption options[] = {
 	{ 0, "daemon", N_("Detach and run in the background"),
 	  NULL, NULL, &daemonise, NULL },
+	{ 0, "sigstop", N_("Raise SIGSTOP when ready"),
+		NULL, NULL, &sigstop, NULL },
 	{ 0, "check-master", N_("Check whether cgmanager is running"),
 	  NULL, NULL, &checkmaster, NULL },
 
@@ -1029,6 +1031,9 @@ main (int argc, char *argv[])
 		nih_fatal("Failed to send opening ping to cgmanager");
 		exit(1);
 	}
+
+	if (sigstop)
+		raise(SIGSTOP);
 
 	ret = nih_main_loop ();
 
