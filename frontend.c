@@ -1,8 +1,8 @@
 /* frontend.h: definitions of the dbus and scm-enhanced dbus
  *             frontend routines.
  *
- * Copyright © 2013 Stphane Graber
- * Author: Stphane Graber <stgraber@ubuntu.com>
+ * Copyright © 2013 Stephane Graber
+ * Author: Stephane Graber <stgraber@ubuntu.com>
  * Copyright © 2014 Canonical Group Limited
  * Author: Serge Hallyn <serge.hallyn@ubuntu.com>
  *
