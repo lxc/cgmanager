@@ -1086,9 +1086,8 @@ int get_child_directories(void *parent, const char *path, char ***output)
 			alloced += 5;
 			tmp = nih_realloc(*output, parent, alloced * sizeof(char *));
 			if (!tmp) {
-				if (*output)
-					nih_free(*output);
-				output = NULL;
+				nih_free(*output);
+				*output = NULL;
 				nih_error("%s: Out of memory", __func__);
 				closedir(d);
 				return -1;
