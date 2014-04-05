@@ -46,7 +46,7 @@ static struct scm_sock_data *alloc_scm_sock_data(NihDBusMessage *message,
 		int fd, enum req_type t)
 {
 	struct scm_sock_data *d;
-	int optval = -1, dbusfd;
+	int optval = 1, dbusfd;
 	socklen_t len;
 
 	if (setsockopt(fd, SOL_SOCKET, SO_PASSCRED, &optval, sizeof(optval)) == -1) {
