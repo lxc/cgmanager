@@ -168,11 +168,16 @@ static bool save_mount_subsys(char *s)
 	}
 	if ((controller = strchr(s, '='))) {
 		/* this is something like 'name=systemd' */
-		src = alloca(len+6);
+		src = alloca(len+7);
 		/* so for controller we want 'systemd' */
 		controller++;
 		/* and for source we want "none,name=systemd" */
-		snprintf(src, len+6, "none,%s", s);
+		ret = snprintf(src, len+6, "none,%s", s);
+		if (ret < 0 || ret >= len+6) {
+			nih_fatal("saving mount subsys for %s", s);
+			ret = -1;
+			goto out;
+		}
 	} else {
 		controller = s;
 		src = s;
