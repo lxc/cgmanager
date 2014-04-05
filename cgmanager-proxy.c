@@ -865,7 +865,8 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 	if (recv(sv[0], &len, sizeof(uint32_t), 0) != sizeof(uint32_t))
 		goto out;
 
-	paths = nih_alloc(NULL, len);
+	paths = nih_alloc(NULL, len+1);
+	paths[len] = '\0';
 	if (read(sv[0], paths, len) != len) {
 		nih_error("%s: Failed getting paths from server", __func__);
 		goto out;
@@ -876,6 +877,12 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 	s = paths;
 	(*output)[nrkids] = NULL;
 	for (i=0; i<nrkids; i++) {
+		if (s > paths + len) {
+			ret = -1;
+			nih_error("%s: corrupted result from cgmanager",
+					__func__);
+			goto out;
+		}
 		(*output)[i] = NIH_MUST( nih_strdup(parent, s) );
 		s += strlen(s) + 1;
 	}
