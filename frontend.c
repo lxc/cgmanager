@@ -60,24 +60,27 @@ static uint32_t timer_hash_fn(const void *conn)
 
 static int timer_cmp_fn(const void *v1, const void *v2)
 {
-	if (v1 == v2)
+	unsigned long val1 = (unsigned long)v1;
+	unsigned long val2 = (unsigned long)v2;
+
+	if (val1 > val2)
+		return 1;
+	else if (val1 < val2)
+		return -1;
+	else
 		return 0;
-	return 1;
 }
 
 static void timeout_remove(DBusConnection *conn)
 {
 	timer_hash_entry *t;
-	NihTimer *timer;
 
 	t = (timer_hash_entry *) nih_hash_lookup(timer_hash, conn);
 	if (!t)
 		return;
-	nih_list_remove(&t->entry);
-	timer = t->timer;
-	nih_list_remove(&timer->entry);
-	nih_free(timer);
-	nih_free(t);
+
+	nih_free (t->timer);
+	nih_free (t);
 }
 
 static void timeout_handler(void *data, NihTimer *timer)
@@ -88,7 +91,6 @@ static void timeout_handler(void *data, NihTimer *timer)
 	dbus_connection_close(conn);
 	dbus_connection_unref(conn);
 	/* nih will take care of the NihTimer itself */
-	nih_list_remove(&t->entry);
 	nih_free(t);
 }
 
@@ -96,18 +98,7 @@ static void timeout_add(DBusConnection *);
 
 static void timeout_reset(DBusConnection *conn)
 {
-	timer_hash_entry *t; /* entry into our own timer_hash */
-	NihTimer *timer;
-
-	t = (timer_hash_entry *) nih_hash_lookup(timer_hash, conn);
-	if (!t)
-		return;
-	nih_list_remove(&t->entry);
-	timer = t->timer;
-	nih_list_remove(&timer->entry);
-	nih_free(timer);
-	nih_free(t);
-
+	timeout_remove(conn);
 	timeout_add(conn);
 }
 
@@ -116,13 +107,14 @@ static void timeout_add(DBusConnection *conn)
 	timer_hash_entry *t;
 	NihTimer *timer;
 
-	t = NIH_MUST( nih_new(NULL, timer_hash_entry) );
-	timer = NIH_MUST( nih_timer_add_timeout(NULL, 20,
-		timeout_handler, t) );
+	t = NIH_MUST (nih_new (NULL, timer_hash_entry));
+	nih_list_init (&t->entry);
+	nih_alloc_set_destructor (t, nih_list_destroy);
+	timer = NIH_MUST (nih_timer_add_timeout (NULL, 20, timeout_handler, t));
 	t->conn = conn;
 	t->timer = timer;
-	nih_list_init((NihList *) t);
-	nih_hash_add(timer_hash, (NihList *)t);
+
+	nih_hash_add (timer_hash, &t->entry);
 }
 
 /* reject unsafe cgroups */

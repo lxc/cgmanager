@@ -114,6 +114,8 @@ int setup_proxy(void)
 		nih_fatal("Failed to open connection to %s: %s",
 				CGPROXY_DBUS_PATH, err->message);
 		nih_free(err);
+
+		return -1;
 	}
 	return 0;
 }
@@ -143,6 +145,7 @@ bool send_dummy_msg(DBusConnection *conn)
 	DBusMessage *message = NULL;
 	DBusMessageIter iter;
 	int a;
+
 	message = dbus_message_new_method_call(dbus_bus_get_unique_name(conn),
 			"/org/linuxcontainers/cgmanager",
 			"org.linuxcontainers.cgmanager0_0", "Ping");
@@ -995,6 +998,9 @@ main (int argc, char *argv[])
 			exit(0);
 		exit(1);
 	}
+
+	connection_timeout_init();
+
 	if (setup_proxy() < 0) {
 		nih_fatal ("Failed to set up as proxy");
 		exit(1);
@@ -1014,8 +1020,6 @@ main (int argc, char *argv[])
 		myuserns = read_user_ns_link(getpid());
 		setns_user_supported = true;
 	}
-
-	connection_timeout_init();
 
 	/* Become daemon */
 	if (daemonise) {
