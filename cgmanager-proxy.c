@@ -45,6 +45,22 @@ bool master_running(void)
 	return false;
 }
 
+/* wait up to 2 seconds for a reply from cgmanager */
+static int proxyrecv(int sockfd, void *buf, size_t len)
+{
+	struct timeval tv;
+	fd_set rfds;
+
+	FD_ZERO(&rfds);
+	FD_SET(sockfd, &rfds);
+	tv.tv_sec = 2;
+	tv.tv_usec = 0;
+
+	if (select(sockfd+1, &rfds, NULL, NULL, &tv) < 0)
+		return -1;
+	return recv(sockfd, buf, len, MSG_DONTWAIT);
+}
+
 static void cgm_dbus_disconnected(DBusConnection *connection);
 
 int setup_proxy(void)
@@ -210,7 +226,7 @@ static bool complete_dbus_request(DBusMessage *message,
 	dbus_connection_flush(server_conn);
 	dbus_message_unref(message);
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
+	if (proxyrecv(sv[0], buf, 1) != 1) {
 		nih_error("%s: Error getting reply from server over socketpair",
 			  __func__);
 		return false;
@@ -224,7 +240,7 @@ static bool complete_dbus_request(DBusMessage *message,
 	if (!vcred) // this request only requires one scm_credential
 		return true;
 
-	if (recv(sv[0], buf, 1, 0) != 1) {
+	if (proxyrecv(sv[0], buf, 1) != 1) {
 		nih_error("%s: Error getting reply from server over socketpair",
 			__func__);
 		return false;
@@ -275,8 +291,7 @@ int get_pid_cgroup_main (void *parent, const char *controller,
 		goto out;
 	}
 
-	// TODO - switch to nih_io_message_recv?
-	if (recv(sv[0], s, MAXPATHLEN-1, 0) <= 0)
+	if (proxyrecv(sv[0], s, MAXPATHLEN-1) <= 0)
 		nih_error("%s: Error reading result from cgmanager",
 			__func__);
 	else {
@@ -336,7 +351,7 @@ int do_move_pid_main (const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
+	if (proxyrecv(sv[0], buf, 1) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
@@ -418,7 +433,7 @@ int create_main (const char *controller, const char *cgroup, struct ucred p,
 		goto out;
 	}
 
-	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
+	if (proxyrecv(sv[0], buf, 1) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
 	*existed = *buf == '2' ? 1 : -1;
 out:
@@ -472,7 +487,7 @@ int chown_main (const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
+	if (proxyrecv(sv[0], buf, 1) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
@@ -535,7 +550,7 @@ int chmod_main (const char *controller, const char *cgroup, const char *file,
 		goto out;
 	}
 
-	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
+	if (proxyrecv(sv[0], buf, 1) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
@@ -593,7 +608,7 @@ int get_value_main (void *parent, const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (recv(sv[0], output, MAXPATHLEN, 0) <= 0) {
+	if (proxyrecv(sv[0], output, MAXPATHLEN) <= 0) {
 		nih_error("%s: Failed reading string from cgmanager: %s",
 			__func__, strerror(errno));
 	} else {
@@ -662,7 +677,7 @@ int set_value_main (const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (recv(sv[0], buf, 1, 0) == 1 && *buf == '1')
+	if (proxyrecv(sv[0], buf, 1) == 1 && *buf == '1')
 		ret = 0;
 out:
 	close(sv[0]);
@@ -720,7 +735,7 @@ int remove_main (const char *controller, const char *cgroup, struct ucred p,
 		goto out;
 	}
 
-	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1' || *buf == '2'))
+	if (proxyrecv(sv[0], buf, 1) == 1 && (*buf == '1' || *buf == '2'))
 		ret = 0;
 	*existed = *buf == '2' ? 1 : -1;
 out:
@@ -775,7 +790,7 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 		nih_error("%s: error completing dbus request", __func__);
 		goto out;
 	}
-	if (recv(sv[0], &nrpids, sizeof(uint32_t), 0) != sizeof(uint32_t))
+	if (proxyrecv(sv[0], &nrpids, sizeof(uint32_t)) != sizeof(uint32_t))
 		goto out;
 	if (nrpids == -1) {
 		nih_error("%s: bad cgroup: %s:%s", __func__, controller, cgroup);
@@ -854,7 +869,7 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 		goto out;
 	}
 
-	if (recv(sv[0], &nrkids, sizeof(int32_t), 0) != sizeof(int32_t))
+	if (proxyrecv(sv[0], &nrkids, sizeof(int32_t)) != sizeof(int32_t))
 		goto out;
 	if (nrkids == 0) {
 		ret = 0;
@@ -865,7 +880,7 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 		ret = -1;
 		goto out;
 	}
-	if (recv(sv[0], &len, sizeof(uint32_t), 0) != sizeof(uint32_t))
+	if (proxyrecv(sv[0], &len, sizeof(uint32_t)) != sizeof(uint32_t))
 		goto out;
 
 	paths = nih_alloc(NULL, len+1);
@@ -941,7 +956,7 @@ int remove_on_empty_main (const char *controller, const char *cgroup,
 		goto out;
 	}
 
-	if (recv(sv[0], buf, 1, 0) == 1 && (*buf == '1'))
+	if (proxyrecv(sv[0], buf, 1) == 1 && (*buf == '1'))
 		ret = 0;
 out:
 	close(sv[0]);
