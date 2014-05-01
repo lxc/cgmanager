@@ -155,7 +155,6 @@ int cgmanager_ping (void *data, NihDBusMessage *message, int junk);
 
 int client_connect (DBusServer *server, DBusConnection *conn);
 void client_disconnect (DBusConnection *conn);
-void connection_timeout_init(void);
 
 bool sane_cgroup(const char *cgroup);
 

@@ -22,9 +22,6 @@
 
 #define __frontend_c
 #include <frontend.h>
-#include <nih/hash.h>
-#include <nih/list.h>
-#include <nih/timer.h>
 
 int daemonise = FALSE;
 int sigstop = FALSE;
@@ -33,91 +30,6 @@ unsigned long mypidns;
 bool setns_user_supported = false;
 unsigned long myuserns;
 
-/* functions to time out connections */
-
-typedef struct timer_hash_entry {
-	NihList entry;
-	DBusConnection *conn;
-	NihTimer *timer;
-} timer_hash_entry;
-
-static NihHash *timer_hash;
-
-static const void *timer_key_fn(NihList *entry)
-{
-	timer_hash_entry *e = (timer_hash_entry *)entry;
-	return e->conn;
-}
-
-static uint32_t timer_hash_fn(const void *conn)
-{
-	unsigned long val = (unsigned long)conn;
-
-	if (sizeof(conn) > 4)
-		val ^= (val >> 32);
-	return (uint32_t)val;
-}
-
-static int timer_cmp_fn(const void *v1, const void *v2)
-{
-	unsigned long val1 = (unsigned long)v1;
-	unsigned long val2 = (unsigned long)v2;
-
-	if (val1 > val2)
-		return 1;
-	else if (val1 < val2)
-		return -1;
-	else
-		return 0;
-}
-
-static void timeout_remove(DBusConnection *conn)
-{
-	timer_hash_entry *t;
-
-	t = (timer_hash_entry *) nih_hash_lookup(timer_hash, conn);
-	if (!t)
-		return;
-
-	nih_free (t->timer);
-	nih_free (t);
-}
-
-static void timeout_handler(void *data, NihTimer *timer)
-{
-	timer_hash_entry *t = (timer_hash_entry *)data;
-	DBusConnection *conn = t->conn;
-
-	dbus_connection_close(conn);
-	dbus_connection_unref(conn);
-	/* nih will take care of the NihTimer itself */
-	nih_free(t);
-}
-
-static void timeout_add(DBusConnection *);
-
-static void timeout_reset(DBusConnection *conn)
-{
-	timeout_remove(conn);
-	timeout_add(conn);
-}
-
-static void timeout_add(DBusConnection *conn)
-{
-	timer_hash_entry *t;
-	NihTimer *timer;
-
-	t = NIH_MUST (nih_new (NULL, timer_hash_entry));
-	nih_list_init (&t->entry);
-	nih_alloc_set_destructor (t, nih_list_destroy);
-	timer = NIH_MUST (nih_timer_add_timeout (NULL, 20, timeout_handler, t));
-	t->conn = conn;
-	t->timer = timer;
-
-	nih_hash_add (timer_hash, &t->entry);
-}
-
-/* reject unsafe cgroups */
 bool sane_cgroup(const char *cgroup)
 {
 	if (!cgroup)
@@ -304,7 +216,6 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_PID);
 	if (!d)
 		return -1;
@@ -347,7 +258,6 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -417,7 +327,6 @@ int cgmanager_get_pid_cgroup_abs_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_PID_ABS);
 	if (!d)
 		return -1;
@@ -461,7 +370,6 @@ int cgmanager_get_pid_cgroup_abs (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -541,7 +449,6 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_MOVE_PID);
 	if (!d)
 		return -1;
@@ -584,7 +491,6 @@ int cgmanager_move_pid (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -636,7 +542,6 @@ int cgmanager_move_pid_abs_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_MOVE_PID_ABS);
 	if (!d)
 		return -1;
@@ -674,7 +579,6 @@ int cgmanager_move_pid_abs (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -758,7 +662,6 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_CREATE);
 	if (!d)
 		return -1;
@@ -803,7 +706,6 @@ int cgmanager_create (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"Could not get client socket.");
@@ -845,7 +747,6 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_CHOWN);
 	if (!d)
 		return -1;
@@ -893,7 +794,6 @@ int cgmanager_chown (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -952,7 +852,6 @@ int cgmanager_chmod_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_CHMOD);
 	if (!d)
 		return -1;
@@ -997,7 +896,6 @@ int cgmanager_chmod (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -1042,7 +940,6 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_VALUE);
 	if (!d)
 		return -1;
@@ -1094,7 +991,6 @@ int cgmanager_get_value (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -1135,7 +1031,6 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_SET_VALUE);
 	if (!d)
 		return -1;
@@ -1184,7 +1079,6 @@ int cgmanager_set_value (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -1228,7 +1122,6 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_REMOVE);
 	if (!d)
 		return -1;
@@ -1273,7 +1166,6 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 			"message was null");
 		return -1;
 	}
-	timeout_reset(message->connection);
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -1331,7 +1223,6 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_TASKS);
 	if (!d)
 		return -1;
@@ -1375,7 +1266,6 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 		return -1;
 	}
 
-	timeout_reset(message->connection);
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 					     "Could not get client socket.");
@@ -1460,7 +1350,6 @@ int cgmanager_list_children_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_LIST_CHILDREN);
 	if (!d)
 		return -1;
@@ -1504,7 +1393,6 @@ int cgmanager_list_children (void *data, NihDBusMessage *message,
 			"message was null");
 		return -1;
 	}
-	timeout_reset(message->connection);
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -1548,7 +1436,6 @@ int cgmanager_remove_on_empty_scm (void *data, NihDBusMessage *message,
 {
 	struct scm_sock_data *d;
 
-	timeout_reset(message->connection);
 	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_REMOVE_ON_EMPTY);
 	if (!d)
 		return -1;
@@ -1591,7 +1478,6 @@ int cgmanager_remove_on_empty (void *data, NihDBusMessage *message,
 			"message was null");
 		return -1;
 	}
-	timeout_reset(message->connection);
 
 	if (!dbus_connection_get_socket(message->connection, &fd)) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
@@ -1622,7 +1508,6 @@ int cgmanager_remove_on_empty (void *data, NihDBusMessage *message,
 int
 cgmanager_get_api_version(void *data, NihDBusMessage *message, int *version)
 {
-	timeout_reset(message->connection);
 	nih_assert(message);
 	nih_assert(version);
 	*version = API_VERSION;
@@ -1650,7 +1535,6 @@ int client_connect (DBusServer *server, DBusConnection *conn)
 				"/org/linuxcontainers/cgmanager",
 				cgmanager_interfaces, NULL));
 
-	timeout_add(conn);
 	return TRUE;
 }
 
@@ -1659,12 +1543,5 @@ void client_disconnect (DBusConnection *conn)
 	if (conn == NULL)
 		return;
 
-	timeout_remove(conn);
 	nih_info (_("Disconnected from private client"));
-}
-
-void connection_timeout_init(void)
-{
-	timer_hash = NIH_MUST( nih_hash_new(NULL, 1024,
-			timer_key_fn, timer_hash_fn, timer_cmp_fn) );
 }

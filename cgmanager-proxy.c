@@ -1075,8 +1075,6 @@ main (int argc, char *argv[])
 		exit(1);
 	}
 
-	connection_timeout_init();
-
 	if (setup_proxy() < 0) {
 		nih_fatal ("Failed to set up as proxy");
 		exit(1);

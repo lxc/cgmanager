@@ -907,8 +907,6 @@ main (int argc, char *argv[])
 		setns_user_supported = true;
 	}
 
-	connection_timeout_init();
-
 	newrlimit.rlim_cur = 10000;
 	newrlimit.rlim_max = 10000;
 	if (setrlimit(RLIMIT_NOFILE, &newrlimit) < 0)
