@@ -37,6 +37,8 @@ usage() {
 	echo
 	echo "   $me movepid <controller> <cgroup> pid"
 	echo
+	echo "   $me movepidabs <controller> <cgroup> pid"
+	echo
 	echo "   $me getvalue <controller> <cgroup> file"
 	echo
 	echo "   $me setvalue <controller> <cgroup> file value"
@@ -146,6 +148,19 @@ case "$1" in
 			done
 		else
 			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:$2 string:$3 int32:$4
+		fi
+		exit $?
+	;;
+	movepidabs)
+		if [ $# -lt 4 ]; then
+			usage $0
+		fi
+		if [ "$2" = "all" ]; then
+			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePidAbs string:$cg string:$3 int32:$4
+			done
+		else
+			dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePidAbs string:$2 string:$3 int32:$4
 		fi
 		exit $?
 	;;
