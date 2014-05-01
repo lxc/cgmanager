@@ -10,7 +10,7 @@ dotest() {
     mkdir /sys/fs/cgroup/cgmanager
     touch /sys/fs/cgroup/cgmanager/sock
     mount --bind /mnt/cgmanager/sock /sys/fs/cgroup/cgmanager/sock
-    cgproxy --debug > cgproxy.out.$$ &
+    cgproxy &
     ppid=$!
     sleep 20 &
     spid=$!
