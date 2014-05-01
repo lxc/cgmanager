@@ -5,7 +5,7 @@ echo "Test 22: getpidcgroupabs"
 cg="test22_cg"
 
 dotest() {
-    mount --move /sys/fs/cgroup /mnt
+    mount --move /sys/fs/cgroup /mnt || { echo "move mount not allowed;  aborting test"; exit 0; }
     mount -t tmpfs none /sys/fs/cgroup
     mkdir /sys/fs/cgroup/cgmanager
     touch /sys/fs/cgroup/cgmanager/sock
