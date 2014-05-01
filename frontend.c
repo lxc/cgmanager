@@ -165,27 +165,6 @@ static struct scm_sock_data *alloc_scm_sock_data(NihDBusMessage *message,
 	return d;
 }
 
-#if 0
-static const char *req_type_to_str(enum req_type r)
-{
-	switch(r) {
-		case REQ_TYPE_GET_PID: return "get_pid";
-		case REQ_TYPE_MOVE_PID: return "move_pid";
-		case REQ_TYPE_MOVE_PID_ABS: return "move_pid";
-		case REQ_TYPE_CREATE: return "create";
-		case REQ_TYPE_CHOWN: return "chown";
-		case REQ_TYPE_GET_VALUE: return "get_value";
-		case REQ_TYPE_SET_VALUE: return "set_value";
-		case REQ_TYPE_REMOVE: return "remove";
-		case REQ_TYPE_GET_TASKS: return "get_tasks";
-		case REQ_TYPE_CHMOD: return "chmod";
-		case REQ_TYPE_LIST_CHILDREN: return "list_children";
-		case REQ_TYPE_REMOVE_ON_EMPTY: return "remove_on_empty";
-		default: return "invalid";
-	}
-}
-#endif
-
 /*
  * All Scm-enhanced transactions take at least one SCM cred,
  * the requestor's.  Some require a second SCM cred to identify
@@ -195,6 +174,7 @@ static bool need_two_creds(enum req_type t)
 {
 	switch (t) {
 	case REQ_TYPE_GET_PID:
+	case REQ_TYPE_GET_PID_ABS:
 	case REQ_TYPE_MOVE_PID:
 	case REQ_TYPE_MOVE_PID_ABS:
 	case REQ_TYPE_CHOWN:
@@ -208,10 +188,6 @@ static void scm_sock_error_handler (void *data, NihIo *io)
 {
 	struct scm_sock_data *d = data;
 	NihError *error = nih_error_get ();
-#if 0
-	nih_info("got an error, type %s", req_type_to_str(d->type));
-	nih_info("error %s", strerror(error->number));
-#endif
 	nih_free(error);
 	d->fd = -1;
 }
@@ -270,6 +246,7 @@ static void sock_scm_reader(struct scm_sock_data *data,
 
 	switch (data->type) {
 	case REQ_TYPE_GET_PID: get_pid_scm_complete(data); break;
+	case REQ_TYPE_GET_PID_ABS: get_pid_abs_scm_complete(data); break;
 	case REQ_TYPE_MOVE_PID: move_pid_scm_complete(data); break;
 	case REQ_TYPE_MOVE_PID_ABS: move_pid_abs_scm_complete(data); break;
 	case REQ_TYPE_CREATE: create_scm_complete(data); break;
@@ -403,6 +380,142 @@ int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
 	vcred.gid = 0;
 	vcred.pid = plain_pid;
 	ret = get_pid_cgroup_main(message, controller, rcred, rcred, vcred, output);
+	if (ret) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"invalid request");
+		return -1;
+	}
+	return 0;
+}
+
+void get_pid_abs_scm_complete(struct scm_sock_data *data)
+{
+	// output will be nih_alloced with data as parent, and therefore
+	// freed when data is freed.
+	char *output = NULL;
+	int ret;
+
+	ret = get_pid_cgroup_abs_main(data, data->controller, data->pcred,
+			data->rcred, data->vcred, &output);
+	if (ret == 0)
+		ret = write(data->fd, output, strlen(output)+1);
+	else
+		// Let the client know it failed
+		ret = write(data->fd, &data->rcred, 0);
+	if (ret < 0)
+		nih_error("GetPidCgroupAbsScm: Error writing final result to client: %s",
+			strerror(errno));
+}
+
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests the cgroup of @pid in a given @controller, relative
+ * to the proxy's
+ */
+int cgmanager_get_pid_cgroup_abs_scm (void *data, NihDBusMessage *message,
+			const char *controller, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	timeout_reset(message->connection);
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_PID_ABS);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+
+	if (!kick_fd_client(sockfd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Error writing to client: %s", strerror(errno));
+		return -1;
+	}
+	return 0;
+}
+
+/* GetPidCgroup */
+/*
+ * This is one of the dbus callbacks.
+ * Caller requests the cgroup of @pid in a given @controller relative
+ * to the proxy's
+ */
+int cgmanager_get_pid_cgroup_abs (void *data, NihDBusMessage *message,
+			const char *controller, int plain_pid, char **output)
+{
+	int fd = 0, ret;
+	struct ucred rcred, vcred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	timeout_reset(message->connection);
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("GetPidCgroupAbs: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	/*
+	 * getpidcgroup results cannot make sense as the pid is not
+	 * translated.  Note that on an old enough kernel we cannot detect
+	 * this situation.  In that case we allow it - it will confuse the
+	 * caller, but cause no harm
+	 */
+	if (!is_same_pidns(rcred.pid)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"GetPidCgroupAbs called from non-init namespace");
+		return -1;
+	}
+	vcred.uid = 0;
+	vcred.gid = 0;
+	vcred.pid = plain_pid;
+
+#ifdef CGMANAGER
+	/*
+	 * A plain dbus request to escape cgroup root was made by a root
+	 * owned task in cgmanager's namespace.  We will send ourselves as the
+	 * proxy.
+	 */
+	struct ucred mycred = {
+		.pid = getpid(),
+		.uid = getuid(),
+		.gid = getgid()
+	};
+#else
+	/*
+	 * This is the !CGMANAGER case.  We are in the proxy.  We don't
+	 * support chained proxying anyway, so it is simple - the requestor
+	 * is the proxy at this point;  then we will proxy the call on to
+	 * the cgmanager
+	 */
+#define mycred rcred
+#endif
+
+	ret = get_pid_cgroup_abs_main(message, controller, mycred, rcred, vcred, output);
 	if (ret) {
 		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
 				"invalid request");

@@ -304,6 +304,56 @@ out:
 	return ret;
 }
 
+int get_pid_cgroup_abs_main (void *parent, const char *controller,
+		struct ucred p, struct ucred r, struct ucred v, char **output)
+{
+	DBusMessage *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1;
+	char s[MAXPATHLEN] = { 0 };
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!(message = start_dbus_request("GetPidCgroupAbsScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(message, &iter);
+	if (!dbus_message_iter_append_basic (&iter,
+			DBUS_TYPE_STRING,
+			&controller)) {
+		dbus_message_unref(message);
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		dbus_message_unref(message);
+		nih_error("%s: out of memory", __func__);
+		goto out;
+	}
+
+	if (!complete_dbus_request(message, sv, &r, &v)) {
+		nih_error("%s: error completing dbus request", __func__);
+		goto out;
+	}
+
+	if (proxyrecv(sv[0], s, MAXPATHLEN-1) <= 0)
+		nih_error("%s: Error reading result from cgmanager",
+			__func__);
+	else {
+		*output = NIH_MUST( nih_strdup(parent, s) );
+		ret = 0;
+	}
+out:
+	close(sv[0]);
+	close(sv[1]);
+	return ret;
+}
+
 int do_move_pid_main (const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, struct ucred v,
 		const char *cmd)
@@ -377,10 +427,21 @@ int move_pid_main (const char *controller, const char *cgroup,
 int move_pid_abs_main (const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, struct ucred v)
 {
+#if 0
+	/*
+	 * We used to enforce that r must be root.  However that's
+	 * overly restrictive.
+	 * Cgmanager ensures that r must have write access to the
+	 * tasks file.  That seems sufficient.  However if it is deemed
+	 * insufficient, we can ensure that r's user or group id own
+	 * all parent directories up to a common parent, from v.cgroup
+	 * to the requested cgroup.  THIS CODE does NOT do that.
+	 */
 	if (r.uid) {
 		nih_error("%s: uid %u tried to escape", __func__, r.uid);
 		return -1;
 	}
+#endif
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
 		return -1;

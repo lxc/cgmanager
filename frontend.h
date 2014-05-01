@@ -105,11 +105,15 @@ enum req_type {
 	REQ_TYPE_MOVE_PID_ABS,
 	REQ_TYPE_LIST_CHILDREN,
 	REQ_TYPE_REMOVE_ON_EMPTY,
+	REQ_TYPE_GET_PID_ABS,
 };
 
 int get_pid_cgroup_main(void *parent, const char *controller,
 		struct ucred p, struct ucred r, struct ucred v, char **output);
 void get_pid_scm_complete(struct scm_sock_data *data);
+int get_pid_cgroup_abs_main(void *parent, const char *controller,
+		struct ucred p, struct ucred r, struct ucred v, char **output);
+void get_pid_abs_scm_complete(struct scm_sock_data *data);
 int move_pid_main(const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, struct ucred v);
 void move_pid_scm_complete(struct scm_sock_data *data);

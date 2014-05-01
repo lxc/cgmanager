@@ -44,6 +44,18 @@
       <arg name="output" type="s" direction="out" />
       <!-- client must be in manager's pidns -->
     </method>
+    <method name="GetPidCgroupAbsScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <!-- Pid is passed as a scm_cred over sockfd -->
+      <!-- Result is printed over same sockfd -->
+    </method>
+    <method name="GetPidCgroupAbs">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="pid" type="i" direction="in" />
+      <arg name="output" type="s" direction="out" />
+      <!-- client must be in manager's pidns -->
+    </method>
     <method name="CreateScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />

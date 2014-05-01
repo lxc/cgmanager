@@ -61,6 +61,39 @@ int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 	return 0;
 }
 
+/* GetPidCgroupAbs */
+int get_pid_cgroup_abs_main(void *parent, const char *controller,struct ucred p,
+			 struct ucred r, struct ucred v, char **output)
+{
+	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
+
+	// Get p's current cgroup in rcgpath
+	if (!compute_pid_cgroup(p.pid, controller, "", rcgpath, NULL)) {
+		nih_error("%s: Could not determine the requestor cgroup", __func__);
+		return -1;
+	}
+
+	// Get v's cgroup in vcgpath
+	if (!compute_pid_cgroup(v.pid, controller, "", vcgpath, NULL)) {
+		nih_error("%s: Could not determine the victim cgroup", __func__);
+		return -1;
+	}
+
+	// Make sure v's cgroup is under p's
+	int rlen = strlen(rcgpath);
+	if (strncmp(rcgpath, vcgpath, rlen) != 0) {
+		nih_error("%s: v (%d)'s cgroup is not below p (%d)'s", __func__,
+			v.pid, p.pid);
+		return -1;
+	}
+	if (strlen(vcgpath) == rlen)
+		*output = NIH_MUST (nih_strdup(parent, "/") );
+	else
+		*output = NIH_MUST (nih_strdup(parent, vcgpath + rlen) );
+
+	return 0;
+}
+
 static bool victim_under_proxy_cgroup(char *rcgpath, pid_t v,
 		const char *controller)
 {

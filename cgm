@@ -35,6 +35,8 @@ usage() {
 	echo
 	echo "   $me getpidcgroup <controller> pid"
 	echo
+	echo "   $me getpidcgroupabs <controller> pid"
+	echo
 	echo "   $me movepid <controller> <cgroup> pid"
 	echo
 	echo "   $me movepidabs <controller> <cgroup> pid"
@@ -136,6 +138,13 @@ case "$1" in
 			usage $0
 		fi
 		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetPidCgroup string:$2 int32:$3
+		exit $?
+	;;
+	getpidcgroupabs)
+		if [ $# -lt 3 ]; then
+			usage $0
+		fi
+		dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetPidCgroupAbs string:$2 int32:$3
 		exit $?
 	;;
 	movepid)
