@@ -26,8 +26,14 @@ fi
 
 dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetTasks string:'memory' string:$cg >/dev/null 2>&1
 if [ $? -eq 0 ]; then
-	echo "Failed to remove-on-empty"
-	exit 1
+	# Maybe we're on a slow vm.  Kernel needs time to spawn the remove
+	# helper.  Give it some time...
+	sleep 5
+	dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetTasks string:'memory' string:$cg >/dev/null 2>&1
+	if [ $? -eq 0 ]; then
+		echo "Failed to remove-on-empty"
+		exit 1
+	fi
 fi
 
 echo "Test 21 (remove_on_empty) passed"
