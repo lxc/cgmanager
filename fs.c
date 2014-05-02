@@ -599,7 +599,7 @@ const char *get_controller_path(const char *controller)
 	int i;
 
 	for (i=0; i<num_controllers; i++) {
-		if (strcmp(all_mounts[i].controller, controller) == 0)
+		if (is_same_controller(controller, all_mounts[i].controller))
 			return all_mounts[i].path;
 	}
 	return NULL;
