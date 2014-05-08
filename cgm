@@ -86,7 +86,7 @@ case "$1" in
 			usage $0
 		fi
 		if [ "$2" = "all" ]; then
-			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+			for cg in `cut -d : -f 2 /proc/self/cgroup`; do
 				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:$cg string:$3 int32:1
 			done
 		else
@@ -99,7 +99,7 @@ case "$1" in
 			usage $0
 		fi
 		if [ "$2" = "all" ]; then
-			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+			for cg in `cut -d : -f 2 /proc/self/cgroup`; do
 				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:$cg string:$3
 			done
 		else
@@ -112,7 +112,7 @@ case "$1" in
 			usage $0
 		fi
 		if [ "$2" = "all" ]; then
-			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+			for cg in `cut -d : -f 2 /proc/self/cgroup`; do
 				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:$cg string:$3 int32:$4 int32:$5
 			done
 		else
@@ -125,7 +125,7 @@ case "$1" in
 			usage $0
 		fi
 		if [ "$2" = "all" ]; then
-			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+			for cg in `cut -d : -f 2 /proc/self/cgroup`; do
 				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chmod string:$cg string:$3 int32:$4
 			done
 		else
@@ -152,7 +152,7 @@ case "$1" in
 			usage $0
 		fi
 		if [ "$2" = "all" ]; then
-			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+			for cg in `cut -d : -f 2 /proc/self/cgroup`; do
 				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:$cg string:$3 int32:$4
 			done
 		else
@@ -165,7 +165,7 @@ case "$1" in
 			usage $0
 		fi
 		if [ "$2" = "all" ]; then
-			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+			for cg in `cut -d : -f 2 /proc/self/cgroup`; do
 				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePidAbs string:$cg string:$3 int32:$4
 			done
 		else
@@ -199,7 +199,7 @@ case "$1" in
 			usage $0
 		fi
 		if [ "$2" = "all" ]; then
-			for cg in `awk '!/^#/ { print $1 }' /proc/cgroups`; do
+			for cg in `cut -d : -f 2 /proc/self/cgroup`; do
 				dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.RemoveOnEmpty string:$cg string:$3
 			done
 		else
