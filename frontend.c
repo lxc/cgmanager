@@ -108,10 +108,14 @@ static void scm_sock_close (struct scm_sock_data *data, NihIo *io)
 {
 	nih_assert (data);
 	nih_assert (io);
+
+	nih_free (io);
+
+	// Only delete data struct after io, because freeing io may call methods
+	// like error_handler that use this data struct.
 	if (data->fd != -1)
 		close (data->fd);
 	nih_free (data);
-	nih_free (io);
 }
 
 /*
