@@ -706,6 +706,11 @@ int remove_on_empty_main(const char *controller, const char *cgroup,
 	size_t cgroup_len;
 	nih_local char *working = NULL, *wcgroup = NULL;
 
+	if (was_premounted(controller)) {
+		nih_error("remove-on-empty request for pre-mounted controller");
+		return -1;
+	}
+
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
 		return -1;

@@ -2,6 +2,15 @@
 
 echo "Test 21: remove_on_empty"
 
+if [ ! -f /run/cgmanager/agents/cgm-release-agent.memory ]; then
+	echo "memory cgroup was premounted;  skipping remove_on_empty test"
+	exit 0;
+fi
+if [ ! -f /run/cgmanager/agents/cgm-release-agent.devices ]; then
+	echo "devices cgroup was premounted;  skipping remove_on_empty test"
+	exit 0;
+fi
+
 cg="test21_cg"
 dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:'memory' string:$cg || true
 dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:'devices' string:$cg || true

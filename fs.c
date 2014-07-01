@@ -60,6 +60,8 @@ struct controller_mounts {
 	char *path;
 	char *src;
 	char *agent;
+	struct controller_mounts *comounted;
+	bool premounted;
 };
 
 static struct controller_mounts *all_mounts;
@@ -162,7 +164,7 @@ static void zero_out(struct controller_mounts *c)
 }
 
 /*
- * Look for a controller_mount struct for controller @c.
+ * Look for a controller_mounts struct for controller @c.
  * If found, set @found to true and return its index in all_mounts.
  * If not found, set @found to false and return index of the first
  * location in all_mounts whose controller is > @c, i.e. where it
@@ -215,10 +217,38 @@ static int find_controller_in_mounts(const char *c, bool *found)
 	return mid;
 }
 
+static bool fill_in_controller(struct controller_mounts *m, char *controller,
+			char *src)
+{
+	int ret;
+	char dest[MAXPATHLEN];
+
+	ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, src);
+	if (ret < 0 || ret >= MAXPATHLEN) {
+		nih_fatal("Error calculating pathname for %s and %s", base_path, src);
+		return false;
+	}
+	m->controller = strdup(controller);
+	if (!m->controller) {
+		nih_fatal("Out of memory mounting controllers");
+		return false;
+	}
+	m->options = NULL;
+	m->path = strdup(dest);
+	m->src = strdup(src);
+	if (!m->path ||
+			!m->src) {
+		nih_fatal("Out of memory mounting controllers");
+		return false;
+	}
+	nih_info(_("Arranged to mount %s onto %s"), m->controller, m->path);
+	return true;
+}
+
 static bool save_mount_subsys(char *s)
 {
 	struct controller_mounts *tmp;
-	char *src, dest[MAXPATHLEN], *controller;
+	char *src, *controller;
 	int i, insert_pt, ret;
 	size_t len = strlen(s);
 	bool found;
@@ -246,7 +276,7 @@ static bool save_mount_subsys(char *s)
 
 	insert_pt = find_controller_in_mounts(controller, &found);
 	if (found)
-		return 0;
+		return true;
 
 	tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
 	if (!tmp) {
@@ -259,29 +289,10 @@ static bool save_mount_subsys(char *s)
 		all_mounts[i] = all_mounts[i-1];
 	zero_out(&all_mounts[insert_pt]);
 
-	ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, src);
-	if (ret < 0 || ret >= MAXPATHLEN) {
-		nih_fatal("Error calculating pathname for %s and %s", base_path, src);
+	if (!fill_in_controller(&all_mounts[insert_pt], controller, src)) {
 		ret = -1;
 		goto out;
 	}
-	ret = -1;
-	all_mounts[insert_pt].controller = strdup(controller);
-	if (!all_mounts[insert_pt].controller) {
-		nih_fatal("Out of memory mounting controllers");
-		goto out;
-	}
-	all_mounts[insert_pt].options = NULL;
-	all_mounts[insert_pt].path = strdup(dest);
-	all_mounts[insert_pt].src = strdup(src);
-	if (!all_mounts[insert_pt].path ||
-			!all_mounts[insert_pt].src) {
-		nih_fatal("Out of memory mounting controllers");
-		goto out;
-	}
-	nih_info(_("Mounted %s onto %s"),
-			all_mounts[insert_pt].controller,
-			all_mounts[insert_pt].path);
 	num_controllers++;
 	return true;
 
@@ -295,6 +306,11 @@ static bool set_release_agent(struct controller_mounts *m)
 	char path[MAXPATHLEN];
 	int ret;
 
+	if (m->premounted) {
+		nih_info("%s was pre-mounted, not setting a release agent",
+			m->controller);
+		return true;
+	}
 	ret = snprintf(path, MAXPATHLEN, "%s/release_agent", m->path);
 	if (ret < 0 || ret >= MAXPATHLEN) {
 		nih_error("out of memory");
@@ -321,22 +337,29 @@ static bool set_release_agent(struct controller_mounts *m)
 static bool do_mount_subsys(int i)
 {
 	char *src, *dest, *controller;
+	struct controller_mounts *m = &all_mounts[i];
 	int ret;
 
-	dest = all_mounts[i].path;
-	controller = all_mounts[i].controller;
-	src = all_mounts[i].src;
+	dest = m->path;
+	controller = m->controller;
+	src = m->src;
 
 	if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
 		nih_fatal("Failed to create %s: %s", dest, strerror(errno));
-		ret = -1;
-		goto out;
+		return false;
 	}
-	if ((ret = mount(src, dest, "cgroup", 0, src)) < 0) {
-		nih_fatal("Failed mounting %s: %s", dest, strerror(errno));
-		goto out;
+	if (m->premounted)
+		ret = mount(src, dest, "cgroup", 0, m->options);
+	else
+		ret = mount(src, dest, "cgroup", 0, src);
+	if (ret < 0) {
+		nih_fatal("Failed mounting %s onto %s: %s", src, dest, strerror(errno));
+		if (m->premounted)
+			nih_fatal("options was %s\n", m->options);
+		return false;
 	}
 	nih_info(_("Mounted %s onto %s"), controller, dest);
+
 	if (strcmp(controller, "cpuset") == 0) {
 		set_clone_children(dest); // TODO make this optional?
 		nih_info(_("set clone_children"));
@@ -345,23 +368,211 @@ static bool do_mount_subsys(int i)
 		nih_info(_("set memory.use_hierarchy"));
 	}
 
-	if (!set_release_agent(&all_mounts[i])) {
+	if (!set_release_agent(m)) {
 		nih_error("failed to set release agent for %s",
-				all_mounts[i].controller);
+				m->controller);
 		return false;
 	}
 	return true;
+}
+
+const char *controllers[] = { "blkio", "cpuset", "cpu", "cpuacct", "debug",
+			"devices", "freezer", "memory", "net_cls", "net_prio",
+			NULL };
+
+static bool is_kernel_controller(const char *c)
+{
+	int i = 0;
+
+	while (controllers[i]) {
+		if (strcmp(controllers[i++], c) == 0)
+			return true;
+	}
+	return false;
+}
+
+static bool process_mounted_subsystem(char *options)
+{
+	char *tok;
+	nih_local char *cp_opts = NULL, *cp_opts_split = NULL;
+	int i;
+	bool found;
+
+	tok = strtok(options, ",");
+	while (tok) {
+		if (strncmp(tok, "name=", 5) == 0) {
+			i = find_controller_in_mounts(tok+5, &found);
+			if (found) // jinkeys, multiple mounts already
+				continue;
+			if (!save_mount_subsys(tok))
+				return false;
+			i = find_controller_in_mounts(tok+5, &found);
+			if (!found)
+				return false;
+			all_mounts[i].premounted = true;
+			if (!cp_opts)
+				cp_opts = NIH_MUST( nih_strdup(NULL, tok) );
+			else
+				NIH_MUST( nih_strcat_sprintf(&cp_opts, NULL, ",%s", tok) );
+		} else if (is_kernel_controller(tok)) {
+			i = find_controller_in_mounts(tok, &found);
+			if (found) // jinkeys, multiple mounts already
+				continue;
+			if (!save_mount_subsys(tok))
+				return false;
+			i = find_controller_in_mounts(tok, &found);
+			if (!found)
+				return false;
+			all_mounts[i].premounted = true;
+			if (!cp_opts)
+				cp_opts = NIH_MUST( nih_strdup(NULL, tok) );
+			else
+				NIH_MUST( nih_strcat_sprintf(&cp_opts, NULL, ",%s", tok) );
+		}
+		tok = strtok(NULL, ",");
+	}
+
+	if (!cp_opts)
+		return true;
+
+	cp_opts_split = NIH_MUST( nih_strdup(NULL, cp_opts) );
+	tok = strtok(cp_opts_split, ",");
+	while (tok) {
+		if (strncmp(tok, "name=", 5) == 0)
+			i = find_controller_in_mounts(tok+5, &found);
+		else
+			i = find_controller_in_mounts(tok, &found);
+		if (!found)
+			return false;
+		all_mounts[i].options = strdup(cp_opts);
+		if (!all_mounts[i].options)
+			return false;
+		tok = strtok(NULL, ",");
+	}
+
+	return true;
+}
+
+/*
+ * parse /proc/self/mounts looking for already-mounted subsystems
+ */
+static bool collect_premounted_subsystems(void)
+{
+	char line[1024], *p1, *p2, *p3, *p4;
+
+	FILE *f = fopen("/proc/self/mounts", "r");
+	if (!f)
+		return false;
+	while (fgets(line, 1024, f)) {
+		p1 = strchr(line, ' ');
+		if (!p1)
+			goto bad;
+		*p1 = '\0';
+		p2 = strchr(++p1, ' ');
+		if (!p2)
+			goto bad;
+		*p2 = '\0';
+		p2++;
+		p3 = strchr(p2, ' ');
+		if (!p3)
+			goto bad;
+		*p3 = '\0';
+		if (strcmp(p2, "cgroup") != 0)
+			continue;
+		p4 = strchr(++p3, ' ');
+		if (!p4)
+			goto bad;
+		*p4 = '\0';
+		if (!process_mounted_subsystem(p3))
+			goto bad;
+	}
+	fclose(f);
+	return true;
+bad:
+	fclose(f);
+	return false;
+}
+
+static bool collate_premounted_subsystems(void)
+{
+	int i;
+
+	for (i = 0;  i < num_controllers; i++) {
+		nih_local char *opts = NULL;
+		char *tok;
+		struct controller_mounts *first = NULL, *last = NULL;
+		int j;
+		bool found;
+
+		first = &all_mounts[i];
+		if (!first->premounted)
+			continue;
+		if (first->comounted) // already linked
+			continue;
+		if (!first->options)
+			continue;
+		opts = NIH_MUST( nih_strdup(NULL, first->options) );
+		tok = strtok(opts, ",");
+		while (tok) {
+			if (strncmp(tok, "name=", 5) == 0)
+				j = find_controller_in_mounts(tok+5, &found);
+			else
+				j = find_controller_in_mounts(tok, &found);
+			if (!found)
+				return false;
+			if (!last) {
+				last = &all_mounts[j];
+				first->comounted = last;
+			} else {
+				last->comounted = &all_mounts[j];
+				last = last->comounted;
+			}
+			tok = strtok(NULL, ",");
+		}
+	}
+
+	return true;
+}
+
+static bool collect_kernel_subsystems(void)
+{
+	FILE *cgf;
+	char line[400];
+	bool bret = false;
+
+	if ((cgf = fopen("/proc/cgroups", "r")) == NULL) {
+		nih_fatal ("Error opening /proc/cgroups: %s", strerror(errno));
+		return false;
+	}
+	while (fgets(line, 400, cgf)) {
+		char *p;
+
+		if (line[0] == '#')
+			continue;
+		p = strchr(line, '\t');
+		if (!p)
+			continue;
+		*p = '\0';
+
+		if (!save_mount_subsys(line)) {
+			nih_fatal("Error storing subsystem %s", line);
+			goto out;
+		}
+	}
+	bret = true;
 
 out:
-	return false;
+	fclose(cgf);
+	return bret;
 }
 
 int collect_subsystems(char *extra_mounts)
 {
-	FILE *cgf;
-	int ret;
-	char line[400];
+	/* first collect all already-mounted subsystems */
+	if (!collect_premounted_subsystems())
+		return -1;
 
+	/* handle the requested extra-mounts, which are not in /proc/cgroups */
 	if (extra_mounts) {
 		char *e;
 		for (e = strtok(extra_mounts, ","); e; e = strtok(NULL, ",")) {
@@ -372,40 +583,14 @@ int collect_subsystems(char *extra_mounts)
 		}
 	}
 
-	if ((cgf = fopen("/proc/cgroups", "r")) == NULL) {
-		nih_fatal ("Error opening /proc/cgroups: %s", strerror(errno));
+	if (!collect_kernel_subsystems())
 		return -1;
-	}
-	while (fgets(line, 400, cgf)) {
-		char *p;
-		unsigned long h;
 
-		if (line[0] == '#')
-			continue;
-		p = strchr(line, '\t');
-		if (!p)
-			continue;
-		*p = '\0';
-		h = strtoul(p+1, NULL, 10);
-		if (h) {
-			nih_info(_("%s was already mounted!"), line);
-#if STRICT
-			ret = -1;
-			goto out;
-#endif
-		}
 
-		if (!save_mount_subsys(line)) {
-			nih_fatal("Error storing subsystem %s", line);
-			ret = -1;
-			goto out;
-		}
-	}
-	nih_info(_("found %d controllers"), num_controllers);
-	ret = 0;
-out:
-	fclose(cgf);
-	return ret;
+	if (!collate_premounted_subsystems())
+		return -1;
+
+	return 0;
 }
 
 /**
@@ -465,6 +650,9 @@ bool create_agent_symlinks(void)
 	}
 
 	for (i=0; i<num_controllers; i++) {
+		if (all_mounts[i].premounted)
+			continue;
+
 		ret = snprintf(buf+plen, MAXPATHLEN-plen, "cgm-release-agent.%s",
 				all_mounts[i].controller);
 		if (ret < 0 || ret >= MAXPATHLEN) {
@@ -1176,4 +1364,13 @@ int get_child_directories(void *parent, const char *path, char ***output)
 	}
 	closedir(d);
 	return used;
+}
+
+bool was_premounted(const char *controller)
+{
+	bool found;
+	int i = find_controller_in_mounts(controller, &found);
+	if (!found)
+		return false;
+	return all_mounts[i].premounted;
 }

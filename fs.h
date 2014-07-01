@@ -48,3 +48,4 @@ bool move_self_to_root(void);
 int get_child_directories(void *parent, const char *path, char ***output);
 bool setup_base_run_path(void);
 bool create_agent_symlinks(void);
+bool was_premounted(const char *controller);
