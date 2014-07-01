@@ -45,6 +45,7 @@
 #include <nih/main.h>
 #include <nih/logging.h>
 #include <nih/error.h>
+#include <nih/hash.h>
 
 #include <nih-dbus/dbus_connection.h>
 #include <nih-dbus/dbus_proxy.h>
@@ -155,12 +156,72 @@ static void set_use_hierarchy(const char *path)
 	fclose(f);
 }
 
+static void zero_out(struct controller_mounts *c)
+{
+	memset(c, 0, sizeof(*c));
+}
+
+/*
+ * Look for a controller_mount struct for controller @c.
+ * If found, set @found to true and return its index in all_mounts.
+ * If not found, set @found to false and return index of the first
+ * location in all_mounts whose controller is > @c, i.e. where it
+ * should be inserted.
+ */
+static int find_controller_in_mounts(const char *c, bool *found)
+{
+	int cmp, low = 0, mid = low, high = num_controllers-1;
+
+	*found = false;
+	if (!num_controllers)
+		return 0;
+
+	while (low <= high) {
+		if (high == low)
+			break;
+		if (high == low+1) {
+			cmp = strcmp(c, all_mounts[low].controller);
+			if (cmp <= 0) {
+				mid = low;
+				break;
+			}
+			cmp = strcmp(c, all_mounts[high].controller);
+			if (cmp > 0) {
+				mid = high + 1;
+				if (mid >= num_controllers)
+					mid = num_controllers-1;
+				break;
+			}
+			mid = high;
+			break;
+		}
+		mid = low + (high-low)/2;
+		cmp = strcmp(c, all_mounts[mid].controller);
+		if (cmp == 0)
+			break;
+		if (cmp < 0)
+			high = mid;
+		else
+			low = mid;
+	}
+
+	cmp = strcmp(c, all_mounts[mid].controller);
+
+	if (cmp == 0)
+		*found = true;
+	if (cmp > 0)
+		mid++;
+
+	return mid;
+}
+
 static bool save_mount_subsys(char *s)
 {
 	struct controller_mounts *tmp;
 	char *src, dest[MAXPATHLEN], *controller;
-	int ret;
+	int i, insert_pt, ret;
 	size_t len = strlen(s);
+	bool found;
 
 	if (len > MAXPATHLEN) {
 		nih_fatal("bad controller type: %s", s);
@@ -183,6 +244,21 @@ static bool save_mount_subsys(char *s)
 		src = s;
 	}
 
+	insert_pt = find_controller_in_mounts(controller, &found);
+	if (found)
+		return 0;
+
+	tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
+	if (!tmp) {
+		nih_fatal("Out of memory mounting controllers");
+		goto out;
+	}
+	all_mounts = tmp;
+
+	for (i = num_controllers; i > insert_pt; i--)
+		all_mounts[i] = all_mounts[i-1];
+	zero_out(&all_mounts[insert_pt]);
+
 	ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, src);
 	if (ret < 0 || ret >= MAXPATHLEN) {
 		nih_fatal("Error calculating pathname for %s and %s", base_path, src);
@@ -190,28 +266,22 @@ static bool save_mount_subsys(char *s)
 		goto out;
 	}
 	ret = -1;
-	tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
-	if (!tmp) {
+	all_mounts[insert_pt].controller = strdup(controller);
+	if (!all_mounts[insert_pt].controller) {
 		nih_fatal("Out of memory mounting controllers");
 		goto out;
 	}
-	all_mounts = tmp;
-	all_mounts[num_controllers].controller = strdup(controller);
-	if (!all_mounts[num_controllers].controller) {
-		nih_fatal("Out of memory mounting controllers");
-		goto out;
-	}
-	all_mounts[num_controllers].options = NULL;
-	all_mounts[num_controllers].path = strdup(dest);
-	all_mounts[num_controllers].src = strdup(src);
-	if (!all_mounts[num_controllers].path ||
-			!all_mounts[num_controllers].src) {
+	all_mounts[insert_pt].options = NULL;
+	all_mounts[insert_pt].path = strdup(dest);
+	all_mounts[insert_pt].src = strdup(src);
+	if (!all_mounts[insert_pt].path ||
+			!all_mounts[insert_pt].src) {
 		nih_fatal("Out of memory mounting controllers");
 		goto out;
 	}
 	nih_info(_("Mounted %s onto %s"),
-			all_mounts[num_controllers].controller,
-			all_mounts[num_controllers].path);
+			all_mounts[insert_pt].controller,
+			all_mounts[insert_pt].path);
 	num_controllers++;
 	return true;
 
@@ -597,12 +667,18 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 const char *get_controller_path(const char *controller)
 {
 	int i;
+	bool found;
 
-	for (i=0; i<num_controllers; i++) {
-		if (is_same_controller(controller, all_mounts[i].controller))
-			return all_mounts[i].path;
+	i = find_controller_in_mounts(controller, &found);
+	if (!found) {
+		if (strncmp(controller, "name=", 5) == 0) {
+			i = find_controller_in_mounts(controller+5, &found);
+			if (found)
+				return all_mounts[i].path;
+		}
+		return NULL;
 	}
-	return NULL;
+	return all_mounts[i].path;
 }
 
 int get_path_depth(const char *p)
