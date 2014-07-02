@@ -24,6 +24,8 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+extern char *all_controllers;
+
 int collect_subsystems(char *extra_mounts);
 int setup_cgroup_mounts(void);
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
@@ -49,3 +51,4 @@ int get_child_directories(void *parent, const char *path, char ***output);
 bool setup_base_run_path(void);
 bool create_agent_symlinks(void);
 bool was_premounted(const char *controller);
+void do_prune_comounts(char *controllers);

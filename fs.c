@@ -54,6 +54,8 @@
 #define AGENT SBINDIR "/cgm-release-agent"
 #define AGENT_LINK_PATH "/run/cgmanager/agents"
 
+char *all_controllers;
+
 struct controller_mounts {
 	char *controller;
 	char *options;
@@ -566,6 +568,102 @@ out:
 	return bret;
 }
 
+static void prune_from_string(char *list, char *c)
+{
+	char *f;
+	size_t len;
+	char *origlist = list;
+
+	if (strncmp(c, "none,", 5) == 0)
+		c += 5;
+	len = strlen(c);
+again:
+	if (!list)
+		return;
+	f = strstr(list, c);
+	if (!f)
+		return;
+	if (f > origlist && *(f-1) != ',') {
+		list = f+len;
+		goto again;
+	}
+	if (*(f+len) != ',' && *(f+len) != '\0') {
+		list = f+len;
+		goto again;
+	}
+	/* now we know for sure that [f-1,f+len+1] == ",f," */
+	if (f[len])
+		memmove(f, f+len+1, strlen(f+len+1)+1);
+	else
+		*(f-1) = '\0';
+	goto again;
+}
+
+static void print_debug_controller_info(void)
+{
+	int i;
+	struct controller_mounts *m;
+
+	nih_debug("all unique controllers: %s", all_controllers);
+
+	for (i = 0; i < num_controllers; i++) {
+		m = &all_mounts[i];
+		nih_debug("%d: controller %s", i, m->controller);
+		nih_debug("    src %s path %s options %s",
+			m->src, m->path, m->options ? m->options : "(none)");
+		nih_debug("    agent: %s", m->agent ? m->agent : "(none)");
+		nih_debug("    premounted: %s comounted: %s",
+			m->premounted ? "yes" : "no",
+			m->comounted ? m->comounted->controller : "(none)");
+	}
+}
+
+void do_prune_comounts(char *controllers)
+{
+	char *p1 = controllers, *p2;
+	int i;
+	bool found;
+	struct controller_mounts *m1;
+
+	while (p1) {
+		p2 = strchr(p1, ',');
+		if (!p2)
+			return;
+		*p2 = '\0';
+		i = find_controller_in_mounts(p1, &found);
+		if (!found) {
+			*p2 = ',';
+			p1 = p2+1;
+			continue;
+		}
+		m1 = all_mounts[i].comounted;
+		while (m1 && m1 != &all_mounts[i]) {
+			prune_from_string(p2+1, m1->src);
+			m1 = m1->comounted;
+		}
+		*p2 = ',';
+		p1 = p2+1;
+	}
+}
+
+static void build_all_controllers(void)
+{
+	int i;
+	char *c;
+
+	for (i = 0;  i < num_controllers;  i++) {
+		c = all_mounts[i].src;
+		if (strncmp(c, "none,", 5) == 0)
+			c += 5;
+		if (!all_controllers)
+			all_controllers = NIH_MUST( nih_strdup(NULL, c) );
+		else
+			NIH_MUST( nih_strcat_sprintf(&all_controllers, NULL, ",%s", c) );
+	}
+
+	do_prune_comounts(all_controllers);
+}
+
 int collect_subsystems(char *extra_mounts)
 {
 	/* first collect all already-mounted subsystems */
@@ -586,9 +684,12 @@ int collect_subsystems(char *extra_mounts)
 	if (!collect_kernel_subsystems())
 		return -1;
 
-
 	if (!collate_premounted_subsystems())
 		return -1;
+
+	build_all_controllers();
+
+	print_debug_controller_info();
 
 	return 0;
 }

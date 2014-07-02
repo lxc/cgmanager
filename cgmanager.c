@@ -108,23 +108,12 @@ static bool victim_under_proxy_cgroup(char *rcgpath, pid_t v,
 	return true;
 }
 
-int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
+int per_ctrl_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, struct ucred v, bool escape)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
 	FILE *f;
 	pid_t query = r.pid;
-
-	if (!sane_cgroup(cgroup)) {
-		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
-	// verify that ucred.pid may move target pid
-	if (!may_move_pid(r.pid, r.uid, v.pid)) {
-		nih_error("%s: %d may not move %d", __func__, r.pid, v.pid);
-		return -1;
-	}
 
 	// Get r's current cgroup in rcgpath
 	if (escape)
@@ -184,6 +173,50 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	return 0;
 }
 
+int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, struct ucred v, bool escape)
+{
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	// verify that ucred.pid may move target pid
+	if (!may_move_pid(r.pid, r.uid, v.pid)) {
+		nih_error("%s: %d may not move %d", __func__, r.pid, v.pid);
+		return -1;
+	}
+
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ','))
+		return per_ctrl_move_pid_main(controller, cgroup, p, r, v, escape);
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
+	}
+	tok = strtok(c, ",");
+	while (tok) {
+		int32_t e = 1;
+		ret = per_ctrl_move_pid_main(tok, cgroup, p, r, v, escape);
+		if (ret == -2)  // permission denied - ignore for group requests
+			goto next;
+		if (ret != 0)
+			return -1;
+next:
+		tok = strtok(NULL, ",");
+	}
+
+	return 0;
+}
+
 int move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, struct ucred v)
 {
@@ -202,7 +235,7 @@ int move_pid_abs_main(const char *controller, const char *cgroup, struct ucred p
 	return do_move_pid_main(controller, cgroup, p, r, v, true);
 }
 
-int create_main(const char *controller, const char *cgroup, struct ucred p,
+int do_create_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, int32_t *existed)
 {
 	int ret, depth;
@@ -212,14 +245,6 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 	char *p1, *p2, oldp2;
 
 	*existed = 1;
-	if (!cgroup || ! *cgroup)  // nothing to do
-		return 0;
-
-	if (!sane_cgroup(cgroup)) {
-		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, &depth)) {
 		nih_error("%s: Could not determine the requested cgroup", __func__);
@@ -258,14 +283,14 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 			if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
 				nih_error("%s: pid %d (uid %u gid %u) may not look under %s", __func__,
 					r.pid, r.uid, r.gid, path);
-				return -1;
+				return -2;
 			}
 			goto next;
 		}
 		if (!may_access(r.pid, r.uid, r.gid, dirpath, O_RDWR)) {
 			nih_error("%s: pid %d (uid %u gid %u) may not create under %s", __func__,
 				r.pid, r.uid, r.gid, dirpath);
-			return -1;
+			return -2;
 		}
 		ret = mkdir(path, 0755);
 		if (ret < 0) {  // Should we ignore EEXIST?  Ok, but don't chown.
@@ -274,7 +299,7 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 				goto next;
 			}
 			nih_error("%s: failed to create %s", __func__, path);
-			return -1;
+			return -2;
 		}
 		if (!chown_cgroup_path(path, r.uid, r.gid, true)) {
 			nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
@@ -297,26 +322,55 @@ next:
 	return 0;
 }
 
-int chown_main(const char *controller, const char *cgroup, struct ucred p,
-		struct ucred r, struct ucred v)
+int create_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, int32_t *existed)
 {
-	char rcgpath[MAXPATHLEN];
-	nih_local char *path = NULL;
-	uid_t uid;
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
 
-	/* If caller is not root in his userns, then he can't chown, as
-	 * that requires privilege over two uids */
-	if (r.uid) {
-		if (!hostuid_to_ns(r.uid, r.pid, &uid) || uid != 0) {
-			nih_error("%s: Chown requested by non-root uid %u", __func__, r.uid);
-			return -1;
-		}
-	}
+	*existed = 1;
+	if (!cgroup || ! *cgroup)  // nothing to do
+		return 0;
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
+
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ','))
+		return do_create_main(controller, cgroup, p, r, existed);
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
+	}
+	tok = strtok(c, ",");
+	while (tok) {
+		int32_t e = 1;
+		ret = do_create_main(tok, cgroup, p, r, &e);
+		if (ret == -2)  // permission denied - ignore for group requests
+			goto next;
+		if (ret != 0)
+			return -1;
+		if (!e)
+			*existed = 0;
+next:
+		tok = strtok(NULL, ",");
+	}
+
+	return 0;
+}
+
+int do_chown_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, struct ucred v)
+{
+	char rcgpath[MAXPATHLEN];
+	nih_local char *path = NULL;
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
@@ -337,41 +391,77 @@ int chown_main(const char *controller, const char *cgroup, struct ucred p,
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
 		nih_error("%s: pid %d (uid %u gid %u) may not read under %s", __func__,
 			r.pid, r.uid, r.gid, path);
-		return -1;
+		return -2;
 	}
 
 	// does r have privilege over the cgroup dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
 		nih_error("%s: Pid %d may not chown %s\n", __func__, r.pid, path);
-		return -1;
+		return -2;
 	}
 
 	// go ahead and chown it.
 	if (!chown_cgroup_path(path, v.uid, v.gid, false)) {
 		nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
 			path, v.uid, v.gid);
-		return -1;
+		return -2;
 	}
 
 	return 0;
 }
 
-int chmod_main(const char *controller, const char *cgroup, const char *file,
-		struct ucred p, struct ucred r, int mode)
+int chown_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, struct ucred v)
 {
-	char rcgpath[MAXPATHLEN];
-	nih_local char *path = NULL;
+	uid_t uid;
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
+
+	/* If caller is not root in his userns, then he can't chown, as
+	 * that requires privilege over two uids */
+	if (r.uid) {
+		if (!hostuid_to_ns(r.uid, r.pid, &uid) || uid != 0) {
+			nih_error("%s: Chown requested by non-root uid %u", __func__, r.uid);
+			return -1;
+		}
+	}
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
 	}
 
-	if (file && ( strchr(file, '/') || strchr(file, '\\')) ) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"invalid file");
-		return -1;
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ','))
+		return do_chown_main(controller, cgroup, p, r, v);
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
 	}
+	tok = strtok(c, ",");
+	while (tok) {
+		ret = do_chown_main(tok, cgroup, p, r, v);
+		if (ret == -2)  // permission denied - ignore for group requests
+			goto next;
+		if (ret != 0)
+			return -1;
+next:
+		tok = strtok(NULL, ",");
+	}
+
+	return 0;
+}
+
+int do_chmod_main(const char *controller, const char *cgroup, const char *file,
+		struct ucred p, struct ucred r, int mode)
+{
+	char rcgpath[MAXPATHLEN];
+	nih_local char *path = NULL;
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
@@ -390,20 +480,63 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
 		nih_error("%s: pid %d (uid %u gid %u) may not read under %s", __func__,
 			r.pid, r.uid, r.gid, path);
-		return -1;
+		return -2;
 	}
 
 	// does r have privilege over the cgroup dir?
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDWR)) {
 		nih_error("%s: Pid %d may not chmod %s\n", __func__, r.pid, path);
-		return -1;
+		return -2;
 	}
 
 	// go ahead and chmod it.
 	if (!chmod_cgroup_path(path, mode)) {
 		nih_error("%s: Failed to change mode on %s to %d", __func__,
 			path, mode);
+		return -2;
+	}
+
+	return 0;
+}
+
+int chmod_main(const char *controller, const char *cgroup, const char *file,
+		struct ucred p, struct ucred r, int mode)
+{
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
+	}
+
+	if (file && ( strchr(file, '/') || strchr(file, '\\')) ) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+				"invalid file");
+		return -1;
+	}
+
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ','))
+		return do_chmod_main(controller, cgroup, file, p, r, mode);
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
+	}
+	tok = strtok(c, ",");
+	while (tok) {
+		ret = do_chmod_main(tok, cgroup, file, p, r, mode);
+		if (ret == -2)  // permission denied - ignore for group requests
+			goto next;
+		if (ret != 0)
+			return -1;
+next:
+		tok = strtok(NULL, ",");
 	}
 
 	return 0;
@@ -576,7 +709,7 @@ static int recursive_rmdir(char *path)
 	return failed ? -1 : 0;
 }
 
-int remove_main(const char *controller, const char *cgroup, struct ucred p,
+int do_remove_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, int recursive, int32_t *existed)
 {
 	char rcgpath[MAXPATHLEN];
@@ -585,12 +718,6 @@ int remove_main(const char *controller, const char *cgroup, struct ucred p,
 	char *p1;
 
 	*existed = 1;
-
-	if (!sane_cgroup(cgroup)) {
-		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
 	// Get r's current cgroup in rcgpath
 	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup", __func__);
@@ -624,19 +751,60 @@ int remove_main(const char *controller, const char *cgroup, struct ucred p,
 	if (!may_access(r.pid, r.uid, r.gid, copy, O_WRONLY)) {
 		nih_error("%s: pid %d (%u:%u) may not remove %s", __func__,
 			r.pid, r.uid, r.gid, copy);
-		return -1;
+		return -2;
 	}
 
 	if (!recursive) {
 		if (rmdir(working) < 0) {
 			nih_error("%s: Failed to remove %s: %s", __func__, working, strerror(errno));
-			return -1;
+			return errno == EPERM ? -2 : -1;
 		}
 	} else if (recursive_rmdir(working) < 0)
 			return -1;
 
 	nih_info(_("Removed %s for %d (%u:%u)"), working, r.pid,
 		 r.uid, r.gid);
+	return 0;
+}
+
+int remove_main(const char *controller, const char *cgroup, struct ucred p,
+		struct ucred r, int recursive, int32_t *existed)
+{
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
+
+	*existed = 1;
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ','))
+		return do_remove_main(controller, cgroup, p, r, recursive, existed);
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
+	}
+	tok = strtok(c, ",");
+	while (tok) {
+		int32_t e = 1;
+		ret = do_remove_main(tok, cgroup, p, r, recursive, &e);
+		if (ret == -2)  // permission denied - ignore for group requests
+			goto next;
+		if (ret != 0)
+			return -1;
+		if (!e)
+			*existed = 0;
+next:
+		tok = strtok(NULL, ",");
+	}
+
 	return 0;
 }
 

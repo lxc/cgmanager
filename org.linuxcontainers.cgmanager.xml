@@ -29,6 +29,10 @@
     <!-- Every Scm call sends requestor's creds as a first
 	 scm credential over the passed-in fd -->
 
+    <!-- The following methods accept comma-separated lists
+         of multiple controllers as well as 'all':
+	 Create*, Chown*, Chmod*, MovePid* -->
+
     <method name="Ping">
       <arg name="junk" type="i" direction="in" />
     </method>
