@@ -31,7 +31,7 @@
 
     <!-- The following methods accept comma-separated lists
          of multiple controllers as well as 'all':
-	 Create*, Chown*, Chmod*, MovePid* -->
+	 Create*, Chown*, Chmod*, MovePid*, Remove, RemoveOnEmpty -->
 
     <method name="Ping">
       <arg name="junk" type="i" direction="in" />

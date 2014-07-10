@@ -867,7 +867,7 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 	return get_child_directories(parent, path, output);
 }
 
-int remove_on_empty_main(const char *controller, const char *cgroup,
+int do_remove_on_empty_main(const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r)
 {
 	char rcgpath[MAXPATHLEN];
@@ -876,12 +876,7 @@ int remove_on_empty_main(const char *controller, const char *cgroup,
 
 	if (was_premounted(controller)) {
 		nih_error("remove-on-empty request for pre-mounted controller");
-		return -1;
-	}
-
-	if (!sane_cgroup(cgroup)) {
-		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
+		return -2;
 	}
 
 	// Get r's current cgroup in rcgpath
@@ -924,6 +919,46 @@ int remove_on_empty_main(const char *controller, const char *cgroup,
 
 	return 0;
 }
+
+int remove_on_empty_main(const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r)
+{
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ','))
+		return do_remove_on_empty_main(controller, cgroup, p, r);
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
+	}
+	tok = strtok(c, ",");
+	while (tok) {
+		int32_t e = 1;
+		ret = do_remove_on_empty_main(tok, cgroup, p, r);
+		if (ret == -2)  // pre-mounted, autoremove not an option, ignore
+			goto next;
+		if (ret != 0)
+			return -1;
+next:
+		tok = strtok(NULL, ",");
+	}
+
+	return 0;
+}
+
+
 char *extra_cgroup_mounts;
 
 static int
