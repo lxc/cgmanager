@@ -1,0 +1,57 @@
+#! /bin/sh
+### BEGIN INIT INFO
+# Provides:          cgmanager
+# Required-Start:    mountkernfs
+# Required-Stop:     
+# Default-Start:    2 3 4 5
+# Default-Stop:     0 1 6
+# Short-Description: Cgroup manager daemon
+# Description:
+#  The cgroup manager accepts cgroup administration requests
+#  over dbus, honoring privilege by root users in mapped user
+#  namespaces over the non-root mapped uids.  This allows safe
+#  nesting of lxc containers by unprivileged users.
+### END INIT INFO
+
+. /lib/lsb/init-functions
+
+DAEMON=/sbin/cgmanager
+NAME=cgmanager
+DESC="cgroup management daemon"
+
+BASEOPTS="--sigstop --daemon"
+
+test -x $DAEMON || exit 0
+
+PIDFILE=/var/run/$NAME.pid
+
+if [ -f /etc/default/cgmanager ]; then
+	# get cgmanager_opts if specified
+	. /etc/default/cgmanager
+fi
+
+case "$1" in
+    start|restart|force-reload)
+	# Kill any existing cgproxy
+	service cgproxy stop >/dev/null 2>&1 || true
+	# check whether to start cgproxy or cgmanager
+	if /sbin/cgproxy --check-master; then
+		NESTED=yes service cgproxy start || true && { exit 0; }
+	fi
+
+	log_daemon_msg "Starting $DESC" "$NAME"
+  	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $BASEOPTS $cgmanager_opts $cgm_extra_mounts
+	log_end_msg 0
+	;;
+  stop)
+	log_daemon_msg "Stopping $DESC" "$NAME"
+  	start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
+	log_end_msg 0
+	;;
+  *)
+	echo "Usage: $0 {start|stop|restart|force-reload}" >&2
+	exit 3
+	;;
+esac
+
+:
