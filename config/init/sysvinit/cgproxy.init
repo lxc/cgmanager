@@ -19,7 +19,7 @@ DAEMON=/sbin/cgproxy
 NAME=cgproxy
 DESC="cgroup management proxy daemon"
 
-BASEOPTS="--sigstop --daemon"
+BASEOPTS="--daemon"
 
 test -x $DAEMON || exit 0
 
