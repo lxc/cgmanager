@@ -33,7 +33,7 @@ fi
 case "$1" in
     start|restart|force-reload)
 	log_daemon_msg "Starting $DESC" "$NAME"
-	if [ -e /proc/self/ns/pid ] && [ "$NESTED" = "no" ]; then
+	if [ -e /proc/self/ns/pid ] && [ "$NESTED" != "yes" ]; then
 		log_daemon_msg "Kernel is new enough and not nested, no proxy is needed"
 	else
 		start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $BASEOPTS $cgmanager_opts
