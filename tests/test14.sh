@@ -1,5 +1,12 @@
 #!/bin/bash -x
 
+kmaj=`awk -F. '{ print $1 '} /proc/sys/kernel/osrelease`
+kmin=`awk -F. '{ print $2 '} /proc/sys/kernel/osrelease`
+if [ $kmaj -eq 3 -a $kmin -eq 16 ]; then
+	echo "skipping test 14 (Remove)"
+	exit 0
+fi
+
 echo "Test 14 (Remove)"
 dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"xxx/bbb" > /dev/null 2>&1
 
