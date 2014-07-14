@@ -405,7 +405,7 @@ static bool process_mounted_subsystem(char *options)
 		if (strncmp(tok, "name=", 5) == 0) {
 			i = find_controller_in_mounts(tok+5, &found);
 			if (found) // jinkeys, multiple mounts already
-				continue;
+				goto next;
 			if (!save_mount_subsys(tok))
 				return false;
 			i = find_controller_in_mounts(tok+5, &found);
@@ -419,7 +419,7 @@ static bool process_mounted_subsystem(char *options)
 		} else if (is_kernel_controller(tok)) {
 			i = find_controller_in_mounts(tok, &found);
 			if (found) // jinkeys, multiple mounts already
-				continue;
+				goto next;
 			if (!save_mount_subsys(tok))
 				return false;
 			i = find_controller_in_mounts(tok, &found);
@@ -431,6 +431,7 @@ static bool process_mounted_subsystem(char *options)
 			else
 				NIH_MUST( nih_strcat_sprintf(&cp_opts, NULL, ",%s", tok) );
 		}
+next:
 		tok = strtok(NULL, ",");
 	}
 
