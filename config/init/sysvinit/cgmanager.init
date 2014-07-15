@@ -23,7 +23,7 @@ BASEOPTS="--daemon -m name=systemd"
 
 test -x $DAEMON || exit 0
 
-PIDFILE=/var/run/$NAME.pid
+PIDFILE=/run/$NAME.pid
 
 if [ -f /etc/default/cgmanager ]; then
 	# get cgmanager_opts if specified
