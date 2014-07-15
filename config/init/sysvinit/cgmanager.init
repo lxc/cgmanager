@@ -19,7 +19,7 @@ DAEMON=/sbin/cgmanager
 NAME=cgmanager
 DESC="cgroup management daemon"
 
-BASEOPTS="--daemon"
+BASEOPTS="--daemon -m name=systemd"
 
 test -x $DAEMON || exit 0
 
