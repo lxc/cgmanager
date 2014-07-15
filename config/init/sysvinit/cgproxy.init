@@ -45,6 +45,9 @@ case "$1" in
   	start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
 	log_end_msg 0
 	;;
+  status)
+	status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
+	;;
   *)
 	echo "Usage: $0 {start|stop|restart|force-reload}" >&2
 	exit 3
