@@ -204,7 +204,6 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	}
 	tok = strtok(c, ",");
 	while (tok) {
-		int32_t e = 1;
 		ret = per_ctrl_move_pid_main(tok, cgroup, p, r, v, escape);
 		if (ret == -2)  // permission denied - ignore for group requests
 			goto next;
@@ -945,7 +944,6 @@ int remove_on_empty_main(const char *controller, const char *cgroup,
 	}
 	tok = strtok(c, ",");
 	while (tok) {
-		int32_t e = 1;
 		ret = do_remove_on_empty_main(tok, cgroup, p, r);
 		if (ret == -2)  // pre-mounted, autoremove not an option, ignore
 			goto next;
