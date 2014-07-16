@@ -116,4 +116,3 @@ TESTS_CGM_CONCURRENT: tests/cgm-concurrent.o
 tests: TESTS_CGM_CONCURRENT
 
 SUBDIRS = config
-DIST_SUBDIRS = config
