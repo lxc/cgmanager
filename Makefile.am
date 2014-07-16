@@ -114,3 +114,6 @@ TESTS_CGM_CONCURRENT: tests/cgm-concurrent.o
 		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lpthread -lcgmanager
 
 tests: TESTS_CGM_CONCURRENT
+
+SUBDIRS = config
+DIST_SUBDIRS = config
