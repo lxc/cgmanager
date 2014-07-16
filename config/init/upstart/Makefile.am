@@ -5,7 +5,6 @@ install-upstart: cgmanager.conf cgproxy.conf
 	$(MKDIR_P) $(DESTDIR)$(sysconfdir)/init/
 	$(INSTALL_DATA) cgmanager.conf $(DESTDIR)$(sysconfdir)/init/
 	$(INSTALL_DATA) cgproxy.conf $(DESTDIR)$(sysconfdir)/init/
-	$(INSTALL_DATA) $(DESTDIR)$(sysconfdir)/init/
 
 uninstall-upstart:
 	rm -f $(DESTDIR)$(sysconfdir)/init/cgmanager.conf
