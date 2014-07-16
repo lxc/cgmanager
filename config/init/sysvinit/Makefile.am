@@ -1,10 +1,10 @@
 EXTRA_DIST = cgmanager cgproxy
 
 if INIT_SCRIPT_SYSV
-install-sysvinit: lxc
+install-sysvinit: cgmanager cgproxy
 	$(MKDIR_P) $(DESTDIR)$(sysconfdir)/rc.d/init.d
-	$(INSTALL_SCRIPT) lxc $(DESTDIR)$(sysconfdir)/rc.d/init.d/cgmanager
-	$(INSTALL_SCRIPT) lxc $(DESTDIR)$(sysconfdir)/rc.d/init.d/cgproxy
+	$(INSTALL_SCRIPT) cgmanager $(DESTDIR)$(sysconfdir)/rc.d/init.d/cgmanager
+	$(INSTALL_SCRIPT) cgproxy $(DESTDIR)$(sysconfdir)/rc.d/init.d/cgproxy
 
 uninstall-sysvinit:
 	rm -f $(DESTDIR)$(sysconfdir)/rc.d/init.d/cgmanager
