@@ -4,7 +4,6 @@
 *.la
 *.so
 *.sgml
-*.conf
 *~
 *.gz
 
