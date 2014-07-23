@@ -1,6 +1,8 @@
 #!/bin/bash
 
 echo "Test 7 (non-root movepid)"
+dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"xxx/b" > /dev/null 2>&1
+
 # try to move another task to xxx/b without being root - should fail
 if [ -n "$SUDO_USER" ]; then
 	gid=$SUDO_GID
