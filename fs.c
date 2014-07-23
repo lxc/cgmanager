@@ -716,6 +716,9 @@ int setup_cgroup_mounts(void)
 		return 0;
 	}
 
+	if (mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, 0) < 0)
+		nih_warn("Failed to re-mount / non-shared");
+
 	for (i=0; i<num_controllers; i++) {
 		if (!do_mount_subsys(i)) {
 			nih_fatal("Failed mounting cgroups");
