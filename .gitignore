@@ -51,3 +51,4 @@ tests/*.o
 tests/cgm-concurrent
 00*
 cgm-release-agent
+cgm

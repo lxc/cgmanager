@@ -24,8 +24,7 @@ CLEANFILES = \
 	libcgmanager.pc.in
 
 sbin_PROGRAMS = cgmanager cgproxy cgm-release-agent
-
-bin_SCRIPTS = cgm
+bin_PROGRAMS = cgm
 
 lib_LTLIBRARIES = libcgmanager.la
 
@@ -76,6 +75,10 @@ cgproxy_SOURCES = cgmanager-proxy.c \
 cgm_release_agent_SOURCES = cgm-release-agent.c
 cgm_release_agent_LDADD = -L.libs -lcgmanager
 cgm_release_agent_DEPENDENCIES = libcgmanager.la
+
+cgm_SOURCES = cgm.c cgmanager.h
+cgm_LDADD = -L.libs -lcgmanager
+cgm_DEPENDENCIES = libcgmanager.la
 
 libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \
