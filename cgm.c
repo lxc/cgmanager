@@ -126,7 +126,7 @@ void do_ping(void)
 	if (cgmanager_ping_sync(NULL, cgroup_manager, a) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_ping_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_ping_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -195,7 +195,7 @@ void do_chown(const char *controller, const char *cgroup_path,
 			cgroup_path, (int32_t)u, (int32_t)g) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_chown_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_chown_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -210,7 +210,7 @@ void do_get_pid_cgroup(const char *controller, const char *pid)
 			atoi(pid), &cgroup) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_get_pid_cgroup_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_get_pid_cgroup_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -227,7 +227,7 @@ void do_get_pid_cgroupabs(const char *controller, const char *pid)
 			atoi(pid), &cgroup) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_get_pid_cgroup_abs_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_get_pid_cgroup_abs_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -250,7 +250,7 @@ void do_chmod(const char *controller, const char *cgroup_path, const char *mode)
 			cgroup_path, "", (int32_t)m) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_chmod_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_chmod_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -272,7 +272,7 @@ void do_chmodfile(const char *controller, const char *cgroup_path,
 			cgroup_path, file, (int32_t)m) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_chmod_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_chmod_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -285,7 +285,7 @@ void do_move_pid(const char *controller, const char *cgroup_path, const char *pi
 				atoi(pid)) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_move_pid_main_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_move_pid_main_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -298,7 +298,7 @@ void do_move_pid_abs(const char *controller, const char *cgroup_path, const char
 				atoi(pid)) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_move_pid_main_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_move_pid_main_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -312,7 +312,7 @@ void do_getvalue(const char *controller, const char *cgroup_path, const char *fi
 			cgroup_path, file, &value) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_get_value_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_get_value_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -327,7 +327,7 @@ void do_setvalue(const char *controller, const char *cgroup_path, const char *fi
 			cgroup_path, file, value) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_set_value_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_set_value_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -338,15 +338,17 @@ void do_gettasks(const char *controller, const char *cgroup_path)
 {
 	int32_t *pids = NULL;
 	int i;
-	size_t pids_len = 0;
+	size_t pids_len = -1;
 
 	if (cgmanager_get_tasks_sync(NULL, cgroup_manager, controller,
 				     cgroup_path, &pids, &pids_len) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_get_tasks_sync failed: %s", nerr->message);
+		if (pids_len != 0)
+			fprintf(stderr, "call to cgmanager_get_tasks_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
-		exit(1);
+		if (pids_len != 0)
+			exit(1);
 	}
 	for (i = 0;  i < pids_len;  i++) {
 		printf("%d\n", pids[i]);
@@ -365,7 +367,7 @@ void do_listchildren(const char *controller, const char *cgroup_path)
 				cgroup_path, &children) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_list_children_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_list_children_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
@@ -384,7 +386,7 @@ void do_apiversion(void)
 	if (cgmanager_get_api_version_sync(NULL, cgroup_manager, &v) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_get_api_version_sync failed: %s", nerr->message);
+		fprintf(stderr, "call to cgmanager_get_api_version_sync failed: %s\n", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
