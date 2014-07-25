@@ -355,6 +355,12 @@ static bool do_mount_subsys(int i)
 	else
 		ret = mount(src, dest, "cgroup", 0, src);
 	if (ret < 0) {
+		if (!m->premounted) {
+			nih_warn("Failed mounting %s onto %s: %s", src, dest, strerror(errno));
+			free(m->path);
+			m->path = NULL;
+			return true;
+		}
 		nih_fatal("Failed mounting %s onto %s: %s", src, dest, strerror(errno));
 		if (m->premounted)
 			nih_fatal("options was %s\n", m->options);
@@ -611,7 +617,7 @@ static void print_debug_controller_info(void)
 		m = &all_mounts[i];
 		nih_debug("%d: controller %s", i, m->controller);
 		nih_debug("    src %s path %s options %s",
-			m->src, m->path, m->options ? m->options : "(none)");
+			m->src, m->path ? m->path : "(none)", m->options ? m->options : "(none)");
 		nih_debug("    agent: %s", m->agent ? m->agent : "(none)");
 		nih_debug("    premounted: %s comounted: %s",
 			m->premounted ? "yes" : "no",
@@ -1401,6 +1407,8 @@ bool move_self_to_root(void)
 	FILE *f;
 
 	for (i = 0; i < num_controllers; i++) {
+		if (!all_mounts[i].path)
+			continue;
 		ret = snprintf(path, MAXPATHLEN, "%s/tasks", all_mounts[i].path);
 		if (ret < 0 || ret >= MAXPATHLEN)
 			return false;
