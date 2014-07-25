@@ -24,8 +24,7 @@ CLEANFILES = \
 	libcgmanager.pc.in
 
 sbin_PROGRAMS = cgmanager cgproxy cgm-release-agent
-
-bin_SCRIPTS = cgm
+bin_PROGRAMS = cgm
 
 lib_LTLIBRARIES = libcgmanager.la
 
@@ -77,6 +76,10 @@ cgm_release_agent_SOURCES = cgm-release-agent.c
 cgm_release_agent_LDADD = -L.libs -lcgmanager
 cgm_release_agent_DEPENDENCIES = libcgmanager.la
 
+cgm_SOURCES = cgm.c cgmanager.h
+cgm_LDADD = -L.libs -lcgmanager
+cgm_DEPENDENCIES = libcgmanager.la
+
 libcgmanager_la_SOURCES = \
 	$(client_files_OUTPUTS) \
 	org.linuxcontainers.cgmanager.xml
@@ -93,7 +96,7 @@ cgproxy.8: cgmanager-proxy.c cgproxy cgproxy.man.add
 	$(HELP2MAN) -n "a proxy for cgmanager" -s 8 -I cgproxy.man.add -N ./cgproxy > cgproxy.8
 
 cgm.1: cgm cgm.man.add
-	$(HELP2MAN) -n "a client script for cgmanager" -s 1 -I cgm.man.add -N ./cgm > cgm.1
+	$(HELP2MAN) -n "a client script for cgmanager" -s 1 -I cgm.man.add -N ./.libs/cgm > cgm.1
 
 install-exec-local:
 	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests
