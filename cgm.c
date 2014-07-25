@@ -408,6 +408,9 @@ int main(int argc, const char *argv[])
 	else
 		me = argv[0];
 
+	if (strncmp(me, "lt-", 3) == 0 && strlen(me) > 3)
+		me += 3;
+
 	if (argc < 2)
 		usage(me);
 

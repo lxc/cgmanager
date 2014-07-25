@@ -96,7 +96,7 @@ cgproxy.8: cgmanager-proxy.c cgproxy cgproxy.man.add
 	$(HELP2MAN) -n "a proxy for cgmanager" -s 8 -I cgproxy.man.add -N ./cgproxy > cgproxy.8
 
 cgm.1: cgm cgm.man.add
-	$(HELP2MAN) -n "a client script for cgmanager" -s 1 -I cgm.man.add -N ./.libs/cgm > cgm.1
+	$(HELP2MAN) -n "a client script for cgmanager" -s 1 -I cgm.man.add -N ./cgm > cgm.1
 
 install-exec-local:
 	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests
