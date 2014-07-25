@@ -28,6 +28,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include "cgmanager.h"
+#include "cgmanager-client.h"
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -41,8 +42,6 @@
 
 #include <nih-dbus/dbus_connection.h>
 #include <nih-dbus/dbus_proxy.h>
-
-#include <cgmanager/cgmanager-client.h>
 
 static NihDBusProxy *cgroup_manager = NULL;
 
