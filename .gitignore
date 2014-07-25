@@ -17,6 +17,7 @@ Makefile
 aclocal.m4
 autom4te.cache
 cgmanager.spec
+compile
 configure
 config.log
 config.status
