@@ -2,9 +2,9 @@
 
 # Try to move myself task to xxx/b - should work
 echo "Test 8 (movepid self)"
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"xxx/b" > /dev/null 2>&1
+cgm create memory xxx/b
 
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:'memory' string:'xxx/b' int32:$$
+cgm movepid memory xxx/b $$
 if [ $? -ne 0 ]; then
 	exit 1
 fi

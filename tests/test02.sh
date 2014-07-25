@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "Test 2 (getMyCgroup)"
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetPidCgroup string:'memory' int32:$$ > /dev/null 2>&1
+cgm getpidcgroup memory $$
 if [ $? -ne 0 ]; then
 	exit 1
 fi

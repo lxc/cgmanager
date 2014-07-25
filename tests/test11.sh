@@ -9,7 +9,7 @@ else
 	uid=1000
 fi
 
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.SetValue string:'memory' string:'zzz' string:'memory.limit_in_bytes' string:'99999' > /dev/null 2>&1
+sudo -u \#$uid cgm setvalue memory zzz memory.limit_in_bytes 99999
 if [ $? -eq 0 ]; then
 	exit 1
 fi

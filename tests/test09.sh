@@ -30,8 +30,8 @@ if [ $cantmount -eq 0 ]; then
 	rmdir "${mnt}/${myc}/zzz" || true
 fi
 
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"zzz" > /dev/null 2>&1
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:'memory' string:"zzz" int32:$uid int32:$gid > /dev/null 2>&1
+cgm create memory zzz
+cgm chown memory zzz $uid $gid
 if [ $cantmount -eq 1 ]; then
 	echo "Chowned zzz, but cannot verify the result"
 	exit 0

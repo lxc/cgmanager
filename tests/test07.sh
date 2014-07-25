@@ -1,7 +1,7 @@
 #!/bin/bash
 
 echo "Test 7 (non-root movepid)"
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:"xxx/b" > /dev/null 2>&1
+cgm create memory xxx/b
 
 # try to move another task to xxx/b without being root - should fail
 if [ -n "$SUDO_USER" ]; then
@@ -15,7 +15,7 @@ fi
 sleep 200 &
 pid=$!
 
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:'memory' string:'xxx/b' int32:$pid
+sudo -u \#$uid cgm movepid memory xxx/b $pid
 if [ $? -eq 0 ]; then
 	echo "Failed test 7 - uid $uid could move root-owned sleep"
 	exit 1
