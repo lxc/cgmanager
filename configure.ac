@@ -11,6 +11,7 @@ AC_CONFIG_FILES([
 	config/init/Makefile
 	config/init/sysvinit/Makefile
 	config/init/upstart/Makefile
+	config/init/upstart/sessions/Makefile
 	libcgmanager.pc.in
 	cgmanager.spec])
 

@@ -14,3 +14,5 @@ uninstall-upstart:
 install-data-local: install-upstart
 uninstall-local: uninstall-upstart
 endif
+
+SUBDIRS = sessions
