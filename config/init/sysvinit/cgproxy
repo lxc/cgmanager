@@ -30,23 +30,97 @@ if [ -f /etc/default/cgmanager ]; then
 	. /etc/default/cgmanager
 fi
 
-case "$1" in
-    start|restart|force-reload)
-	log_daemon_msg "Starting $DESC" "$NAME"
+running_pid()
+{
+    # Check if a given process pid's cmdline matches a given name
+    pid=$1
+    name=$2
+    [ -z "$pid" ] && return 1
+    [ ! -d /proc/$pid ] &&  return 1
+    cmd=`cat /proc/$pid/cmdline | tr "\000" "\n"|head -n 1 |cut -d : -f 1`
+    # Is this the expected child?
+    [ "$cmd" != "$name" ] &&  return 1
+    return 0
+}
+
+running()
+{
+  [ ! -f "$PIDFILE" ] && return 1
+  pid=`cat $PIDFILE`
+  running_pid $pid $DAEMON || return 1
+  return 0
+}
+
+stop()
+{
+  	start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
+	return 0
+}
+
+start()
+{
+	rm -f $PIDFILE
 	if [ -e /proc/self/ns/pid ] && [ "$NESTED" != "yes" ]; then
 		log_daemon_msg "Kernel is new enough and not nested, no proxy is needed"
-	else
-		start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $BASEOPTS $cgmanager_opts
+		log_end_msg 0
+		exit 0
 	fi
-	log_end_msg 0
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $BASEOPTS $cgmanager_opts
+	sleep 1
+}
+
+case "$1" in
+    restart|force-reload)
+	log_daemon_msg "Restarting $DESC" "$NAME"
+	stop
+	sleep 2
+	# not sure this makes sense - should we just stop it and count on the
+	# cgmanager starting the cgproxy?
+	start
+	if running; then
+		log_end_msg 0
+	else
+		log_end_msg 1
+	fi
+	;;
+    start)
+	log_daemon_msg "Starting $DESC" "$NAME"
+	if running; then
+		log_progress_msg "already running"
+		log_end_msg 0
+		exit 0
+	fi
+	start
+	if running; then
+		log_end_msg 0
+	else
+		log_end_msg 1
+	fi
 	;;
   stop)
 	log_daemon_msg "Stopping $DESC" "$NAME"
-  	start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
+	if ! running ; then
+		log_progress_msg "not running"
+		log_end_msg 0
+		exit 0
+	fi
+	stop
 	log_end_msg 0
 	;;
   status)
-	status_of_proc "$DAEMON" "$NAME" && exit 0 || exit $?
+	log_daemon_msg "Checking status of $DESC" "$NAME"
+	if running ; then
+		log_progress_msg "running"
+            log_end_msg 0
+        else
+            log_progress_msg "not running"
+            log_end_msg 1
+            if [ -f "$PIDFILE" ] ; then
+                exit 1
+            else
+                exit 3
+            fi
+        fi
 	;;
   *)
 	echo "Usage: $0 {start|stop|restart|force-reload}" >&2
