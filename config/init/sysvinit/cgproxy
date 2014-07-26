@@ -61,7 +61,6 @@ start()
 {
 	rm -f $PIDFILE
 	if [ -e /proc/self/ns/pid ] && [ "$NESTED" != "yes" ]; then
-		log_daemon_msg "Kernel is new enough and not nested, no proxy is needed"
 		log_end_msg 0
 		exit 0
 	fi
