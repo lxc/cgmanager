@@ -356,7 +356,7 @@ static bool do_mount_subsys(int i)
 		ret = mount(src, dest, "cgroup", 0, src);
 	if (ret < 0) {
 		if (!m->premounted) {
-			nih_warn("Failed mounting %s onto %s: %s", src, dest, strerror(errno));
+			nih_debug("Failed mounting %s onto %s: %s", src, dest, strerror(errno));
 			free(m->path);
 			m->path = NULL;
 			return true;
