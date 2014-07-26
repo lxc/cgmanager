@@ -53,7 +53,7 @@ running()
 
 stop()
 {
-  	start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
+	start-stop-daemon --stop --retry 5 --quiet --pidfile $PIDFILE --exec $DAEMON
 	return 0
 }
 
@@ -73,7 +73,6 @@ case "$1" in
     restart|force-reload)
 	log_daemon_msg "Restarting $DESC" "$NAME"
 	stop
-	sleep 2
 	# not sure this makes sense - should we just stop it and count on the
 	# cgmanager starting the cgproxy?
 	start

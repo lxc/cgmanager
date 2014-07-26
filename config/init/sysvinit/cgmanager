@@ -54,7 +54,7 @@ running()
 stop()
 {
 	/etc/init.d/cgproxy stop >/dev/null 2>&1 || true
-  	start-stop-daemon --stop --quiet --pidfile $PIDFILE --exec $DAEMON
+	start-stop-daemon --stop --retry 5 --quiet --pidfile $PIDFILE --exec $DAEMON
 	return 0
 }
 
@@ -77,7 +77,6 @@ case "$1" in
     restart|force-reload)
 	log_daemon_msg "Restarting $DESC" "$NAME"
 	stop
-	sleep 2
 	start
 	if running; then
 		log_end_msg 0
