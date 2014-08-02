@@ -13,7 +13,9 @@
 #  nesting of lxc containers by unprivileged users.
 ### END INIT INFO
 
-. /lib/lsb/init-functions
+# Do NOT "set -e"
+
+PATH=/sbin:/bin
 
 DAEMON=/sbin/cgproxy
 NAME=cgproxy
@@ -30,41 +32,59 @@ if [ -f /etc/default/cgmanager ]; then
 	. /etc/default/cgmanager
 fi
 
-running_pid()
-{
-    # Check if a given process pid's cmdline matches a given name
-    pid=$1
-    name=$2
-    [ -z "$pid" ] && return 1
-    [ ! -d /proc/$pid ] &&  return 1
-    cmd=`cat /proc/$pid/cmdline | tr "\000" "\n"|head -n 1 |cut -d : -f 1`
-    # Is this the expected child?
-    [ "$cmd" != "$name" ] &&  return 1
-    return 0
-}
+# Load the VERBOSE setting and other rcS variables
+. /lib/init/vars.sh
 
-running()
-{
-  [ ! -f "$PIDFILE" ] && return 1
-  pid=`cat $PIDFILE`
-  running_pid $pid $DAEMON || return 1
-  return 0
-}
+# Define LSB log_* functions.
+# Depend on lsb-base (>= 3.2-14) to ensure that this file is present
+# and status_of_proc is working.
+. /lib/lsb/init-functions
+
+DAEMON_ARGS="$BASEOPTS $cgmanager_opts"
 
 stop()
 {
-	start-stop-daemon --stop --retry 5 --quiet --pidfile $PIDFILE --exec $DAEMON
-	return 0
+	# Return
+	#   0 if daemon has been stopped
+	#   1 if daemon was already stopped
+	#   2 if daemon could not be stopped
+	#   other if a failure occurred
+	start-stop-daemon --stop --quiet --retry=TERM/30/KILL/5 --pidfile $PIDFILE --name $NAME
+	RETVAL="$?"
+	[ "$RETVAL" = 2 ] && return 2
+	# Wait for children to finish too if this is a daemon that forks
+	# and if the daemon is only ever run from this initscript.
+	# If the above conditions are not satisfied then add some other code
+	# that waits for the process to drop all resources that could be
+	# needed by services started subsequently.  A last resort is to
+	# sleep for some time.
+	start-stop-daemon --stop --quiet --oknodo --retry=0/30/KILL/5 --exec $DAEMON
+	[ "$?" = 2 ] && return 2
+	# Many daemons don't delete their pidfiles when they exit.
+	rm -f $PIDFILE
+	return "$RETVAL"
 }
 
 start()
 {
-	rm -f $PIDFILE
+	# Return
+	#   0 if daemon has been started
+	#   1 if daemon was already running
+	#   2 if daemon could not be started
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON --test > /dev/null \
+		|| return 1
+
+	# cgproxy should only run on container unless on older kernel
 	if [ -e /proc/self/ns/pid ] && [ "$NESTED" != "yes" ]; then
 		log_end_msg 0
 		exit 0
 	fi
-	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- $BASEOPTS $cgmanager_opts
+
+	start-stop-daemon --start --quiet --pidfile $PIDFILE --exec $DAEMON -- \
+		$DAEMON_ARGS \
+		|| return $?
+	# Todo - once the compiled cgm is installed we could use it here to ping
+	# cgmanager as our test for readiness.
 	sleep 1
 }
 
@@ -72,53 +92,39 @@ case "$1" in
     restart|force-reload)
 	log_daemon_msg "Restarting $DESC" "$NAME"
 	stop
-	# not sure this makes sense - should we just stop it and count on the
-	# cgmanager starting the cgproxy?
-	start
-	if running; then
-		log_end_msg 0
-	else
+	case "$?" in
+	  0|1)
+		do_start
+		case "$?" in
+			0) log_end_msg 0 ;;
+			1) log_end_msg 1 ;; # Old process is still running
+			*) log_end_msg 1 ;; # Failed to start
+		esac
+		;;
+	  *)
+		# Failed to stop
 		log_end_msg 1
-	fi
+		;;
+	esac
 	;;
     start)
 	log_daemon_msg "Starting $DESC" "$NAME"
-	if running; then
-		log_progress_msg "already running"
-		log_end_msg 0
-		exit 0
-	fi
 	start
-	if running; then
-		log_end_msg 0
-	else
-		log_end_msg 1
-	fi
+	case "$?" in
+		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
 	;;
   stop)
 	log_daemon_msg "Stopping $DESC" "$NAME"
-	if ! running ; then
-		log_progress_msg "not running"
-		log_end_msg 0
-		exit 0
-	fi
 	stop
-	log_end_msg 0
+	case "$?" in
+		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
+		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
+	esac
 	;;
   status)
-	log_daemon_msg "Checking status of $DESC" "$NAME"
-	if running ; then
-		log_progress_msg "running"
-            log_end_msg 0
-        else
-            log_progress_msg "not running"
-            log_end_msg 1
-            if [ -f "$PIDFILE" ] ; then
-                exit 1
-            else
-                exit 3
-            fi
-        fi
+	status_of_proc -p $PIDFILE "$DAEMON" "$NAME" && exit 0 || exit $?
 	;;
   *)
 	echo "Usage: $0 {start|stop|restart|force-reload}" >&2
