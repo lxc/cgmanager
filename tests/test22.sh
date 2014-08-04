@@ -15,11 +15,11 @@ dotest() {
     sleep 20 &
     spid=$!
     cgm create memory ab
-    dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:memory string:$cg
-    dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:memory string:$cg int32:$spid
-    dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:memory string:$cg int32:$$
-    p=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetPidCgroup string:memory int32:$spid`
-    absp=`dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.GetPidCgroupAbs string:memory int32:$spid`
+    cgm create memory $cg
+    cgm movepid memory $cg $spid
+    cgm movepid memory $cg $$
+    p=`cgm getpidcgroup memory $spid`
+    absp=`cgm getpidcgroupabs memory $spid`
     kill -9 $ppid
     kill -9 $spid
     echo "p is .$p."

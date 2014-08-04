@@ -23,10 +23,10 @@ cantmount=0
 mount -t cgroup -o memory cgroup $mnt || cantmount=1
 
 # Create /testchown cgroup owned by root
-dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:'memory' string:'testchown' int32:1 || true
-dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:'testchown'
+cgm remove memory testchown
+cgm create memory testchown
 
-dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chmod string:'memory' string:'testchown' string:'tasks' int32:0775
+cgm chmodfile memory testchown tasks 0775
 if [ $cantmount -eq 0 ]; then
 	myc=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
 	path="${mnt}/${myc}/testchown/tasks"
@@ -41,18 +41,18 @@ else
 fi
 
 # Create /testchown cgroup owned by root
-dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Remove string:'memory' string:'testchown' int32:1 || true
-dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:'memory' string:'testchown'
-sudo -u \#$uid dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chmod string:'memory' string:'testchown' string:'tasks' int32:0775
+cgm remove memory testchown
+cgm create memory testchown
+sudo -u \#$uid cgm chmodfile memory testchown tasks 0775
 if [ $? -eq 0 ]; then
 	echo "test 17: should have failed to chmod tasks file"
 	exit 1
 fi
 
 # chown the cgroup so that unprivileged user should be able to chmod it.
-dbus-send --print-reply=literal --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chown string:'memory' string:'testchown' int32:$uid int32:0
+cgm chown memory testchown $uid 0
 
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Chmod string:'memory' string:'testchown' string:'tasks' int32:0775 > /dev/null 2>&1
+sudo -u \#$uid cgm chmodfile  memory testchown tasks 0775
 if [ $? -ne 0 ]; then
 	echo "test 17: should have succeeded chmoding tasks file as non-root"
 	exit 1

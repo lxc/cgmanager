@@ -10,12 +10,12 @@ else
 fi
 
 cgmescape() {
-	dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePidAbs string:memory string:$1 int32:$2
+	cgm movepidabs memory $1 $2
 }
 
 orig_cg=`awk -F: '/memory/ { print $3 }' /proc/$$/cgroup`
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Create string:memory string:'escapetest'
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:memory string:'escapetest' int32:$$
+cgm create memory escapetest
+cgm movepid memory escapetest $$
 new_cg=`awk -F: '/memory/ { print $3 }' /proc/$$/cgroup`
 if [ "$orig_cg" = "$new_cg" ]; then
 	echo "root was not able to enter the escapetest cgroup"
@@ -37,7 +37,7 @@ pp=$!
 sleep 1
 p=`ps -ef | grep sleep | grep $pp | grep -v sudo | tail -1 | awk '{ print $2 }'`
 
-sudo -u \#$uid dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.MovePid string:'memory' string:'/' int32:$p
+sudo -u \#$uid cgm movepid memory / $p
 if [ $? -eq 0 ]; then
 	echo "unpriv user was able to move a task to /"
 	kill -9 $pp $p

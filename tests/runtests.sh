@@ -16,7 +16,7 @@ else
 fi
 echo "Note: real uid is $uid gid is $gid user is $SUDO_USER"
 
-dbus-send --print-reply --address=unix:path=/sys/fs/cgroup/cgmanager/sock --type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.Ping int32:0 > /dev/null 2>&1 || { echo "cgmanager is not running"; exit 1; }
+cgm ping || { echo "cgmanager is not running"; exit 1; }
 
 # mount memory cgroup and remove our test directories
 mount -t cgroup -o memory cgroup /sys/fs/cgroup
