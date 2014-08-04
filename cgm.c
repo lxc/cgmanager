@@ -59,7 +59,7 @@ void usage(const char *me)
 	printf("\n");
 	printf("%s chmodfile <controller> <cgroup> file mode\n", me);
 	printf("\n");
-	printf("%s remove <controller> <cgroup>\n", me);
+	printf("%s remove <controller> <cgroup> [0|1]\n", me);
 	printf("\n");
 	printf("%s getpidcgroup <controller> pid\n", me);
 	printf("\n");
@@ -85,6 +85,10 @@ void usage(const char *me)
 	printf(" memory, and '<cgroup>' with the desired cgroup, i.e. x1.\n");
 	printf(" For create, chown, chmod, remove, and movepid, <controller>\n");
 	printf(" may be \"all\" or a comma-separate set of cgroups.\n");
+	printf(" Remove by default is recursive.  Adding '0' as the last argument\n");
+	printf(" will perforn non-recursive deletion.  Adding '1' is supported\n");
+	printf(" for legacy reasions.\n");
+	printf("\n");
 	printf(" To refer to the current cgroup, use ''.\n");
 	exit(1);
 }
@@ -143,24 +147,27 @@ void do_create(const char *controller, const char *cgroup_path)
 		nih_free(nerr);
 		exit(1);
 	}
-	if (existed)
+	if (existed == 1)
 		printf("Path existed\n");
 	exit(0);
 }
 
+#define CG_REMOVE_NONRECURSIVE 0
 #define CG_REMOVE_RECURSIVE 1
-void do_remove(const char *controller, const char *cgroup_path)
+void do_remove(const char *controller, const char *cgroup_path, bool recursive)
 {
 	int32_t existed = 0;
-	if ( cgmanager_remove_sync(NULL, cgroup_manager, controller,
-				       cgroup_path, CG_REMOVE_RECURSIVE, &existed) != 0) {
+	if ( cgmanager_remove_sync(NULL, cgroup_manager, controller, cgroup_path,
+				recursive ? CG_REMOVE_RECURSIVE : CG_REMOVE_NONRECURSIVE,
+				&existed) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_remove_sync failed: %s\n", nerr->message);
+		fprintf(stderr, "call to cgmanager_remove_sync (%s) failed: %s\n",
+			recursive ? "recursive" : "non-recursive", nerr->message);
 		nih_free(nerr);
 		exit(1);
 	}
-	if (!existed)
+	if (existed == -1)
 		printf("Path did not exist\n");
 	exit(0);
 }
@@ -441,9 +448,12 @@ int main(int argc, const char *argv[])
 			usage(me);
 		do_chmodfile(argv[2], argv[3], argv[4], argv[5]);
 	} else if (strcmp(argv[1], "remove") == 0) { 
-		if (argc != 4)
+		bool recursive = true;
+		if (argc != 4 && argc != 5)
 			usage(me);
-		do_remove(argv[2], argv[3]);
+		if (argc == 5 && strcmp(argv[4], "0") == 0)
+			recursive = false;
+		do_remove(argv[2], argv[3], recursive);
 	} else if (strcmp(argv[1], "removeonempty") == 0) { 
 		if (argc != 4)
 			usage(me);
