@@ -1021,12 +1021,16 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 	const char *cont_path;
 	bool abspath = false;
 
-	if (!cgroup)
+	if (!cgroup) {
+		nih_error("%s: BUG: called with NULL cgroup\n");
 		return false;
+	}
 
 	if (cgroup[0] != '/') {
 		cg = pid_cgroup(pid, controller, requestor_cgpath);
 		if (!cg) {
+			nih_error("Found no cgroup entry for pid %lu controller %s\n",
+				(unsigned long)pid, controller);
 			return false;
 		}
 	} else
