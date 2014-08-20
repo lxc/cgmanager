@@ -236,11 +236,8 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -347,11 +344,8 @@ int cgmanager_get_pid_cgroup_abs_scm (void *data, NihDBusMessage *message,
 		return -1;
 	}
 
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -469,11 +463,8 @@ int cgmanager_move_pid_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -562,11 +553,8 @@ int cgmanager_move_pid_abs_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -682,11 +670,8 @@ int cgmanager_create_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -767,11 +752,8 @@ int cgmanager_chown_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -874,11 +856,8 @@ int cgmanager_chmod_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -961,11 +940,8 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 
 }
@@ -1053,11 +1029,8 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -1143,11 +1116,8 @@ int cgmanager_remove_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -1243,11 +1213,8 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -1370,11 +1337,8 @@ int cgmanager_list_children_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
@@ -1456,11 +1420,8 @@ int cgmanager_remove_on_empty_scm (void *data, NihDBusMessage *message,
 		nih_free(error);
 		return -1;
 	}
-	if (!kick_fd_client(sockfd)) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-			"Error writing to client: %s", strerror(errno));
+	if (!kick_fd_client(sockfd))
 		return -1;
-	}
 	return 0;
 }
 
