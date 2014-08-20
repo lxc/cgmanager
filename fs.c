@@ -1022,7 +1022,7 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 	bool abspath = false;
 
 	if (!cgroup) {
-		nih_error("%s: BUG: called with NULL cgroup\n");
+		nih_error("%s: BUG: called with NULL cgroup\n", __func__);
 		return false;
 	}
 
