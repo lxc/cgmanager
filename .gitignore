@@ -51,6 +51,7 @@ cgm.1
 tests/*.o
 tests/cgm-concurrent
 tests/scmtest
+tests/nstest
 00*
 cgm-release-agent
 cgm

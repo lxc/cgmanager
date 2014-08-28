@@ -111,6 +111,14 @@ rpm: dist
 TESTS_SCM: tests/scmtest.c
 	$(CC) -o tests/scmtest tests/scmtest.c
 
+tests/nstest.o: tests/nstest.c
+	$(CC) -I. $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS) $(DBUS_CFLAGS)  -c \
+		-fPIC -DPIC -o tests/nstest.o tests/nstest.c
+
+TEST_NSTEST: tests/nstest.o
+	$(CCLD) -o tests/nstest tests/nstest.o \
+		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lcgmanager
+
 tests/cgm-concurrent.o: tests/cgm-concurrent.c
 	$(CC) -I. $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS) $(DBUS_CFLAGS)  -c \
 		-fPIC -DPIC -o tests/cgm-concurrent.o tests/cgm-concurrent.c
@@ -119,6 +127,6 @@ TESTS_CGM_CONCURRENT: tests/cgm-concurrent.o
 	$(CCLD) -o tests/cgm-concurrent tests/cgm-concurrent.o \
 		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lpthread -lcgmanager
 
-tests: TESTS_CGM_CONCURRENT TESTS_SCM
+tests: TESTS_CGM_CONCURRENT TESTS_SCM TEST_NSTEST
 
 SUBDIRS = config
