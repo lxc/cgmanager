@@ -106,6 +106,9 @@ enum req_type {
 	REQ_TYPE_LIST_CHILDREN,
 	REQ_TYPE_REMOVE_ON_EMPTY,
 	REQ_TYPE_GET_PID_ABS,
+	REQ_TYPE_PRUNE,
+	REQ_TYPE_LISTCONTROLLERS,
+	REQ_TYPE_LISTKEYS,
 };
 
 int get_pid_cgroup_main(void *parent, const char *controller,
@@ -150,6 +153,15 @@ void list_children_scm_complete(struct scm_sock_data *data);
 int remove_on_empty_main (const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r);
 void remove_on_empty_scm_complete(struct scm_sock_data *data);
+
+int prune_main (const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r);
+void prune_scm_complete(struct scm_sock_data *data);
+
+int list_controllers_main (void *parent, char ***output);
+
+int list_keys_main (void *parent, const char *controller, char ***output);
+
 
 int cgmanager_ping (void *data, NihDBusMessage *message, int junk);
 

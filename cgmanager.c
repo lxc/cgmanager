@@ -877,7 +877,7 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	return get_child_directories(parent, path, output);
+	return get_directory_children(parent, path, output, DT_DIR);
 }
 
 int do_remove_on_empty_main(const char *controller, const char *cgroup,
@@ -971,6 +971,145 @@ next:
 	return 0;
 }
 
+void do_recursive_prune(char *path, bool autoremove)
+{
+	nih_local char *releasefile = NULL;
+	struct dirent dirent, *direntp;
+	DIR *dir;
+	char pathname[MAXPATHLEN];
+
+	if (!autoremove)
+		goto remove;
+
+	releasefile = NIH_MUST( nih_strdup(NULL, path) );
+	NIH_MUST( nih_strcat(&releasefile, NULL, "/notify_on_release") );
+
+	if (!set_value_trusted(releasefile, "1\n"))
+		nih_info("Failed to set remove-on-empty for %s\n", path);
+
+remove:
+	dir = opendir(path);
+	if (!dir) {
+		nih_warn("%s: Failed to open dir %s for recursive deletion", __func__, path);
+		return;
+	}
+
+	while (!readdir_r(dir, &dirent, &direntp)) {
+		struct stat mystat;
+		int rc;
+
+		if (!direntp)
+			break;
+		if (!strcmp(direntp->d_name, ".") ||
+		    !strcmp(direntp->d_name, ".."))
+			continue;
+		rc = snprintf(pathname, MAXPATHLEN, "%s/%s", path, direntp->d_name);
+		if (rc < 0 || rc >= MAXPATHLEN)
+			continue;
+		rc = lstat(pathname, &mystat);
+		if (rc)
+			continue;
+		if (S_ISDIR(mystat.st_mode))
+			do_recursive_prune(pathname, autoremove);
+	}
+
+	closedir(dir);
+	rmdir(path);
+}
+
+int do_prune_main(const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r)
+{
+	char rcgpath[MAXPATHLEN];
+	size_t cgroup_len;
+	nih_local char *working = NULL, *wcgroup = NULL;
+
+	// Get r's current cgroup in rcgpath
+	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+		nih_error("%s: Could not determine the requestor's cgroup for %s",
+                __func__, controller);
+		return -1;
+	}
+
+	cgroup_len = strlen(cgroup);
+
+	if (strlen(rcgpath) + cgroup_len > MAXPATHLEN) {
+		nih_error("%s: Path name too long", __func__);
+		return -1;
+	}
+
+	wcgroup = NIH_MUST( nih_strdup(NULL, cgroup) );
+	if (!normalize_path(wcgroup))
+		return -1;
+
+	working = NIH_MUST( nih_strdup(NULL, rcgpath) );
+	NIH_MUST( nih_strcat(&working, NULL, "/") );
+	NIH_MUST( nih_strcat(&working, NULL, wcgroup) );
+
+	if (!dir_exists(working)) {
+		return -1;
+	}
+	// must have write access
+	if (!may_access(r.pid, r.uid, r.gid, working, O_WRONLY)) {
+		nih_error("%s: pid %d (%u:%u) may not remove %s", __func__,
+			r.pid, r.uid, r.gid, working);
+		return -1;
+	}
+
+	do_recursive_prune(working, was_premounted(controller));
+
+	return 0;
+}
+
+int prune_main(const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r)
+{
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ','))
+		return do_prune_main(controller, cgroup, p, r);
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
+	}
+	tok = strtok(c, ",");
+	while (tok) {
+		ret = do_prune_main(tok, cgroup, p, r);
+		if (ret != 0)
+			nih_warn("do_prune_main for %s: %s failed", tok, cgroup);
+		tok = strtok(NULL, ",");
+	}
+
+	return 0;
+}
+
+int list_controllers_main(void *parent, char ***output)
+{
+	*output = NULL;
+
+	do_list_controllers(parent, output);
+
+	return 0;
+}
+
+int list_keys_main(void *parent, const char *controller, char ***output)
+{
+	*output = NULL;
+
+	return do_list_controller_keys(parent, controller, output);
+}
 
 char *extra_cgroup_mounts;
 

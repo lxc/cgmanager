@@ -174,6 +174,7 @@ static void sock_scm_reader(struct scm_sock_data *data,
 	case REQ_TYPE_GET_TASKS: get_tasks_scm_complete(data); break;
 	case REQ_TYPE_LIST_CHILDREN: list_children_scm_complete(data); break;
 	case REQ_TYPE_REMOVE_ON_EMPTY: remove_on_empty_scm_complete(data); break;
+	case REQ_TYPE_PRUNE: prune_scm_complete(data); break;
 	default:
 		nih_fatal("%s: bad req_type %d", __func__, data->type);
 		exit(1);
@@ -1470,6 +1471,182 @@ int cgmanager_remove_on_empty (void *data, NihDBusMessage *message,
 	return ret;
 }
 
+/*
+ * Prune - recursively call remove-on-empty first, then remove, on each
+ * directory.
+ */
+void prune_scm_complete(struct scm_sock_data *data)
+{
+	char b = '0';
+
+	if (prune_main(data->controller, data->cgroup, data->pcred,
+				data->rcred) == 0)
+		b = '1';
+	if (write(data->fd, &b, 1) < 0)
+		nih_error("PruneScm: Error writing final result to client");
+}
+
+int cgmanager_prune_scm (void *data, NihDBusMessage *message,
+		 const char *controller, const char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_PRUNE);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd))
+		return -1;
+	return 0;
+}
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests that cgroup @cgroup in controller @controller be
+ * recursively removed if empty, or else removed when it becomes empty.
+ */
+int cgmanager_prune (void *data, NihDBusMessage *message,
+		const char *controller, const char *cgroup)
+{
+	int fd = 0, ret;
+	struct ucred rcred;
+	socklen_t len;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("Prune: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	ret = prune_main(controller, cgroup, rcred, rcred);
+	if (ret >= 0)
+		ret = 0;
+	else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+/*
+ * listcontrollers
+ */
+int cgmanager_list_controllers (void *data, NihDBusMessage *message,
+		char ***output)
+{
+	int fd = 0, ret;
+	struct ucred rcred;
+	socklen_t len;
+
+	nih_assert(output);
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("ListControllers: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	ret = list_controllers_main(message, output);
+	if (ret >= 0)
+		ret = 0;
+	else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+/*
+ * listkeys
+ */
+int cgmanager_list_keys (void *data, NihDBusMessage *message,
+		const char *controller, char ***output)
+{
+	int fd = 0, ret;
+	struct ucred rcred;
+	socklen_t len;
+
+	nih_assert(output);
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("ListKeys: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	ret = list_keys_main(message, controller, output);
+	if (ret >= 0)
+		ret = 0;
+	else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+/*
+ * return our APi version
+ */
 int
 cgmanager_get_api_version(void *data, NihDBusMessage *message, int *version)
 {

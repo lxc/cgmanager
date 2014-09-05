@@ -625,6 +625,24 @@ static void print_debug_controller_info(void)
 	}
 }
 
+void do_list_controllers(void *parent, char ***output)
+{
+	int i;
+
+	nih_assert(output);
+	*output = NIH_MUST( nih_alloc(parent, (num_controllers+1) * sizeof(char *)) );
+	(*output)[num_controllers] = NULL;
+	
+	/* XXX
+	 * This will actually not be right.
+	 * if we have freezer,devices co-mounted, we'll have two separate
+	 * entries for the two.
+	 * So TODO - figure out what we want in that case, and provide it
+	 */
+	for (i = 0; i < num_controllers; i++)
+		(*output)[i] = NIH_MUST( nih_strdup(parent, all_mounts[i].controller) );
+}
+
 void do_prune_comounts(char *controllers)
 {
 	char *p1 = controllers, *p2;
@@ -1429,20 +1447,21 @@ bool move_self_to_root(void)
 }
 
 /*
- * get_child_directories:
+ * get_directory_children:
  *
  * @parent: parent which will be given a reference to the returned string
  * (to allow the returned value to be freed automatically when @parent is
  * freed).
  * @path: Full path whose child directories to list.
  * output: pointer to which the list of directory names will be stored.
+ * @type: type of file (dir or regular file) to return
  *
  * Read all child directories under @path.
  *
  * Returns: Number of directories read.  The names will be placed in the
  * null-terminated array @output.
  */
-int get_child_directories(void *parent, const char *path, char ***output)
+int get_directory_children(void *parent, const char *path, char ***output, unsigned char type)
 {
 	int used = 0, alloced = 5;
 	DIR *d;
@@ -1460,7 +1479,7 @@ int get_child_directories(void *parent, const char *path, char ***output)
 	while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
 		if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
 			continue;
-		if (DT_DIR != direntp->d_type)
+		if (type != direntp->d_type)
 			continue;
 		if (used+1 >= alloced) {
 			char **tmp;
@@ -1481,6 +1500,16 @@ int get_child_directories(void *parent, const char *path, char ***output)
 	}
 	closedir(d);
 	return used;
+}
+
+int do_list_controller_keys(void *parent, const char *controller, char ***output)
+{
+	const char *path;
+
+	if (!(path = get_controller_path(controller)))
+		return -1;
+
+	return get_directory_children(parent, path, output, DT_REG);
 }
 
 bool was_premounted(const char *controller)
