@@ -170,6 +170,6 @@ void client_disconnect (DBusConnection *conn);
 
 bool sane_cgroup(const char *cgroup);
 
-#define API_VERSION 6
+#define API_VERSION 7
 
 #endif
