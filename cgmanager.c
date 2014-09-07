@@ -1056,7 +1056,7 @@ int do_prune_main(const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	do_recursive_prune(working, was_premounted(controller));
+	do_recursive_prune(working, !was_premounted(controller));
 
 	return 0;
 }
