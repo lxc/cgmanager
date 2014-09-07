@@ -392,6 +392,59 @@ void do_listchildren(const char *controller, const char *cgroup_path)
 	exit(0);
 }
 
+void do_prune(const char *controller, const char *cgroup_path)
+{
+	if ( cgmanager_prune_sync(NULL, cgroup_manager, controller, cgroup_path) != 0) {
+		NihError *nerr;
+		nerr = nih_error_get();
+		fprintf(stderr, "call to cgmanager_prune_sync failed: %s\n", nerr->message);
+		nih_free(nerr);
+		exit(1);
+	}
+	exit(0);
+}
+
+void do_listcontrollers(void)
+{
+	char **controllers = NULL;
+	int i = 0;
+
+	if (cgmanager_list_controllers_sync(NULL, cgroup_manager, &controllers) != 0) {
+		NihError *nerr;
+		nerr = nih_error_get();
+		fprintf(stderr, "call to cgmanager_list_controllers_sync failed: %s\n", nerr->message);
+		nih_free(nerr);
+		exit(1);
+	}
+
+	while (controllers[i]) {
+		printf("%s\n", controllers[i++]);
+	}
+	nih_free(controllers);
+	exit(0);
+}
+
+void do_listkeys(const char *controller, const char *cgroup_path)
+{
+	char **keys = NULL;
+	int i = 0;
+
+	if (cgmanager_list_keys_sync(NULL, cgroup_manager, controller,
+				cgroup_path, &keys) != 0) {
+		NihError *nerr;
+		nerr = nih_error_get();
+		fprintf(stderr, "call to cgmanager_list_keys_sync failed: %s\n", nerr->message);
+		nih_free(nerr);
+		exit(1);
+	}
+
+	while (keys[i]) {
+		printf("%s\n", keys[i++]);
+	}
+	nih_free(keys);
+	exit(0);
+}
+
 void do_apiversion(void)
 {
 	int32_t v;
@@ -497,6 +550,16 @@ int main(int argc, const char *argv[])
 		if (argc != 4)
 			usage(me);
 		do_listchildren(argv[2], argv[3]);
+	} else if (strcmp(argv[1], "prune") == 0) { 
+		if (argc != 4)
+			usage(me);
+		do_prune(argv[2], argv[3]);
+	} else if (strcmp(argv[1], "listcontrollers") == 0) { 
+		do_listcontrollers();
+	} else if (strcmp(argv[1], "listkeys") == 0) { 
+		if (argc != 4)
+			usage(me);
+		do_listkeys(argv[2], argv[3]);
 	} else if (strcmp(argv[1], "apiversion") == 0) { 
 		do_apiversion();
 	} else {
