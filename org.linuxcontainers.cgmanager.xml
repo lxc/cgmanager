@@ -204,6 +204,13 @@
       <arg name="sockfd" type="h" direction="in" />
       <!-- 2/1/0 (didntexist/pass/fail) return value comes over sockfd -->
     </method>
+    <!-- Prune calls removeonempty, then calls itself on any child cgroups,
+         Then calls remove.  This will not kill any running tasks, but will
+	 ensure that when all running tasks are gone, the cgroups will be
+	 removed.
+	 Note that a 'KillAndRemove' is not provided because there is no
+	 mechanism for cgmanager to know whether LSMs etc would allow
+	 the caller to kill a task.  -->
     <method name="Prune">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />
