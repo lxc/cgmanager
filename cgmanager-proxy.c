@@ -1161,97 +1161,97 @@ out:
 	return ret;
 }
 
-int list_keys_main (void *parent, const char *controller, char ***output)
+int list_keys_main (void *parent, const char *controller, const char *cgroup,
+		    struct ucred p, struct ucred r, char ***output)
 {
-	DBusMessage *message = NULL, *reply = NULL;
-	char **         output_local = NULL;
-	DBusError       error;
+	DBusMessage *message;
 	DBusMessageIter iter;
-	DBusMessageIter output_local_iter;
-	int		ret = -1;
-	size_t          output_local_size;
+	int sv[2], ret = -1;
+	uint32_t len;
+	int32_t nrkeys;
+	nih_local char * paths = NULL;
+	char *s;
+	int i;
 
 	*output = NULL;
-	message = dbus_message_new_method_call(dbus_bus_get_unique_name(server_conn),
-			"/org/linuxcontainers/cgmanager",
-			"org.linuxcontainers.cgmanager0_0", "ListControllers");
-
-	dbus_message_iter_init_append (message, &iter);
-
-	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
-		dbus_message_unref (message);
-		goto out;
-	}
-
-	dbus_error_init (&error);
-
-	reply = dbus_connection_send_with_reply_and_block (server_conn, message, -1, &error);
-	if (! reply) {
-		dbus_message_unref (message);
-
-		nih_error("%s: error completing dbus request: %s %s", __func__,
-			error.name, error.message);
-
-		dbus_error_free (&error);
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
 		return -1;
 	}
-	dbus_message_unref (message);
 
-	dbus_message_iter_init (reply, &iter);
-
-	if (dbus_message_iter_get_arg_type (&iter) != DBUS_TYPE_ARRAY)
-		goto out;
-
-	dbus_message_iter_recurse (&iter, &output_local_iter);
-
-	output_local_size = 0;
-	output_local = NULL;
-
-	output_local = NIH_MUST( nih_alloc (parent, sizeof (char *)) );
-
-	output_local[output_local_size] = NULL;
-
-	while (dbus_message_iter_get_arg_type (&output_local_iter) != DBUS_TYPE_INVALID) {
-		const char *output_local_element_dbus;
-		char **     output_local_tmp;
-		char *      output_local_element;
-
-		if (dbus_message_iter_get_arg_type (&output_local_iter) != DBUS_TYPE_STRING)
-			goto out;
-
-		dbus_message_iter_get_basic (&output_local_iter, &output_local_element_dbus);
-
-		output_local_element = NIH_MUST( nih_strdup (output_local, output_local_element_dbus) );
-
-		dbus_message_iter_next (&output_local_iter);
-
-		output_local_tmp = NIH_MUST( nih_realloc (output_local, parent, sizeof (char *) * (output_local_size + 2)) );
-
-		output_local = output_local_tmp;
-		output_local[output_local_size] = output_local_element;
-		output_local[output_local_size + 1] = NULL;
-
-		output_local_size++;
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
 	}
 
-	dbus_message_iter_next (&iter);
+	if (!(message = start_dbus_request("ListKeysScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
 
-	if (dbus_message_iter_get_arg_type (&iter) != DBUS_TYPE_INVALID)
+	dbus_message_iter_init_append(message, &iter);
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+
+	if (!complete_dbus_request(message, sv, &r, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
+		goto out;
+	}
+
+	if (proxyrecv(sv[0], &nrkeys, sizeof(int32_t)) != sizeof(int32_t))
+		goto out;
+	if (nrkeys == 0) {
+		ret = 0;
+		goto out;
+	}
+	if (nrkeys < 0) {
+		nih_error("%s: Server encountered an error: bad cgroup?", __func__);
+		ret = -1;
+		goto out;
+	}
+	if (proxyrecv(sv[0], &len, sizeof(uint32_t)) != sizeof(uint32_t))
 		goto out;
 
-	*output = output_local;
+	paths = nih_alloc(NULL, len+1);
+	paths[len] = '\0';
+	if (read(sv[0], paths, len) != len) {
+		nih_error("%s: Failed getting paths from server", __func__);
+		goto out;
+	}
 
-	ret = 0;
+	*output = NIH_MUST( nih_alloc(parent, sizeof( char*)*(nrkeys+1)) );
 
+	s = paths;
+	(*output)[nrkeys] = NULL;
+	for (i=0; i<nrkeys; i++) {
+		if (s > paths + len) {
+			ret = -1;
+			nih_error("%s: corrupted result from cgmanager",
+					__func__);
+			goto out;
+		}
+		(*output)[i] = NIH_MUST( nih_strdup(parent, s) );
+		s += strlen(s) + 1;
+	}
+	ret = nrkeys;
 out:
-	if (reply)
-		dbus_message_unref (reply);
-	if (ret)
-		nih_free (output_local);
+	close(sv[0]);
+	close(sv[1]);
 	return ret;
 }
-
-
 
 /**
  * options:

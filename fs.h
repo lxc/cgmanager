@@ -53,4 +53,3 @@ bool create_agent_symlinks(void);
 bool was_premounted(const char *controller);
 void do_prune_comounts(char *controllers);
 void do_list_controllers(void *parent, char ***output);
-int do_list_controller_keys(void *parent, const char *controller, char ***output);

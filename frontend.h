@@ -160,7 +160,8 @@ void prune_scm_complete(struct scm_sock_data *data);
 
 int list_controllers_main (void *parent, char ***output);
 
-int list_keys_main (void *parent, const char *controller, char ***output);
+int list_keys_main (void *parent, const char *controller, const char *cgroup,
+			struct ucred p, struct ucred r, char ***output);
 
 
 int cgmanager_ping (void *data, NihDBusMessage *message, int junk);

@@ -1560,16 +1560,6 @@ int get_directory_children(void *parent, const char *path, char ***output, unsig
 	return used;
 }
 
-int do_list_controller_keys(void *parent, const char *controller, char ***output)
-{
-	const char *path;
-
-	if (!(path = get_controller_path(controller)))
-		return -1;
-
-	return get_directory_children(parent, path, output, DT_REG);
-}
-
 bool was_premounted(const char *controller)
 {
 	bool found;

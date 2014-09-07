@@ -1,4 +1,4 @@
-/* frontend.h: definitions of the dbus and scm-enhanced dbus
+/* frontend.c: definitions of the dbus and scm-enhanced dbus
  *             frontend routines.
  *
  * Copyright © 2013 Stephane Graber
@@ -1601,10 +1601,94 @@ int cgmanager_list_controllers (void *data, NihDBusMessage *message,
 }
 
 /*
- * listkeys
+ * listkeys - list the files in a specific controller:cgroup.
+ * Unfortunately this does need to be per-cgroup, as freezer:/
+ * and frezer:/foo contain different files.
+ */
+void list_keys_scm_complete(struct scm_sock_data *data)
+{
+	int i, ret;
+	uint32_t len = 0, remainlen;
+	int32_t nrkeys;
+	char **output; // nih_alloced with data as parent; freed at io_shutdown
+	nih_local char * path = NULL;
+	char *p;
+
+	nrkeys = list_keys_main(data, data->controller, data->cgroup,
+			data->pcred, data->rcred, &output);
+	if (write(data->fd, &nrkeys, sizeof(int32_t)) != sizeof(int32_t)) {
+		nih_error("%s: error writing results", __func__);
+		return;
+	}
+	if (nrkeys < 0) {
+		nih_error("Error getting keys for %s:%s for pid %d",
+			data->controller, data->cgroup, data->rcred.pid);
+		return;
+	}
+	if (nrkeys == 0)  /* no names to write, we are done */
+		return;
+
+	for (i=0; i < nrkeys; i++)
+		len += strlen(output[i]) + 1;
+	path = nih_alloc(NULL, len);
+	if (!path) {
+		nih_error("Out of memory");
+		return;
+	}
+	p = path;
+	remainlen = len;
+	for (i=0; i < nrkeys; i++) {
+		ret = snprintf(p, remainlen, "%s", output[i]);
+		if (ret < 0 || ret >= remainlen) // bogus
+			return;
+		p += ret + 1;
+		remainlen -= ret + 1;
+	}
+
+	if (write(data->fd, &len, sizeof(uint32_t)) != sizeof(uint32_t)) {
+		nih_error("%s: error writing results", __func__);
+		return;
+	}
+
+	if (write(data->fd, path, len) != len) {
+		nih_error("list_keysscm: Error writing final result to client");
+		return;
+	}
+}
+
+int cgmanager_list_keys_scm (void *data, NihDBusMessage *message,
+		 const char *controller, const char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_LISTKEYS);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd))
+		return -1;
+	return 0;
+}
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests the list of files in @cgroup in @controller
+ * returns nrkeys, or -1 on error.
  */
 int cgmanager_list_keys (void *data, NihDBusMessage *message,
-		const char *controller, char ***output)
+		const char *controller, const char *cgroup, char ***output)
 {
 	int fd = 0, ret;
 	struct ucred rcred;
@@ -1635,7 +1719,7 @@ int cgmanager_list_keys (void *data, NihDBusMessage *message,
 	nih_info (_("ListKeys: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
 			fd, rcred.pid, rcred.uid, rcred.gid);
 
-	ret = list_keys_main(message, controller, output);
+	ret = list_keys_main(message, controller, cgroup, rcred, rcred, output);
 	if (ret >= 0)
 		ret = 0;
 	else
@@ -1643,6 +1727,7 @@ int cgmanager_list_keys (void *data, NihDBusMessage *message,
 					     "invalid request");
 	return ret;
 }
+
 
 /*
  * return our APi version

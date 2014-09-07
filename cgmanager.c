@@ -1104,11 +1104,30 @@ int list_controllers_main(void *parent, char ***output)
 	return 0;
 }
 
-int list_keys_main(void *parent, const char *controller, char ***output)
+int list_keys_main(void *parent, const char *controller, const char *cgroup,
+			struct ucred p, struct ucred r, char ***output)
 {
-	*output = NULL;
+	char path[MAXPATHLEN];
 
-	return do_list_controller_keys(parent, controller, output);
+	*output = NULL;
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
+                __func__, controller, cgroup);
+		return -1;
+	}
+
+	/* Check access rights to the cgroup directory */
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		return -1;
+	}
+
+	return get_directory_children(parent, path, output, DT_REG);
 }
 
 char *extra_cgroup_mounts;
