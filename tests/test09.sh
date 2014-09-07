@@ -26,6 +26,7 @@ cantmount=0
 mount -t cgroup -o memory cgroup $mnt || cantmount=1
 if [ $cantmount -eq 0 ]; then
 	myc=`cat /proc/$$/cgroup | grep memory | awk -F: '{ print $3 }'`
+	echo 0 > ${mnt}/${myc}/notify_on_release || true
 	rmdir "${mnt}/${myc}/zzz/b" || true
 	rmdir "${mnt}/${myc}/zzz" || true
 fi
