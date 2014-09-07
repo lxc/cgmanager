@@ -31,6 +31,7 @@ if [ $cantmount -eq 0 ]; then
 fi
 
 cgm create memory zzz
+sleep 1 # sad, another kernel slowness
 cgm chown memory zzz $uid $gid
 if [ $cantmount -eq 1 ]; then
 	echo "Chowned zzz, but cannot verify the result"
