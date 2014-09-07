@@ -13,7 +13,7 @@ fi
 cgm create freezer prune0/prune1/prune2
 
 # Test that non-root cannot prune root-owned dir
-if sudo -u \#$uid cgm prune prune0; then
+if sudo -u \#$uid cgm prune freezer prune0; then
 	echo "unpriv user was able to prune a root-owned cgroup"
 	exit 1
 fi
@@ -24,7 +24,7 @@ if ! cgm prune freezer prune0; then
 	exit 1
 fi
 sleep 1 # give buggy kernels a chance
-if cgm listchildren freezer prune0; then
+if cgm listchildren freezer prune0 2>/dev/null; then
 	echo "root failed to prune a directory"
 	exit 1
 fi
