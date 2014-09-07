@@ -83,8 +83,6 @@ void usage(const char *me)
 	printf("\n");
 	printf("%s listcontrollers\n", me);
 	printf("\n");
-	printf("%s listkeys <controller> <cgroup>\n", me);
-	printf("\n");
 	printf("%s apiversion\n", me);
 	printf("\n");
 	printf(" Replace '<controller>' with the desired controller, i.e.\n");
@@ -424,27 +422,6 @@ void do_listcontrollers(void)
 	exit(0);
 }
 
-void do_listkeys(const char *controller, const char *cgroup_path)
-{
-	char **keys = NULL;
-	int i = 0;
-
-	if (cgmanager_list_keys_sync(NULL, cgroup_manager, controller,
-				cgroup_path, &keys) != 0) {
-		NihError *nerr;
-		nerr = nih_error_get();
-		fprintf(stderr, "call to cgmanager_list_keys_sync failed: %s\n", nerr->message);
-		nih_free(nerr);
-		exit(1);
-	}
-
-	while (keys[i]) {
-		printf("%s\n", keys[i++]);
-	}
-	nih_free(keys);
-	exit(0);
-}
-
 void do_apiversion(void)
 {
 	int32_t v;
@@ -556,10 +533,6 @@ int main(int argc, const char *argv[])
 		do_prune(argv[2], argv[3]);
 	} else if (strcmp(argv[1], "listcontrollers") == 0) { 
 		do_listcontrollers();
-	} else if (strcmp(argv[1], "listkeys") == 0) { 
-		if (argc != 4)
-			usage(me);
-		do_listkeys(argv[2], argv[3]);
 	} else if (strcmp(argv[1], "apiversion") == 0) { 
 		do_apiversion();
 	} else {

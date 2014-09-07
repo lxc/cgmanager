@@ -218,17 +218,6 @@
     <method name="ListControllers">
       <arg name="output" type="as" direction="out" />
     </method>
-    <method name="ListKeysScm">
-      <arg name="controller" type="s" direction="in" />
-      <arg name="cgroup" type="s" direction="in" />
-      <arg name="sockfd" type="h" direction="in" />
-      <!-- names will be returned over sockfd -->
-    </method>
-    <method name="ListKeys">
-      <arg name="controller" type="s" direction="in" />
-      <arg name="cgroup" type="s" direction="in" />
-      <arg name="output" type="as" direction="out" />
-    </method>
     <!-- still to add: low priority (kernel not ready),
 	 getEventfd
 	 -->
