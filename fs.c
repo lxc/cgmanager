@@ -646,7 +646,7 @@ static void build_controller_mntlist(void)
 		srclist = NIH_MUST( nih_strdup(NULL, skip_nameeq(m->controller)) );
 		m->visited = true;
 		m2 = m->comounted;
-		while (m2) {
+		while (m2 && m2 != m) {
 			/*
 			 * XXX Should we use m2->controller or m2->options here?
 			 * options would include "none,".  does controller include
