@@ -64,10 +64,19 @@ struct controller_mounts {
 	char *agent;
 	struct controller_mounts *comounted;
 	bool premounted;
+	bool visited;
 };
 
 static struct controller_mounts *all_mounts;
 static int num_controllers;
+
+/*
+ * the controller_mnts is an array of the mounts to export as the controller
+ * list.  If freezer and devices are comounted, then they will form one
+ * entry "freezer,devices"
+ */
+static int num_controller_mnts;
+static char **controller_mnts;
 
 static char *base_path;
 
@@ -606,6 +615,54 @@ again:
 	goto again;
 }
 
+char *skip_nameeq(char *controller)
+{
+	if (strncmp(controller, "name=", 5) == 0)
+		return controller+5;
+	return controller;
+}
+
+/*
+ * Build the list of controllers which we return as the result of
+ * ListControllers
+ */
+static void build_controller_mntlist(void)
+{
+	int i;
+	struct controller_mounts *m, *m2;
+	num_controller_mnts = 0;
+
+	for (i = 0; i < num_controllers; i++) {
+		char *srclist;
+		m = &all_mounts[i];
+		if (m->visited)
+			continue;
+		controller_mnts = realloc(controller_mnts,
+				(num_controller_mnts+1)*(sizeof(char *)));
+		if (!controller_mnts) {
+			nih_fatal("Out of memory building mntlist");
+			exit(1);
+		}
+		srclist = NIH_MUST( nih_strdup(NULL, skip_nameeq(m->controller)) );
+		m->visited = true;
+		m2 = m->comounted;
+		while (m2) {
+			/*
+			 * XXX Should we use m2->controller or m2->options here?
+			 * options would include "none,".  does controller include
+			 * the 'name=' part of systemd?  If not do we need ot add it
+			 * by hande?
+			 */
+			NIH_MUST( nih_strcat_sprintf(&srclist, NULL, ",%s",
+						skip_nameeq(m2->controller)) );
+			m2->visited = true;
+			m2 = m2->comounted;
+		}
+		controller_mnts[num_controller_mnts] = srclist;
+		num_controller_mnts++;
+	}
+}
+
 static void print_debug_controller_info(void)
 {
 	int i;
@@ -630,8 +687,8 @@ void do_list_controllers(void *parent, char ***output)
 	int i;
 
 	nih_assert(output);
-	*output = NIH_MUST( nih_alloc(parent, (num_controllers+1) * sizeof(char *)) );
-	(*output)[num_controllers] = NULL;
+	*output = NIH_MUST( nih_alloc(parent, (num_controller_mnts+1) * sizeof(char *)) );
+	(*output)[num_controller_mnts] = NULL;
 	
 	/* XXX
 	 * This will actually not be right.
@@ -639,8 +696,8 @@ void do_list_controllers(void *parent, char ***output)
 	 * entries for the two.
 	 * So TODO - figure out what we want in that case, and provide it
 	 */
-	for (i = 0; i < num_controllers; i++)
-		(*output)[i] = NIH_MUST( nih_strdup(parent, all_mounts[i].controller) );
+	for (i = 0; i < num_controller_mnts; i++)
+		(*output)[i] = NIH_MUST( nih_strdup(parent, controller_mnts[i]) );
 }
 
 void do_prune_comounts(char *controllers)
@@ -714,6 +771,7 @@ int collect_subsystems(char *extra_mounts)
 
 	build_all_controllers();
 
+	build_controller_mntlist();
 	print_debug_controller_info();
 
 	return 0;
