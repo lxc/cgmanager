@@ -880,6 +880,82 @@ out:
 	return ret;
 }
 
+int get_tasks_recursive_main (void *parent, const char *controller,
+		const char *cgroup, struct ucred p, struct ucred r,
+		int32_t **pids)
+{
+	DBusMessage *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1;
+	uint32_t nrpids;
+	struct ucred tcred;
+	int i;
+
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!(message = start_dbus_request("GetTasksRecursiveScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(message, &iter);
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+
+	if (!complete_dbus_request(message, sv, &r, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
+		goto out;
+	}
+	if (proxyrecv(sv[0], &nrpids, sizeof(uint32_t)) != sizeof(uint32_t))
+		goto out;
+	if (nrpids == -1) {
+		nih_error("%s: bad cgroup: %s:%s", __func__, controller, cgroup);
+		ret = -1;
+		goto out;
+	}
+	if (nrpids == 0) {
+		ret = 0;
+		goto out;
+	}
+
+	*pids = NIH_MUST( nih_alloc(parent, nrpids * sizeof(uint32_t)) );
+	for (i=0; i<nrpids; i++) {
+		get_scm_creds_sync(sv[0], &tcred);
+		if (tcred.pid == -1) {
+			nih_error("%s: Failed getting pid from server",
+				__func__);
+			goto out;
+		}
+		(*pids)[i] = tcred.pid;
+	}
+	ret = nrpids;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	return ret;
+}
+
 int list_children_main (void *parent, const char *controller, const char *cgroup,
 		    struct ucred p, struct ucred r, char ***output)
 {

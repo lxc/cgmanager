@@ -824,6 +824,7 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 {
 	char path[MAXPATHLEN];
 	const char *key = "tasks";
+	int alloced_pids = 0, nrpids = 0;
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
@@ -851,7 +852,97 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 	strncat(path, "/", MAXPATHLEN-1);
 	strncat(path, key, MAXPATHLEN-1);
 
-	return file_read_pids(parent, path, pids);
+	*pids = NULL;
+	if (file_read_pids(parent, path, pids, &alloced_pids, &nrpids) < 0) {
+		nih_free(*pids);
+		return -1;
+	}
+	return nrpids;
+}
+
+int collect_tasks(void *parent, const char *controller, const char *cgroup,
+		struct ucred p, struct ucred r, int32_t **pids,
+		int *alloced_pids, int *nrpids)
+{
+	char path[MAXPATHLEN];
+	const char *key = "tasks";
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
+                __func__, controller, cgroup);
+		return -2;
+	}
+
+	/* Check access rights to the cgroup directory */
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		return -2;
+	}
+
+	/* append the filename */
+	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
+		nih_error("%s: filename too long for cgroup %s key %s", __func__, path, key);
+		return -1;
+	}
+
+	strncat(path, "/", MAXPATHLEN-1);
+	strncat(path, key, MAXPATHLEN-1);
+
+	return file_read_pids(parent, path, pids, alloced_pids, nrpids);
+}
+
+int get_tasks_recursive_main(void *parent, const char *controller,
+		const char *cgroup, struct ucred p, struct ucred r, int32_t **pids)
+{
+	nih_local char *c = NULL;
+	char *tok;
+	int ret;
+	int alloced_pids = 0, nrpids = 0;
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	*pids = NULL;
+
+	if (strcmp(controller, "all") != 0 && !strchr(controller, ',')) {
+		if (collect_tasks(parent, controller, cgroup, p, r, pids,
+				&alloced_pids, &nrpids) < 0) {
+			nih_free(*pids);
+			return -1;
+		}
+		return nrpids;
+	}
+
+	if (strcmp(controller, "all") == 0) {
+		if (!all_controllers)
+			return 0;
+		c = NIH_MUST( nih_strdup(NULL, all_controllers) );
+	} else {
+		c = NIH_MUST( nih_strdup(NULL, controller) );
+		do_prune_comounts(c);
+	}
+	tok = strtok(c, ",");
+	while (tok) {
+		ret = collect_tasks(parent, tok, cgroup, p, r, pids,
+				&alloced_pids, &nrpids);
+		if (ret == -2)  // permission denied - ignore
+			goto next;
+		if (ret != 0) {
+			nih_free(*pids);
+			return -1;
+		}
+next:
+		tok = strtok(NULL, ",");
+	}
+
+	return nrpids;
 }
 
 int list_children_main(void *parent, const char *controller, const char *cgroup,

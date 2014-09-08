@@ -1166,6 +1166,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 	return ret;
 }
 
+/* get_tasks - list tasks for a single cgroup */
 void get_tasks_scm_complete(struct scm_sock_data *data)
 {
 	struct ucred pcred;
@@ -1266,6 +1267,111 @@ int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *contro
 	return ret;
 }
 
+/* GetTasksRecursive - list tasks for a cgroup and any descendents
+ * inherintly racy. */
+void get_tasks_recursive_scm_complete(struct scm_sock_data *data)
+{
+	struct ucred pcred;
+	int i, ret;
+	int32_t *pids, nrpids;
+	ret = get_tasks_main(data, data->controller, data->cgroup,
+			data->pcred, data->rcred, &pids);
+	if (ret < 0) {
+		nih_error("Error getting nrtasks for %s:%s for pid %d",
+			data->controller, data->cgroup, data->rcred.pid);
+		ret = -1;
+	}
+	nrpids = ret;
+	if (write(data->fd, &nrpids, sizeof(int32_t)) != sizeof(int32_t)) {
+		nih_error("get_tasks_recursive_scm: Error writing final result to client");
+		return;
+	}
+	pcred.uid = 0; pcred.gid = 0;
+	for (i=0; i<ret; i++) {
+		pcred.pid = pids[i];
+		if (send_creds(data->fd, &pcred)) {
+			nih_error("get_tasks_recursive_scm: error writing pids back to client");
+			return;
+		}
+	}
+}
+
+int cgmanager_get_tasks_recursive_scm (void *data, NihDBusMessage *message,
+		 const char *controller, const char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_GET_TASKS_RECURSIVE);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd))
+		return -1;
+	return 0;
+}
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests the number of tasks in @cgroup in @controller
+ * returns nrpids, or -1 on error.
+ */
+int cgmanager_get_tasks_recursive (void *data, NihDBusMessage *message,
+		const char *controller, const char *cgroup, int32_t **pids,
+		size_t *nrpids)
+{
+	int fd = 0, ret;
+	struct ucred rcred;
+	socklen_t len;
+	int32_t *tmp;
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("GetTasksRecursive: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	ret = get_tasks_recursive_main(message, controller, cgroup, rcred, rcred, &tmp);
+	if (ret >= 0) {
+		*nrpids = ret;
+		*pids = tmp;
+		ret = 0;
+	} else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
+
+
+/* ListChildren - list child cgroups */
 void list_children_scm_complete(struct scm_sock_data *data)
 {
 	int i, ret;

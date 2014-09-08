@@ -176,6 +176,17 @@
       <arg name="cgroup" type="s" direction="in" />
       <arg name="output" type="ai" direction="out" />
     </method>
+    <method name="GetTasksRecursiveScm">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="sockfd" type="h" direction="in" />
+      <!-- nrtasks + pids as scm creds return value comes over sockfd -->
+    </method>
+    <method name="GetTasksRecursive">
+      <arg name="controller" type="s" direction="in" />
+      <arg name="cgroup" type="s" direction="in" />
+      <arg name="output" type="ai" direction="out" />
+    </method>
     <method name="ListChildrenScm">
       <arg name="controller" type="s" direction="in" />
       <arg name="cgroup" type="s" direction="in" />

@@ -33,7 +33,8 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode);
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid);
 char *file_read_string(void *parent, const char *path);
-int file_read_pids(void *parent, const char *path, int32_t **pids);
+int file_read_pids(void *parent, const char *path, int32_t **pids,
+		int *alloced_pids, int *nrpids);
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid);
 const char *get_controller_path(const char *controller);
 bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer);

@@ -615,7 +615,7 @@ again:
 	goto again;
 }
 
-static char *skip_none(const char *src)
+static char *skip_none(char *src)
 {
 	if (strncmp(src, "none,", 5) == 0)
 		return src+5;
@@ -1211,37 +1211,34 @@ out:
  * Returns: Number of pids read, which are placed into the newly allocated
  * pids array (passed in).
  */
-int file_read_pids(void *parent, const char *path, int32_t **pids)
+int file_read_pids(void *parent, const char *path, int32_t **pids,
+			int *alloced_pids, int *nrpids)
 {
-	int nrpids = 0, alloced_pids = 0, pid;
+	int pid;
 	FILE *fin = fopen(path, "r");
 
-	*pids = NULL;
 	if (!fin) {
 		nih_error("Error opening %s: %s", path, strerror(errno));
-		return -1;
+		return -2;
 	}
 
 	while (fscanf(fin, "%d", &pid) == 1) {
-		if (nrpids + 1 >= alloced_pids) {
+		if (*nrpids + 1 >= *alloced_pids) {
 			int32_t *tmp;
-			alloced_pids += 256;
+			*alloced_pids += 256;
 			tmp = nih_realloc(*pids, parent,
-					  alloced_pids*sizeof(int32_t));
+					  *alloced_pids*sizeof(int32_t));
 			if (!tmp) {
-				if (*pids)
-					nih_free(*pids);
-				pids = NULL;
 				nih_error("Out of memory getting pid list");
-				goto out;
+				fclose(fin);
+				return -1;
 			}
 			*pids = tmp;
 		}
-		(*pids)[nrpids++] = (int32_t) pid;
+		(*pids)[(*nrpids)++] = (int32_t) pid;
 	}
-out:
 	fclose(fin);
-	return nrpids;
+	return 0;
 }
 
 /*

@@ -101,6 +101,7 @@ enum req_type {
 	REQ_TYPE_SET_VALUE,
 	REQ_TYPE_REMOVE,
 	REQ_TYPE_GET_TASKS,
+	REQ_TYPE_GET_TASKS_RECURSIVE,
 	REQ_TYPE_CHMOD,
 	REQ_TYPE_MOVE_PID_ABS,
 	REQ_TYPE_LIST_CHILDREN,
@@ -145,6 +146,9 @@ void remove_scm_complete(struct scm_sock_data *data);
 int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, int32_t **pids);
 void get_tasks_scm_complete(struct scm_sock_data *data);
+int get_tasks_recursive_main (void *parent, const char *controller,
+		const char *cgroup, struct ucred p, struct ucred r, int32_t **pids);
+void get_tasks_recursive_scm_complete(struct scm_sock_data *data);
 int list_children_main (void *parent, const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, char ***output);
 void list_children_scm_complete(struct scm_sock_data *data);

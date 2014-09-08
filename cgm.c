@@ -75,6 +75,8 @@ void usage(const char *me)
 	printf("\n");
 	printf("%s gettasks <controller> <cgroup>\n", me);
 	printf("\n");
+	printf("%s gettasksrecursive <controller> <cgroup>\n", me);
+	printf("\n");
 	printf("%s listchildren <controller> <cgroup>\n", me);
 	printf("\n");
 	printf("%s removeonempty <controller> <cgroup>\n", me);
@@ -88,8 +90,8 @@ void usage(const char *me)
 	printf(" Replace '<controller>' with the desired controller, i.e.\n");
 	printf(" memory, and '<cgroup>' with the desired cgroup, i.e. x1.\n");
 	printf(" For create, chown, chmod, remove, prune, remove_on_empty,\n");
-	printf(" and movepid, <controller> may be \"all\" or a comma-separated\n");
-	printf(" set of cgroups.\n");
+	printf(" gettasksrecursive and movepid, <controller> may be \"all\" or\n");
+	printf(" a comma-separated set of cgroups.\n");
 	printf(" Remove by default is recursive, but adding '0' as the last argument\n");
 	printf(" will perforn non-recursive deletion.  Adding '1' is supported\n");
 	printf(" for legacy reasons.\n");
@@ -369,6 +371,30 @@ void do_gettasks(const char *controller, const char *cgroup_path)
 	exit(0);
 }
 
+void do_gettasks_recursive(const char *controller, const char *cgroup_path)
+{
+	int32_t *pids = NULL;
+	int i;
+	size_t pids_len = -1;
+
+	if (cgmanager_get_tasks_recursive_sync(NULL, cgroup_manager, controller,
+				     cgroup_path, &pids, &pids_len) != 0) {
+		NihError *nerr;
+		nerr = nih_error_get();
+		if (pids_len != 0)
+			fprintf(stderr, "call to cgmanager_get_tasks_recursive_sync failed: %s\n", nerr->message);
+		nih_free(nerr);
+		if (pids_len != 0)
+			exit(1);
+	}
+	for (i = 0;  i < pids_len;  i++) {
+		printf("%d\n", pids[i]);
+	}
+	if (i)
+		nih_free(pids);
+	exit(0);
+}
+
 void do_listchildren(const char *controller, const char *cgroup_path)
 {
 	char **children = NULL;
@@ -519,6 +545,10 @@ int main(int argc, const char *argv[])
 		if (argc != 6)
 			usage(me);
 		do_setvalue(argv[2], argv[3], argv[4], argv[5]);
+	} else if (strcmp(argv[1], "gettasksrecursive") == 0) { 
+		if (argc != 4)
+			usage(me);
+		do_gettasks_recursive(argv[2], argv[3]);
 	} else if (strcmp(argv[1], "gettasks") == 0) { 
 		if (argc != 4)
 			usage(me);
