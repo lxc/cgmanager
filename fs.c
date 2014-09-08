@@ -1248,7 +1248,7 @@ int file_read_pids(void *parent, const char *path, int32_t **pids,
 				return -1;
 			}
 			*pids = tmp;
-			memset((*pids)+nrpids, 0, 256);
+			memset(&(tmp[*nrpids]), 0, 256);
 		}
 		insert_ordered_pid(*pids, (int32_t) pid, *nrpids);
 		(*nrpids)++;
