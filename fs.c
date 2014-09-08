@@ -615,11 +615,11 @@ again:
 	goto again;
 }
 
-char *skip_nameeq(char *controller)
+static char *skip_none(const char *src)
 {
-	if (strncmp(controller, "name=", 5) == 0)
-		return controller+5;
-	return controller;
+	if (strncmp(src, "none,", 5) == 0)
+		return src+5;
+	return src;
 }
 
 /*
@@ -643,7 +643,7 @@ static void build_controller_mntlist(void)
 			nih_fatal("Out of memory building mntlist");
 			exit(1);
 		}
-		srclist = NIH_MUST( nih_strdup(NULL, skip_nameeq(m->controller)) );
+		srclist = NIH_MUST( nih_strdup(NULL, skip_none(m->src)) );
 		m->visited = true;
 		m2 = m->comounted;
 		while (m2 && m2 != m) {
@@ -654,7 +654,7 @@ static void build_controller_mntlist(void)
 			 * by hande?
 			 */
 			NIH_MUST( nih_strcat_sprintf(&srclist, NULL, ",%s",
-						skip_nameeq(m2->controller)) );
+						skip_none(m2->src)) );
 			m2->visited = true;
 			m2 = m2->comounted;
 		}
