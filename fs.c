@@ -1197,13 +1197,18 @@ out:
 	return string;
 }
 
-static void insert_ordered_pid(int32_t *pids, int32_t pid, int nrpids)
+static bool insert_ordered_pid(int32_t *pids, int32_t pid, int nrpids)
 {
 	int i, j;
+
+	/* TODO Switch this to binary */
 	for (i = 0; i < nrpids && pids[i] < pid; i++);
+	if (i < nrpids && pids[i] == pid)
+		return false;
 	for (j = nrpids; j > i; j--)
 		pids[j] = pids[j-1];
 	pids[i] = pid;
+	return true;
 }
 
 /*
@@ -1250,8 +1255,8 @@ int file_read_pids(void *parent, const char *path, int32_t **pids,
 			*pids = tmp;
 			memset(&(tmp[*nrpids]), 0, 256);
 		}
-		insert_ordered_pid(*pids, (int32_t) pid, *nrpids);
-		(*nrpids)++;
+		if (insert_ordered_pid(*pids, (int32_t) pid, *nrpids))
+			(*nrpids)++;
 	}
 	fclose(fin);
 	return 0;
