@@ -1197,12 +1197,51 @@ out:
 	return string;
 }
 
+static int find_ordered_pid(int32_t *pids, int32_t pid, int nrpids)
+{
+	int low = 0, mid = low, high = nrpids-1;
+
+	if (!nrpids)
+		return 0;
+
+	while (low <= high) {
+		if (high == low)
+			break;
+		if (high == low+1) {
+			if (pid <= pids[low]) {
+				mid = low;
+				break;
+			}
+			if (pid > pids[high]) {
+				mid = high + 1;
+				if (mid >= nrpids)
+					mid = nrpids-1;
+				break;
+			}
+			mid = high;
+			break;
+		}
+		mid = low + (high-low)/2;
+		if (pid == pids[mid])
+			break;
+		if (pid < pids[mid])
+			high = mid;
+		else
+			low = mid;
+	}
+
+	if (pid > pids[mid])
+		mid++;
+
+	return mid;
+}
+
 static bool insert_ordered_pid(int32_t *pids, int32_t pid, int nrpids)
 {
 	int i, j;
 
 	/* TODO Switch this to binary */
-	for (i = 0; i < nrpids && pids[i] < pid; i++);
+	i = find_ordered_pid(pids, pid, nrpids);
 	if (i < nrpids && pids[i] == pid)
 		return false;
 	for (j = nrpids; j > i; j--)
