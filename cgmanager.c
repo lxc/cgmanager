@@ -856,16 +856,16 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 	return nrpids;
 }
 
-int do_collect_tasks(void *parent, char *path, int32_t **pids,
+int do_collect_tasks(void *parent, char **path, int32_t **pids,
 			int *alloced_pids, int *nrpids)
 {
 	struct dirent dirent, *direntp;
 	DIR *dir;
 	const char *key = "tasks";
 
-	dir = opendir(path);
+	dir = opendir(*path);
 	if (!dir) {
-		nih_warn("%s: Failed to open dir %s for recursive deletion", __func__, path);
+		nih_warn("%s: Failed to open dir %s for recursive deletion", __func__, *path);
 		return -2;
 	}
 
@@ -879,12 +879,12 @@ int do_collect_tasks(void *parent, char *path, int32_t **pids,
 		if (!strcmp(direntp->d_name, ".") ||
 		    !strcmp(direntp->d_name, ".."))
 			continue;
-		childname = NIH_MUST( nih_sprintf(NULL, "%s/%s", path, direntp->d_name) );
+		childname = NIH_MUST( nih_sprintf(NULL, "%s/%s", *path, direntp->d_name) );
 		rc = lstat(childname, &mystat);
 		if (rc)
 			continue;
 		if (S_ISDIR(mystat.st_mode))
-			if (do_collect_tasks(parent, childname, pids,
+			if (do_collect_tasks(parent, &childname, pids,
 						alloced_pids, nrpids) == -1)
 				nih_info("%s: error descending subdirs", __func__);
 	}
@@ -892,17 +892,9 @@ int do_collect_tasks(void *parent, char *path, int32_t **pids,
 	closedir(dir);
 
 	/* Get tasks for this directory */
+	NIH_MUST( nih_strcat_sprintf(path, NULL, "/%s", key) );
 
-	/* append the filename */
-	if (strlen(path) + strlen(key) + 2 > MAXPATHLEN) {
-		nih_error("%s: filename too long for cgroup %s key %s", __func__, path, key);
-		return -1;
-	}
-
-	strncat(path, "/", MAXPATHLEN-1);
-	strncat(path, key, MAXPATHLEN-1);
-
-	return file_read_pids(parent, path, pids, alloced_pids, nrpids);
+	return file_read_pids(parent, *path, pids, alloced_pids, nrpids);
 }
 
 int collect_tasks(void *parent, const char *controller, const char *cgroup,
@@ -910,6 +902,7 @@ int collect_tasks(void *parent, const char *controller, const char *cgroup,
 		int *alloced_pids, int *nrpids)
 {
 	char path[MAXPATHLEN];
+	nih_local char *rpath = NULL;
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
@@ -928,7 +921,8 @@ int collect_tasks(void *parent, const char *controller, const char *cgroup,
 		return -2;
 	}
 
-	return do_collect_tasks(parent, path, pids, alloced_pids, nrpids);
+	rpath = NIH_MUST( nih_strdup(NULL, path) );
+	return do_collect_tasks(parent, &rpath, pids, alloced_pids, nrpids);
 }
 
 int get_tasks_recursive_main(void *parent, const char *controller,
