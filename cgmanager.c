@@ -677,7 +677,6 @@ static int recursive_rmdir(char *path)
 {
 	struct dirent dirent, *direntp;
 	DIR *dir;
-	char pathname[MAXPATHLEN];
 	int failed = 0;
 
 	dir = opendir(path);
@@ -688,6 +687,7 @@ static int recursive_rmdir(char *path)
 
 	while (!readdir_r(dir, &dirent, &direntp)) {
 		struct stat mystat;
+		nih_local char *pathname = NULL;
 		int rc;
 
 		if (!direntp)
@@ -695,11 +695,7 @@ static int recursive_rmdir(char *path)
 		if (!strcmp(direntp->d_name, ".") ||
 		    !strcmp(direntp->d_name, ".."))
 			continue;
-		rc = snprintf(pathname, MAXPATHLEN, "%s/%s", path, direntp->d_name);
-		if (rc < 0 || rc >= MAXPATHLEN) {
-			failed = 1;
-			continue;
-		}
+		pathname = NIH_MUST( nih_sprintf(NULL, "%s/%s", path, direntp->d_name) );
 		rc = lstat(pathname, &mystat);
 		if (rc) {
 			failed = 1;
@@ -875,7 +871,7 @@ int do_collect_tasks(void *parent, char *path, int32_t **pids,
 
 	while (!readdir_r(dir, &dirent, &direntp)) {
 		struct stat mystat;
-		char childname[MAXPATHLEN];
+		nih_local char *childname = NULL;
 		int rc;
 
 		if (!direntp)
@@ -883,9 +879,7 @@ int do_collect_tasks(void *parent, char *path, int32_t **pids,
 		if (!strcmp(direntp->d_name, ".") ||
 		    !strcmp(direntp->d_name, ".."))
 			continue;
-		rc = snprintf(childname, MAXPATHLEN, "%s/%s", path, direntp->d_name);
-		if (rc < 0 || rc >= MAXPATHLEN)
-			continue;
+		childname = NIH_MUST( nih_sprintf(NULL, "%s/%s", path, direntp->d_name) );
 		rc = lstat(childname, &mystat);
 		if (rc)
 			continue;
@@ -1108,7 +1102,6 @@ void do_recursive_prune(char *path, bool autoremove)
 	nih_local char *releasefile = NULL;
 	struct dirent dirent, *direntp;
 	DIR *dir;
-	char pathname[MAXPATHLEN];
 
 	if (!autoremove)
 		goto remove;
@@ -1129,15 +1122,14 @@ remove:
 	while (!readdir_r(dir, &dirent, &direntp)) {
 		struct stat mystat;
 		int rc;
+		nih_local char *pathname = NULL;
 
 		if (!direntp)
 			break;
 		if (!strcmp(direntp->d_name, ".") ||
 		    !strcmp(direntp->d_name, ".."))
 			continue;
-		rc = snprintf(pathname, MAXPATHLEN, "%s/%s", path, direntp->d_name);
-		if (rc < 0 || rc >= MAXPATHLEN)
-			continue;
+		pathname = NIH_MUST( nih_sprintf(NULL, "%s/%s", path, direntp->d_name) );
 		rc = lstat(pathname, &mystat);
 		if (rc)
 			continue;

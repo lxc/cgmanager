@@ -131,15 +131,10 @@ bool setup_base_run_path(void)
 
 static void set_clone_children(const char *path)
 {
-	char p[MAXPATHLEN];
+	nih_local char *p = NULL;
 	FILE *f;
-	int ret;
 
-	ret = snprintf(p, MAXPATHLEN, "%s/cgroup.clone_children", path);
-	if (ret < 0 || ret >= MAXPATHLEN) {
-		nih_fatal("%s: Error writing clone_children path", __func__);
-		return;
-	}
+	p = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.clone_children", path) );
 	f = fopen(p, "w");
 	if (!f) {
 		nih_fatal("%s: Failed to set clone_children", __func__);
@@ -151,15 +146,10 @@ static void set_clone_children(const char *path)
 
 static void set_use_hierarchy(const char *path)
 {
-	char p[MAXPATHLEN];
+	nih_local char *p = NULL;
 	FILE *f;
-	int ret;
 
-	ret = snprintf(p, MAXPATHLEN, "%s/memory.use_hierarchy", path);
-	if (ret < 0 || ret >= MAXPATHLEN) {
-		nih_fatal("%s: Error writing use_hierarchy path", __func__);
-		return;
-	}
+	p = NIH_MUST( nih_sprintf(NULL, "%s/memory.use_hierarchy", path) );
 	f = fopen(p, "w");
 	if (!f) {
 		nih_fatal("%s: Failed to set memory.use_hierarchy", __func__);
@@ -231,14 +221,9 @@ static int find_controller_in_mounts(const char *c, bool *found)
 static bool fill_in_controller(struct controller_mounts *m, char *controller,
 			char *src)
 {
-	int ret;
-	char dest[MAXPATHLEN];
+	nih_local char *dest = NULL;
 
-	ret = snprintf(dest, MAXPATHLEN, "%s/%s", base_path, src);
-	if (ret < 0 || ret >= MAXPATHLEN) {
-		nih_fatal("Error calculating pathname for %s and %s", base_path, src);
-		return false;
-	}
+	dest = NIH_MUST( nih_sprintf(NULL, "%s/%s", base_path, src) );
 	m->controller = strdup(controller);
 	if (!m->controller) {
 		nih_fatal("Out of memory mounting controllers");
@@ -314,19 +299,14 @@ out:
 static bool set_release_agent(struct controller_mounts *m)
 {
 	FILE *f;
-	char path[MAXPATHLEN];
-	int ret;
+	nih_local char *path = NULL;
 
 	if (m->premounted) {
 		nih_info("%s was pre-mounted, not setting a release agent",
 			m->controller);
 		return true;
 	}
-	ret = snprintf(path, MAXPATHLEN, "%s/release_agent", m->path);
-	if (ret < 0 || ret >= MAXPATHLEN) {
-		nih_error("out of memory");
-		return false;
-	}
+	path = NIH_MUST( nih_sprintf(NULL, "%s/release_agent", m->path) );
 	if ((f = fopen(path, "w")) == NULL) {
 		nih_error("failed to open %s for writing", path);
 		return false;
@@ -1352,7 +1332,7 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
  */
 bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children)
 {
-	int len, ret;
+	int len;
 
 	nih_assert (path);
 	len = strlen(path);
@@ -1362,7 +1342,6 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 	if (all_children) {
 		// chown all the files in the directory
 		struct dirent dirent, *direntp;
-		char fpath[MAXPATHLEN];
 		DIR *d;
 
 		if (len >= MAXPATHLEN)
@@ -1372,13 +1351,11 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		if (!d)
 			goto out;
 
-		strcpy(fpath, path);
 		while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
+			nih_local char *fpath = NULL;
 			if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
 				continue;
-			ret = snprintf(fpath+len, MAXPATHLEN-len, "/%s", direntp->d_name);
-			if (ret < 0 || ret >= MAXPATHLEN-len)
-				continue;
+			fpath = NIH_MUST( nih_sprintf(NULL, "%s/%s", path, direntp->d_name) );
 			if (chown(fpath, uid, gid) < 0)
 				nih_error("Failed to chown file %s to %u:%u",
 					fpath, uid, gid);
@@ -1538,17 +1515,16 @@ bool realpath_escapes(char *path, char *safety)
  */
 bool move_self_to_root(void)
 {
-	char path[MAXPATHLEN];
-	int i, ret;
+	int i;
 	pid_t me = getpid();
-	FILE *f;
 
 	for (i = 0; i < num_controllers; i++) {
+		FILE *f;
+		nih_local char *path = NULL;
+
 		if (!all_mounts[i].path)
 			continue;
-		ret = snprintf(path, MAXPATHLEN, "%s/tasks", all_mounts[i].path);
-		if (ret < 0 || ret >= MAXPATHLEN)
-			return false;
+		path = NIH_MUST( nih_sprintf(NULL, "%s/tasks", all_mounts[i].path) );
 		if ((f = fopen(path, "w")) == NULL)
 			return false;
 		if (fprintf(f, "%d\n", me) <= 0) {
