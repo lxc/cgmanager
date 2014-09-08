@@ -1197,6 +1197,15 @@ out:
 	return string;
 }
 
+static void insert_ordered_pid(int32_t *pids, int32_t pid, int nrpids)
+{
+	int i, j;
+	for (i = 0; i < nrpids && pids[i] < pid; i++);
+	for (j = nrpids; j > i; j--)
+		pids[j] = pids[j-1];
+	pids[i] = pid;
+}
+
 /*
  * file_read_pids:
  *
@@ -1204,12 +1213,17 @@ out:
  * (to allow the returned value to be freed automatically when @parent is
  * freed).
  * @path: Full path to file to read.
+ * @pids: pointer to an array of ints in which pids will be placed.
+ * This should start as NULL, but on repeated calls will be re-used.
+ * @alloced_pids: size of @pids allocated so far
+ * @nrpids: number of pids in @pids which are already in use
  *
  * Read specified file and return the pids it contains.  The file is
  * expected to contain only a set of newline-separated int32_ts.
  *
- * Returns: Number of pids read, which are placed into the newly allocated
- * pids array (passed in).
+ * Returns: 0 on success, -1 on memory error, -2 on failure to open the
+ * cgroup's tasks file.
+ * @pids will be ordered
  */
 int file_read_pids(void *parent, const char *path, int32_t **pids,
 			int *alloced_pids, int *nrpids)
@@ -1234,8 +1248,10 @@ int file_read_pids(void *parent, const char *path, int32_t **pids,
 				return -1;
 			}
 			*pids = tmp;
+			memset((*pids)+nrpids, 0, 256);
 		}
-		(*pids)[(*nrpids)++] = (int32_t) pid;
+		insert_ordered_pid(*pids, (int32_t) pid, *nrpids);
+		(*nrpids)++;
 	}
 	fclose(fin);
 	return 0;
