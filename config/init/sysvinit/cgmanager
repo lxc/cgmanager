@@ -94,10 +94,10 @@ start()
 case "$1" in
     restart|force-reload)
 	log_daemon_msg "Restarting $DESC" "$NAME"
-	do_stop
+	stop
 	case "$?" in
 	  0|1)
-		do_start
+		start
 		case "$?" in
 			0) log_end_msg 0 ;;
 			1) log_end_msg 1 ;; # Old process is still running
