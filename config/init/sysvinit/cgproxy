@@ -42,7 +42,7 @@ fi
 
 DAEMON_ARGS="$BASEOPTS $cgmanager_opts"
 
-stop()
+do_stop()
 {
 	# Return
 	#   0 if daemon has been stopped
@@ -65,7 +65,7 @@ stop()
 	return "$RETVAL"
 }
 
-start()
+do_start()
 {
 	# Return
 	#   0 if daemon has been started
@@ -91,10 +91,10 @@ start()
 case "$1" in
     restart|force-reload)
 	log_daemon_msg "Restarting $DESC" "$NAME"
-	stop
+	do_stop
 	case "$?" in
 	  0|1)
-		start
+		do_start
 		case "$?" in
 			0) log_end_msg 0 ;;
 			1) log_end_msg 1 ;; # Old process is still running
@@ -109,7 +109,7 @@ case "$1" in
 	;;
     start)
 	log_daemon_msg "Starting $DESC" "$NAME"
-	start
+	do_start
 	case "$?" in
 		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
 		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
@@ -117,7 +117,7 @@ case "$1" in
 	;;
   stop)
 	log_daemon_msg "Stopping $DESC" "$NAME"
-	stop
+	do_stop
 	case "$?" in
 		0|1) [ "$VERBOSE" != no ] && log_end_msg 0 ;;
 		2) [ "$VERBOSE" != no ] && log_end_msg 1 ;;
