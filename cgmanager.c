@@ -997,7 +997,7 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	return get_directory_children(parent, path, output, DT_DIR);
+	return get_directory_children(parent, path, output);
 }
 
 int do_remove_on_empty_main(const char *controller, const char *cgroup,
@@ -1220,6 +1220,33 @@ int list_controllers_main(void *parent, char ***output)
 	do_list_controllers(parent, output);
 
 	return 0;
+}
+
+int list_keys_main(void *parent, const char *controller, const char *cgroup,
+			struct ucred p, struct ucred r,
+			struct keys_return_type ***output)
+{
+	char path[MAXPATHLEN];
+
+	*output = NULL;
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
+                __func__, controller, cgroup);
+		return -1;
+	}
+
+	/* Check access rights to the cgroup directory */
+	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
+		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		return -1;
+	}
+
+	return get_directory_contents(parent, path, output);
 }
 
 char *extra_cgroup_mounts;

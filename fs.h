@@ -25,6 +25,7 @@
  */
 
 extern char *all_controllers;
+struct keys_return_type;
 
 int collect_subsystems(char *extra_mounts);
 int setup_cgroup_mounts(void);
@@ -48,7 +49,8 @@ bool realpath_escapes(char *path, char *safety);
 bool file_exists(const char *path);
 bool dir_exists(const char *path);
 bool move_self_to_root(void);
-int get_directory_children(void *parent, const char *path, char ***output, unsigned char type);
+int get_directory_children(void *parent, const char *path, char ***output);
+int get_directory_contents(void *parent, const char *path, struct keys_return_type ***output);
 bool setup_base_run_path(void);
 bool create_agent_symlinks(void);
 bool was_premounted(const char *controller);

@@ -7,3 +7,4 @@
 
 #define CGMANAGER_DBUS_PATH "unix:path=" CGMANAGER_SOCK
 #define CGPROXY_DBUS_PATH "unix:path=" CGPROXY_SOCK
+
