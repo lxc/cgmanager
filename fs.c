@@ -1613,16 +1613,20 @@ int get_directory_contents(void *parent, const char *path,
 	while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
 		struct keys_return_type *tmp;
 		struct stat sb;
-
+		struct keys_return_type **r;
 		nih_local char *pathname = NULL;
+
 		if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
 			continue;
 		if (direntp->d_type != DT_REG)
 			continue;
-		NIH_MUST( nih_realloc(*output, parent, (entries + 1) * sizeof(**output)) );
+
+		r = NIH_MUST( nih_realloc(*output, parent, (entries + 2) * sizeof(struct keys_return_type *)) );
+		*output = r;
+
 		(*output)[entries+1] = NULL;
-		(*output)[entries] = tmp = NIH_MUST( nih_alloc(parent, sizeof(***output)) );
-		tmp->name = NIH_MUST( nih_strdup(parent, direntp->d_name) );
+		(*output)[entries] = tmp = NIH_MUST( nih_new(*output, struct keys_return_type));
+		tmp->name = NIH_MUST( nih_strdup(tmp, direntp->d_name) );
 		pathname = NIH_MUST( nih_sprintf(NULL, "%s/%s", path, direntp->d_name) );
 		if (stat(pathname, &sb) < 0) {
 			tmp->uid = tmp->gid = -1;
