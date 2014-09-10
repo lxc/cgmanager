@@ -175,6 +175,7 @@ static void sock_scm_reader(struct scm_sock_data *data,
 	case REQ_TYPE_LIST_CHILDREN: list_children_scm_complete(data); break;
 	case REQ_TYPE_REMOVE_ON_EMPTY: remove_on_empty_scm_complete(data); break;
 	case REQ_TYPE_PRUNE: prune_scm_complete(data); break;
+	case REQ_TYPE_GET_TASKS_RECURSIVE: get_tasks_recursive_scm_complete(data); break;
 	default:
 		nih_fatal("%s: bad req_type %d", __func__, data->type);
 		exit(1);
