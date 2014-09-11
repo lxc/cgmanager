@@ -1667,14 +1667,14 @@ void convert_directory_contents(struct keys_return_type **keys, struct ucred r)
 {
 	int i = 0;
 	FILE *uidf, *gidf;
-	nih_local char *path = NULL;
+	nih_local char *upath = NULL, *gpath = NULL;
 
-	path = nih_sprintf(NULL, "/proc/%d/uid_map", r.pid);
-	uidf = fopen(path, "r");
+	upath = nih_sprintf(NULL, "/proc/%d/uid_map", r.pid);
+	uidf = fopen(upath, "r");
 	if (!uidf)
 		return;
-	path = nih_sprintf(NULL, "/proc/%d/gid_map", r.pid);
-	gidf = fopen(path, "r");
+	gpath = nih_sprintf(NULL, "/proc/%d/gid_map", r.pid);
+	gidf = fopen(gpath, "r");
 	if (!gidf) {
 		fclose(uidf);
 		return;
@@ -1683,6 +1683,7 @@ void convert_directory_contents(struct keys_return_type **keys, struct ucred r)
 	while (keys[i]) {
 		keys[i]->uid = convert_id_to_ns(uidf, keys[i]->uid);
 		keys[i]->gid = convert_id_to_ns(gidf, keys[i]->gid);
+		i++;
 	}
 	fclose(uidf);
 	fclose(gidf);
