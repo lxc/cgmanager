@@ -913,22 +913,22 @@ found:
 }
 
 /*
- * Given host @uid, return the uid to which it maps in
- * @pid's user namespace, or -1 if none.
+ * Given a open file * to /proc/pid/{u,g}id_map, and an id
+ * valid in the caller's namespace, return the id mapped into
+ * pid's namespace.
+ * Returns the mapped id, or -1 on error.
  */
-bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer)
+unsigned int
+convert_id_to_ns(FILE *idfile, unsigned int in_id)
 {
-	FILE *f;
-	uid_t nsuid, hostuid;
-	unsigned int count;
+	unsigned int nsuid,   // base id for a range in the idfile's namespace
+		     hostuid, // base id for a range in the caller's namespace
+		     count;   // number of ids in this range
 	char line[400];
 	int ret;
 
-	sprintf(line, "/proc/%d/uid_map", pid);
-	if ((f = fopen(line, "r")) == NULL) {
-		return false;
-	}
-	while (fgets(line, 400, f)) {
+	fseek(idfile, 0L, SEEK_SET);
+	while (fgets(line, 400, idfile)) {
 		ret = sscanf(line, "%u %u %u\n", &nsuid, &hostuid, &count);
 		if (ret != 3)
 			continue;
@@ -939,22 +939,43 @@ bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer)
 			 */
 			nih_error("pid wrapparound at entry %u %u %u in %s",
 				nsuid, hostuid, count, line);
-			break;
+			return -1;
 		}
-		if (hostuid <= uid && hostuid+count > uid) {
+		if (hostuid <= in_id && hostuid+count > in_id) {
 			/*
-			 * now since hostuid <= uid < hostuid+count, and
+			 * now since hostuid <= in_id < hostuid+count, and
 			 * hostuid+count and nsuid+count do not wrap around,
-			 * we know that nsuid+(uid-hostuid) which must be
+			 * we know that nsuid+(in_id-hostuid) which must be
 			 * less that nsuid+(count) must not wrap around
 			 */
-			fclose(f);
-			*answer = (uid - hostuid) + nsuid;
-			return true;
+			return (in_id - hostuid) + nsuid;
 		}
 	}
+
+	// no answer found
+	return -1;
+}
+
+/*
+ * Given host @uid, return the uid to which it maps in
+ * @pid's user namespace, or -1 if none.
+ */
+bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer)
+{
+	FILE *f;
+	char line[400];
+
+	sprintf(line, "/proc/%d/uid_map", pid);
+	if ((f = fopen(line, "r")) == NULL) {
+		return false;
+	}
+
+	*answer = convert_id_to_ns(f, uid);
 	fclose(f);
-	return false;
+
+	if (*answer == -1)
+		return false;
+	return true;
 }
 
 /*
@@ -1641,6 +1662,32 @@ int get_directory_contents(void *parent, const char *path,
 	closedir(d);
 	return entries;
 }
+
+void convert_directory_contents(struct keys_return_type **keys, struct ucred r)
+{
+	int i = 0;
+	FILE *uidf, *gidf;
+	nih_local char *path = NULL;
+
+	path = nih_sprintf(NULL, "/proc/%d/uid_map", r.pid);
+	uidf = fopen(path, "r");
+	if (!uidf)
+		return;
+	path = nih_sprintf(NULL, "/proc/%d/gid_map", r.pid);
+	gidf = fopen(path, "r");
+	if (!gidf) {
+		fclose(uidf);
+		return;
+	}
+
+	while (keys[i]) {
+		keys[i]->uid = convert_id_to_ns(uidf, keys[i]->uid);
+		keys[i]->gid = convert_id_to_ns(gidf, keys[i]->gid);
+	}
+	fclose(uidf);
+	fclose(gidf);
+}
+
 
 bool was_premounted(const char *controller)
 {
