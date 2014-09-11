@@ -1275,7 +1275,8 @@ void get_tasks_recursive_scm_complete(struct scm_sock_data *data)
 	struct ucred pcred;
 	int i, ret;
 	int32_t *pids, nrpids;
-	ret = get_tasks_main(data, data->controller, data->cgroup,
+
+	ret = get_tasks_recursive_main(data, data->controller, data->cgroup,
 			data->pcred, data->rcred, &pids);
 	if (ret < 0) {
 		nih_error("Error getting nrtasks for %s:%s for pid %d",
