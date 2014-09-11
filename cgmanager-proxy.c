@@ -1321,12 +1321,13 @@ int list_keys_main (void *parent, const char *controller, const char *cgroup,
 
 	s = results;
 	for (i=0; i<nrkeys; i++) {
-		struct keys_return_type *tmp = (*output)[i];
+		struct keys_return_type *tmp;
 		char *s2 = find_eol(s);
 		if (s2 > results + len)
 			goto bad;
 		*s2 = '\0';
-		tmp->name = NIH_MUST( nih_strdup(parent, s) );
+		(*output)[i] = tmp = NIH_MUST( nih_new(*output, struct keys_return_type) );
+		tmp->name = NIH_MUST( nih_strdup(tmp, s) );
 		s = s2 + 1;
 		s2 = find_eol(s);
 		if (s2 > results + len)
