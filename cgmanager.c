@@ -1252,7 +1252,7 @@ int list_keys_main(void *parent, const char *controller, const char *cgroup,
 	if (nrkeys <= 0)
 		return nrkeys;
 
-	/* TODO - convert uid/gid into r's namespace */
+	/* convert uid/gid into r's namespace */
 	convert_directory_contents(*output, r);
 
 	return nrkeys;
