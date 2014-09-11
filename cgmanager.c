@@ -1227,6 +1227,7 @@ int list_keys_main(void *parent, const char *controller, const char *cgroup,
 			struct keys_return_type ***output)
 {
 	char path[MAXPATHLEN];
+	int nrkids;
 
 	*output = NULL;
 	if (!sane_cgroup(cgroup)) {
@@ -1246,7 +1247,14 @@ int list_keys_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	return get_directory_contents(parent, path, output);
+	nrkeys = get_directory_contents(parent, path, output);
+
+	if (nrkeys <= 0)
+		return nrkeys;
+
+	/* TODO - convert uid/gid into r's namespace */
+
+	return nrkeys;
 }
 
 char *extra_cgroup_mounts;
