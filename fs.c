@@ -50,6 +50,8 @@
 #include <nih-dbus/dbus_connection.h>
 #include <nih-dbus/dbus_proxy.h>
 
+#include "frontend.h"  // for keys_return_type
+
 /* defines relating to the release agent */
 #define AGENT SBINDIR "/cgm-release-agent"
 #define AGENT_LINK_PATH "/run/cgmanager/agents"
@@ -1545,14 +1547,13 @@ bool move_self_to_root(void)
  * freed).
  * @path: Full path whose child directories to list.
  * output: pointer to which the list of directory names will be stored.
- * @type: type of file (dir or regular file) to return
  *
  * Read all child directories under @path.
  *
  * Returns: Number of directories read.  The names will be placed in the
  * null-terminated array @output.
  */
-int get_directory_children(void *parent, const char *path, char ***output, unsigned char type)
+int get_directory_children(void *parent, const char *path, char ***output)
 {
 	int used = 0, alloced = 5;
 	DIR *d;
@@ -1570,7 +1571,7 @@ int get_directory_children(void *parent, const char *path, char ***output, unsig
 	while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
 		if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
 			continue;
-		if (type != direntp->d_type)
+		if (direntp->d_type != DT_DIR)
 			continue;
 		if (used+1 >= alloced) {
 			char **tmp;
@@ -1591,6 +1592,54 @@ int get_directory_children(void *parent, const char *path, char ***output, unsig
 	}
 	closedir(d);
 	return used;
+}
+
+int get_directory_contents(void *parent, const char *path,
+	struct keys_return_type ***output)
+{
+	DIR *d;
+	size_t entries = 0;
+	struct dirent dirent, *direntp;
+
+	nih_assert(output);
+	d = opendir(path);
+	if (!d) {
+		nih_error("%s: failed to open directory %s: %s",
+			__func__, path, strerror(errno));
+		return -1;
+	}
+	*output = NIH_MUST( nih_alloc(parent, (entries + 1) * sizeof(**output)) );
+	(*output)[0] = NULL;
+	while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
+		struct keys_return_type *tmp;
+		struct stat sb;
+		struct keys_return_type **r;
+		nih_local char *pathname = NULL;
+
+		if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
+			continue;
+		if (direntp->d_type != DT_REG)
+			continue;
+
+		r = NIH_MUST( nih_realloc(*output, parent, (entries + 2) * sizeof(struct keys_return_type *)) );
+		*output = r;
+
+		(*output)[entries+1] = NULL;
+		(*output)[entries] = tmp = NIH_MUST( nih_new(*output, struct keys_return_type));
+		tmp->name = NIH_MUST( nih_strdup(tmp, direntp->d_name) );
+		pathname = NIH_MUST( nih_sprintf(NULL, "%s/%s", path, direntp->d_name) );
+		if (stat(pathname, &sb) < 0) {
+			tmp->uid = tmp->gid = -1;
+			tmp->perms = 0;
+		} else {
+			tmp->uid = sb.st_uid;
+			tmp->gid = sb.st_gid;
+			tmp->perms = (uint32_t) sb.st_mode;
+		}
+		entries++;
+	}
+	closedir(d);
+	return entries;
 }
 
 bool was_premounted(const char *controller)

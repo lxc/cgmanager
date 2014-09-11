@@ -1028,9 +1028,9 @@ int list_children_main (void *parent, const char *controller, const char *cgroup
 	}
 
 	*output = NIH_MUST( nih_alloc(parent, sizeof( char*)*(nrkids+1)) );
+	memset(*output, 0, (nrkids + 1) * sizeof(char *));
 
 	s = paths;
-	(*output)[nrkids] = NULL;
 	for (i=0; i<nrkids; i++) {
 		if (s > paths + len) {
 			ret = -1;
@@ -1235,6 +1235,124 @@ out:
 	if (ret)
 		nih_free (output_local);
 	return ret;
+}
+
+static char *find_eol(char *s)
+{
+	while (*s && *s != '\n')
+		s++;
+	return s;
+}
+
+int list_keys_main (void *parent, const char *controller, const char *cgroup,
+		    struct ucred p, struct ucred r,
+		    struct keys_return_type ***output)
+{
+	DBusMessage *message;
+	DBusMessageIter iter;
+	int sv[2], ret = -1;
+	uint32_t len;
+	int32_t nrkeys;
+	nih_local char * results = NULL;
+	char *s;
+	int i;
+
+	*output = NULL;
+	if (memcmp(&p, &r, sizeof(struct ucred)) != 0) {
+		nih_error("%s: proxy != requestor", __func__);
+		return -1;
+	}
+
+	if (!sane_cgroup(cgroup)) {
+		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!(message = start_dbus_request("ListKeysScm", sv))) {
+		nih_error("%s: error starting dbus request", __func__);
+		return -1;
+	}
+
+	dbus_message_iter_init_append(message, &iter);
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &controller)) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_STRING, &cgroup)) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+	if (! dbus_message_iter_append_basic (&iter, DBUS_TYPE_UNIX_FD, &sv[1])) {
+		nih_error("%s: out of memory", __func__);
+		dbus_message_unref(message);
+		goto out;
+	}
+
+	if (!complete_dbus_request(message, sv, &r, NULL)) {
+		nih_error("%s: error completing dbus request", __func__);
+		goto out;
+	}
+
+	if (proxyrecv(sv[0], &nrkeys, sizeof(int32_t)) != sizeof(int32_t))
+		goto out;
+	if (nrkeys == 0) {
+		ret = 0;
+		goto out;
+	}
+	if (nrkeys < 0) {
+		nih_error("%s: Server encountered an error: bad cgroup?", __func__);
+		ret = -1;
+		goto out;
+	}
+	if (proxyrecv(sv[0], &len, sizeof(uint32_t)) != sizeof(uint32_t))
+		goto out;
+
+	results = nih_alloc(NULL, len+1);
+	results[len] = '\0';
+	if (read(sv[0], results, len) != len) {
+		nih_error("%s: Failed getting results from server", __func__);
+		goto out;
+	}
+
+	*output = NIH_MUST( nih_alloc(parent, sizeof(**output)*(nrkeys+1)) );
+	memset(*output, 0, (nrkeys + 1) * sizeof(**output));
+
+	s = results;
+	for (i=0; i<nrkeys; i++) {
+		struct keys_return_type *tmp = (*output)[i];
+		char *s2 = find_eol(s);
+		if (s2 > results + len)
+			goto bad;
+		*s2 = '\0';
+		tmp->name = NIH_MUST( nih_strdup(parent, s) );
+		s = s2 + 1;
+		s2 = find_eol(s);
+		if (s2 > results + len)
+			goto bad;
+		if (sscanf(s, "%u\n", &tmp->uid) != 1)
+			goto bad;
+		s = s2 + 1;
+		s2 = find_eol(s);
+		if (sscanf(s, "%u\n", &tmp->gid) != 1)
+			goto bad;
+		s = s2 + 1;
+		s2 = find_eol(s);
+		if (sscanf(s, "%u\n", &tmp->perms) != 1)
+			goto bad;
+		s = s2 + 1;
+	}
+	ret = nrkeys;
+out:
+	close(sv[0]);
+	close(sv[1]);
+	return ret;
+
+bad:
+	ret = -1;
+	nih_error("%s: corrupted result from cgmanager", __func__);
+	goto out;
 }
 
 /**

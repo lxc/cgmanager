@@ -1708,9 +1708,127 @@ int cgmanager_list_controllers (void *data, NihDBusMessage *message,
 	return ret;
 }
 
+/*
+ * listkeys - list the files in a specific controller:cgroup.
+ * The return value will be written as a repeating list of:
+ * ${name}\n${uid}\n${gid}\n${perms}\n
+ */
+void list_keys_scm_complete(struct scm_sock_data *data)
+{
+	int i;
+	uint32_t len = 0;
+	int32_t nrkeys;
+	nih_local char *retdata = NULL;
+	struct keys_return_type **output; // nih_alloced with data as parent; freed at io_shutdown
+
+	nrkeys = list_keys_main(data, data->controller, data->cgroup,
+			data->pcred, data->rcred, &output);
+	if (write(data->fd, &nrkeys, sizeof(int32_t)) != sizeof(int32_t)) {
+		nih_error("%s: error writing results", __func__);
+		return;
+	}
+	if (nrkeys < 0) {
+		nih_error("Error getting keys for %s:%s for pid %d",
+			data->controller, data->cgroup, data->rcred.pid);
+		return;
+	}
+	if (nrkeys == 0)  /* no names to write, we are done */
+		return;
+
+	for (i = 0; i < nrkeys; i++) {
+		NIH_MUST( nih_strcat_sprintf(&retdata, NULL, "%s\n", output[i]->name) );
+		NIH_MUST( nih_strcat_sprintf(&retdata, NULL, "%d\n", output[i]->uid) );
+		NIH_MUST( nih_strcat_sprintf(&retdata, NULL, "%d\n", output[i]->gid) );
+		NIH_MUST( nih_strcat_sprintf(&retdata, NULL, "%d\n", output[i]->perms) );
+	}
+
+	len = strlen(retdata);
+	if (write(data->fd, &len, sizeof(uint32_t)) != sizeof(uint32_t)) {
+		nih_error("%s: error writing results", __func__);
+		return;
+	}
+
+	if (write(data->fd, retdata, len) != len) {
+		nih_error("list_keysscm: Error writing final result to client");
+		return;
+	}
+}
+
+int cgmanager_list_keys_scm (void *data, NihDBusMessage *message,
+		 const char *controller, const char *cgroup, int sockfd)
+{
+	struct scm_sock_data *d;
+
+	d = alloc_scm_sock_data(message, sockfd, REQ_TYPE_LISTKEYS);
+	if (!d)
+		return -1;
+	d->controller = NIH_MUST( nih_strdup(d, controller) );
+	d->cgroup = NIH_MUST( nih_strdup(d, cgroup) );
+
+	if (!nih_io_reopen(NULL, sockfd, NIH_IO_MESSAGE,
+				(NihIoReader) sock_scm_reader,
+				(NihIoCloseHandler) scm_sock_close,
+				scm_sock_error_handler, d)) {
+		NihError *error = nih_error_steal ();
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"Failed queue scm message: %s", error->message);
+		nih_free(error);
+		return -1;
+	}
+	if (!kick_fd_client(sockfd))
+		return -1;
+	return 0;
+}
+
+/* 
+ * This is one of the dbus callbacks.
+ * Caller requests the list of files in @cgroup in @controller
+ * returns nrkeys, or -1 on error.
+ */
+int cgmanager_list_keys (void *data, NihDBusMessage *message,
+		const char *controller, const char *cgroup,
+		struct keys_return_type ***output)
+{
+	int fd = 0, ret;
+	struct ucred rcred;
+	socklen_t len;
+
+	nih_assert(output);
+
+	if (message == NULL) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+			"message was null");
+		return -1;
+	}
+
+	if (!dbus_connection_get_socket(message->connection, &fd)) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get client socket.");
+		return -1;
+	}
+
+	len = sizeof(struct ucred);
+	if (getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &rcred, &len) < 0) {
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "Could not get peer cred: %s",
+					     strerror(errno));
+		return -1;
+	}
+
+	nih_info (_("ListKeys: Client fd is: %d (pid=%d, uid=%u, gid=%u)"),
+			fd, rcred.pid, rcred.uid, rcred.gid);
+
+	ret = list_keys_main(message, controller, cgroup, rcred, rcred, output);
+	if (ret >= 0)
+		ret = 0;
+	else
+		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
+					     "invalid request");
+	return ret;
+}
 
 /*
- * return our APi version
+ * return our API version
  */
 int
 cgmanager_get_api_version(void *data, NihDBusMessage *message, int *version)
