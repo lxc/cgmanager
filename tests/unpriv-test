@@ -34,6 +34,11 @@ which newuidmap >/dev/null 2>&1 || { echo "'newuidmap' command is missing" >&2; 
 
 which lxc-create >/dev/null 2>&1 || { echo "'lxc' package is missing" >&2; exit 1; }
 
+use_ppa=0
+if [ $# -eq 1 -a $1 = "useppa" ]; then
+	use_ppa=1
+fi
+
 DONE=0
 cleanup() {
 	cd /
@@ -121,12 +126,15 @@ done
 
 run_cmd lxc-attach -n c1 -- ping -c 1 google.com
 run_cmd lxc-attach -n c1 -- apt-get update
-run_cmd lxc-attach -n c1 -- apt-get -y install cgmanager-tests
+if [ $use_ppa -eq 1 ]; then
+	run_cmd lxc-attach -n c1 -- apt-get -y install software-properties-common
+	run_cmd lxc-attach -n c1 -- add-apt-repository -y ppa:serge-hallyn/cgmanager
+	run_cmd lxc-attach -n c1 -- apt-get update
+fi
+run_cmd lxc-attach -n c1 -- apt-get -y install cgmanager cgmanager-tests
 run_cmd lxc-attach -n c1 -- cat /proc/self/cgroup
-read -p "investigate;  hit enter to continue"
 run_cmd lxc-attach -n c1 -- /usr/share/cgmanager/tests/runtests.sh
-output=`run_cmd lxc-attach -n c1 -- cgm listkeys memory ''`
-echo "output is $output"
+run_cmd lxc-attach -n c1 -- cgm listkeys memory
 
 run_cmd lxc-stop -n c1
 
