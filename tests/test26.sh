@@ -14,7 +14,7 @@ output=$(cgm listkeys memory listkeys1)
 id1=$(echo "$output" | awk '/^tasks/ { print $2 }')
 if [ "$id1" != "100000" ]; then
 	echo "Bad listkeys output"
-	false
+	exit 1
 fi
 
 echo PASS
