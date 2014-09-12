@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Authors:
+# Serge Hallyn <serge.hallyn@ubuntu.com>
+#
+# This is based on the lxc-test-unpriv from the lxc testsuite at
+# linuxcontainers.org / git://github.com/lxc/lxc
+
+# This library is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License as published by the Free Software Foundation; either
+# version 2.1 of the License, or (at your option) any later version.
+
+# This library is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# Lesser General Public License for more details.
+
+# You should have received a copy of the GNU Lesser General Public
+# License along with this library; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+
+# This test assumes an Ubuntu host.  It will create an unprivileged
+# user who will create a unprivileged container.  Inside that container
+# it will install and start cgmanager, and run a full testsuite
+# in addition to an extra test for correct uid translation in
+# listkeys
+
+if [ $(id -u) -ne 0 ]; then
+	echo "ERROR: Must run as root."
+	exit 1
+fi
+which newuidmap >/dev/null 2>&1 || { echo "'newuidmap' command is missing" >&2; exit 1; }
+
+which lxc-create >/dev/null 2>&1 || { echo "'lxc' package is missing" >&2; exit 1; }
+
+DONE=0
+cleanup() {
+	cd /
+
+	run_cmd lxc-stop -n c1 -k || true
+	pkill -u $(id -u $TUSER) -9
+
+	sed -i '/lxcunpriv/d' /run/lxc/nics /etc/lxc/lxc-usernet
+	sed -i '/^lxcunpriv:/d' /etc/subuid /etc/subgid
+
+	rm -Rf $HDIR /run/user/$(id -u $TUSER)
+
+	deluser $TUSER
+
+	if [ $DONE -eq 0 ]; then
+		echo "FAIL"
+		exit 1
+	fi
+	echo "PASS"
+}
+
+run_cmd() {
+	sudo -i -u $TUSER \
+	    env http_proxy=${http_proxy:-} https_proxy=${https_proxy:-} \
+	        SUDO_USER="" \
+	        XDG_RUNTIME_DIR=/run/user/$(id -u $TUSER) $*
+}
+
+# create a test user
+TUSER=lxcunpriv
+HDIR=/home/$TUSER
+
+ARCH=i386
+if type dpkg >/dev/null 2>&1; then
+	ARCH=$(dpkg --print-architecture)
+fi
+
+trap cleanup EXIT SIGHUP SIGINT SIGTERM
+set -eu
+
+deluser $TUSER && rm -Rf $HDIR || true
+useradd $TUSER
+
+mkdir -p $HDIR
+echo "$TUSER veth lxcbr0 2" > /etc/lxc/lxc-usernet
+sed -i '/^lxcunpriv:/d' /etc/subuid /etc/subgid
+
+usermod -v 910000-919999 -w 910000-919999 $TUSER
+
+mkdir -p $HDIR/.config/lxc/
+cat > $HDIR/.config/lxc/default.conf << EOF
+lxc.network.type = veth
+lxc.network.link = lxcbr0
+lxc.id_map = u 0 910000 9999
+lxc.id_map = g 0 910000 9999
+lxc.aa_profile = lxc-container-default-with-nesting
+lxc.mount.auto = cgroup:mixed
+EOF
+chown -R $TUSER: $HDIR
+
+mkdir -p /run/user/$(id -u $TUSER)
+chown -R $TUSER: /run/user/$(id -u $TUSER)
+
+cd $HDIR
+
+cgm create all $TUSER
+cgm chown all $TUSER $(id -u $TUSER) $(id -g $TUSER)
+cgm movepid all $TUSER $$
+
+# Copy the download template cache if available
+run_cmd mkdir -p $HDIR/.cache/lxc
+[ -d /var/cache/lxc/download ] && \
+    cp -R /var/cache/lxc/download $HDIR/.cache/lxc && \
+    chown -R $TUSER: $HDIR/.cache/lxc
+
+run_cmd lxc-create -t download -n c1 -- -d ubuntu -r utopic -a $ARCH
+run_cmd lxc-start -n c1 -d
+
+run_cmd lxc-wait -n c1 -s RUNNING
+
+ip=''
+while [ -z "$ip" ]; do
+	ip=$(run_cmd lxc-info -n c1 -i -H)
+done
+
+run_cmd lxc-attach -n c1 -- ping -c 1 google.com
+run_cmd lxc-attach -n c1 -- apt-get update
+run_cmd lxc-attach -n c1 -- apt-get -y install cgmanager-tests
+run_cmd lxc-attach -n c1 -- cat /proc/self/cgroup
+read -p "investigate;  hit enter to continue"
+run_cmd lxc-attach -n c1 -- /usr/share/cgmanager/tests/runtests.sh
+output=`run_cmd lxc-attach -n c1 -- cgm listkeys memory ''`
+echo "output is $output"
+
+run_cmd lxc-stop -n c1
+
+DONE=1
