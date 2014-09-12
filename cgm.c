@@ -573,25 +573,25 @@ int main(int argc, const char *argv[])
 	} else if (strcmp(argv[1], "gettasksrecursive") == 0) { 
 		if (argc != 3 && argc != 4)
 			usage(me);
-		do_gettasks_recursive(argv[2], argc == 3 ? NULL : argv[3]);
+		do_gettasks_recursive(argv[2], argc == 3 ? "" : argv[3]);
 	} else if (strcmp(argv[1], "gettasks") == 0) { 
 		if (argc != 3 && argc != 4)
 			usage(me);
-		do_gettasks(argv[2], argc == 3 ? NULL : argv[3]);
+		do_gettasks(argv[2], argc == 3 ? "" : argv[3]);
 	} else if (strcmp(argv[1], "listchildren") == 0) { 
 		if (argc != 3 && argc != 4)
 			usage(me);
-		do_listchildren(argv[2], argc == 3 ? NULL : argv[3]);
+		do_listchildren(argv[2], argc == 3 ? "" : argv[3]);
 	} else if (strcmp(argv[1], "prune") == 0) { 
 		if (argc != 3 && argc != 4)
 			usage(me);
-		do_prune(argv[2], argc == 3 ? NULL : argv[3]);
+		do_prune(argv[2], argc == 3 ? "" : argv[3]);
 	} else if (strcmp(argv[1], "listcontrollers") == 0) { 
 		do_listcontrollers();
 	} else if (strcmp(argv[1], "listkeys") == 0) { 
 		if (argc != 3 && argc != 4)
 			usage(me);
-		do_listkeys(argv[2], argc == 3 ? NULL : argv[3]);
+		do_listkeys(argv[2], argc == 3 ? "" : argv[3]);
 	} else if (strcmp(argv[1], "apiversion") == 0) { 
 		do_apiversion();
 	} else {
