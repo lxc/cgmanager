@@ -134,7 +134,19 @@ fi
 run_cmd lxc-attach -n c1 -- apt-get -y install cgmanager cgmanager-tests
 run_cmd lxc-attach -n c1 -- cat /proc/self/cgroup
 run_cmd lxc-attach -n c1 -- /usr/share/cgmanager/tests/runtests.sh
-run_cmd lxc-attach -n c1 -- cgm listkeys memory
+run_cmd lxc-attach -n c1 -- cgm create memory xxx
+output=$(run_cmd lxc-attach -n c1 -- cgm listkeys memory)
+output2=$(run_cmd lxc-attach -n c1 -- cgm listkeys memory xxx)
+id1=$(echo "$output" | awk '/^tasks/ { print $2 }')
+id2=$(echo "$output2" | awk '/^tasks/ { print $2 }')
+if [ $id1 != "4294967295" ]; then
+	echo "listkeys did not properly shift nobody id"
+	false
+fi
+if [ $id2 != "0" ]; then
+	echo "listkeys did not properly shift 0 id"
+	false
+fi
 
 run_cmd lxc-stop -n c1
 
