@@ -19,6 +19,9 @@
 
 #include <frontend.h>
 #include <sys/resource.h>
+#include <sys/statvfs.h>
+#include <sys/vfs.h>
+#include <linux/fs.h>
 
 /*
  * Maximum depth of directories we allow in Create
@@ -1310,6 +1313,47 @@ static bool daemon_running(void)
 	return false;
 }
 
+static bool dir_is_sysfs(const char *path)
+{
+	struct statfs sb;
+
+	if (statfs(path, &sb) < 0)
+		// was not yet a mountpoint
+		return true;
+
+	return sb.f_type == 0x62656572;
+}
+
+static void mount_tmpfs_at(const char *path)
+{
+	if (mount("cgroup", path, "tmpfs", 0, "size=10000") < 0) {
+		nih_error("Failed to mount tmpfs at %s: %m", path);
+		exit(1);
+	}
+	nih_debug("Mounted tmpfs onto %s", CGDIR);
+}
+
+static bool is_ro_mount(const char *path)
+{
+	struct statvfs sb;
+
+	if (statvfs(path, &sb) < 0) {
+		nih_error("statvfs failed on %s: %m", path);
+		exit(1);
+	}
+
+	return sb.f_flag & MS_RDONLY;
+}
+
+static void turn_mount_rw(const char *path)
+{
+	if (mount("", path, "cgroup", MS_REMOUNT, NULL) < 0) {
+		nih_error("Failed to turn %s mount readonly: %m", path);
+		exit(1);
+	}
+	nih_debug("Turned %s from ro->rw", path);
+}
+
 /*
  * We may decide to make the socket path customizable.  For now
  * just assume it is in /sys/fs/cgroup/ which has some special
@@ -1317,36 +1361,28 @@ static bool daemon_running(void)
  */
 static bool setup_cgroup_dir(void)
 {
-	int ret;
 	if (!dir_exists(CGDIR)) {
 		nih_debug(CGDIR " does not exist");
 		return false;
 	}
+
 	if (daemon_running()) {
 		nih_error("%s: cgmanager is already running", __func__);
 		return false;
 	}
+
 	if (file_exists(CGMANAGER_SOCK)) {
 		if (unlink(CGMANAGER_SOCK) < 0) {
 			nih_error("%s: failed to delete stale cgmanager socket", __func__);
 			return false;
 		}
 	}
-	/* Check that /sys/fs/cgroup is writeable, else mount a tmpfs */
-	unlink(CGPROBE);
-	ret = creat(CGPROBE, O_RDWR);
-	if (ret >= 0) {
-		close(ret);
-		unlink(CGPROBE);
-		return mkdir_cgmanager_dir();
-	}
-	ret = mount("cgroup", CGDIR, "tmpfs", 0, "size=10000");
-	if (ret) {
-		nih_debug("Failed to mount tmpfs on %s: %s",
-			CGDIR, strerror(errno));
-		return false;
-	}
-	nih_debug("Mounted tmpfs onto %s", CGDIR);
+
+	if (dir_is_sysfs(CGDIR))
+		mount_tmpfs_at(CGDIR);
+	else if (is_ro_mount(CGDIR))
+		turn_mount_rw(CGDIR);
+
 	return mkdir_cgmanager_dir();
 }
 
