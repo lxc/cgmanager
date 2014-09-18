@@ -338,7 +338,7 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 	char *tok;
 	int ret;
 
-	*existed = 1;
+	*existed = -1;
 	if (!cgroup || ! *cgroup)  // nothing to do
 		return 0;
 
@@ -366,8 +366,8 @@ int create_main(const char *controller, const char *cgroup, struct ucred p,
 			goto next;
 		if (ret != 0)
 			return -1;
-		if (e == -1)
-			*existed = -1;
+		if (e == 1)
+			*existed = 1;
 next:
 		tok = strtok(NULL, ",");
 	}
