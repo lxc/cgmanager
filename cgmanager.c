@@ -188,6 +188,7 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	nih_local char *c = NULL;
 	char *tok;
 	int ret;
+	int while_ret = 0;
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
@@ -214,15 +215,16 @@ int do_move_pid_main(const char *controller, const char *cgroup, struct ucred p,
 	tok = strtok(c, ",");
 	while (tok) {
 		ret = per_ctrl_move_pid_main(tok, cgroup, p, r, v, escape);
-		if (ret == -2)  // permission denied - ignore for group requests
-			goto next;
-		if (ret != 0)
-			return -1;
-next:
+
+		/* Save error for later (but ignore permission denied, -2),
+		   but try to complete rest of moves anyway */
+		if (ret != 0 && ret != -2)
+			while_ret = -1;
+
 		tok = strtok(NULL, ",");
 	}
 
-	return 0;
+	return while_ret;
 }
 
 int move_pid_main(const char *controller, const char *cgroup, struct ucred p,
