@@ -554,6 +554,15 @@ static bool collect_kernel_subsystems(void)
 			continue;
 		*p = '\0';
 
+		// TODO: How stable is /proc/cgroups interface?
+		// Check the 'enabled' column
+		p = strrchr(p+1, '\t');
+		if (!p)
+			continue;
+
+		if (*(p+1) != '1')
+			continue;
+
 		if (!save_mount_subsys(line)) {
 			nih_fatal("Error storing subsystem %s", line);
 			goto out;
