@@ -87,7 +87,7 @@ libcgmanager_la_CFLAGS = -fPIC -DPIC $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFL
 libcgmanager_la_LDFLAGS = -E \
 	-version-info $(LIBCGMANAGER_VERSION)
 libcgmanager_la_LIBADD = \
-	$(DBUS_LIBS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
+	$(DBUS_LIBS) $(NIH_LIBS) $(NIH_DBUS_LIBS)
 
 cgmanager.8: cgmanager.c cgmanager cgmanager.man.add
 	$(HELP2MAN) -n "a daemon to manage cgroups" -s 8 -I cgmanager.man.add -N ./cgmanager > cgmanager.8
