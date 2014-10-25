@@ -1328,11 +1328,11 @@ static bool dir_is_sysfs(const char *path)
 
 static void mount_tmpfs_at(const char *path)
 {
-	if (mount("cgroup", path, "tmpfs", 0, "size=10000") < 0) {
+	if (mount("cgroup", path, "tmpfs", 0, "size=10000,mode=0755") < 0) {
 		nih_error("Failed to mount tmpfs at %s: %m", path);
 		exit(1);
 	}
-	nih_debug("Mounted tmpfs onto %s", CGDIR);
+	nih_debug("Mounted tmpfs onto %s", path);
 }
 
 static bool is_ro_mount(const char *path)
