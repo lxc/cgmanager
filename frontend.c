@@ -1168,11 +1168,15 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 	return ret;
 }
 
-/* get_tasks - list tasks for a single cgroup */
+/*
+ * get_tasks - list tasks for a single cgroup
+ * returns -1 on error, 0 on success.
+ */
 void get_tasks_scm_complete(struct scm_sock_data *data)
 {
 	struct ucred pcred;
 	int i, ret;
+	pid_t firstvalid = -1;
 	int32_t *pids, nrpids;
 	ret = get_tasks_main(data, data->controller, data->cgroup,
 			data->pcred, data->rcred, &pids);
@@ -1187,12 +1191,25 @@ void get_tasks_scm_complete(struct scm_sock_data *data)
 		return;
 	}
 	pcred.uid = 0; pcred.gid = 0;
-	for (i=0; i<ret; i++) {
+	for (i=0; i<nrpids; i++) {
 		pcred.pid = pids[i];
-		if (send_creds(data->fd, &pcred)) {
-			nih_error("get_tasks_scm: error writing pids back to client");
+again:
+		ret = send_creds(data->fd, &pcred);
+		if (ret == -3) {
+			if (firstvalid == -1 || firstvalid == pcred.pid) {
+				nih_error("gettasks: too much pid churn.  Last valid pid was %d\n",
+						firstvalid);
+				return;
+			}
+			nih_info("gettasks: sending dup pid %d in place of exited pid %d\n",
+					firstvalid, pcred.pid);
+			pcred.pid = firstvalid;
+			goto again;
+
+		} else if (ret < 0)
 			return;
-		}
+		if (firstvalid == -1)
+			firstvalid = pids[i];
 	}
 }
 
@@ -1275,6 +1292,7 @@ void get_tasks_recursive_scm_complete(struct scm_sock_data *data)
 {
 	struct ucred pcred;
 	int i, ret;
+	pid_t firstvalid = -1;
 	int32_t *pids, nrpids;
 
 	ret = get_tasks_recursive_main(data, data->controller, data->cgroup,
@@ -1290,12 +1308,24 @@ void get_tasks_recursive_scm_complete(struct scm_sock_data *data)
 		return;
 	}
 	pcred.uid = 0; pcred.gid = 0;
-	for (i=0; i<ret; i++) {
+	for (i=0; i<nrpids; i++) {
 		pcred.pid = pids[i];
-		if (send_creds(data->fd, &pcred)) {
-			nih_error("get_tasks_recursive_scm: error writing pids back to client");
+again:
+		ret = send_creds(data->fd, &pcred);
+		if (ret == -3) {
+			if (firstvalid == -1 || firstvalid == pcred.pid) {
+				nih_error("gettasks: too much pid churn.  Last valid pid was %d\n",
+						firstvalid);
+				return;
+			}
+			nih_info("gettasks: sending dup pid %d in place of exited pid %d\n",
+					firstvalid, pcred.pid);
+			pcred.pid = firstvalid;
+			goto again;
+		} else if (ret < 0)
 			return;
-		}
+		if (firstvalid == -1)
+			firstvalid = pids[i];
 	}
 }
 

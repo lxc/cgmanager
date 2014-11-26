@@ -107,8 +107,11 @@ int send_creds(int sock, struct ucred *cred)
 	msg.msg_iovlen = 1;
 
 	if (sendmsg(sock, &msg, 0) < 0) {
+		int saved_errno = errno;
 		nih_error("%s: failed at sendmsg: %s", __func__,
 			  strerror(errno));
+		if (saved_errno == 3)
+			return -3;
 		return -1;
 	}
 	return 0;
@@ -124,6 +127,8 @@ int send_creds(int sock, struct ucred *cred)
 void get_scm_creds_sync(int sock, struct ucred *cred)
 {
 	struct msghdr msg = { 0 };
+	struct timeval tv;
+	fd_set rfds;
 	struct iovec iov;
 	struct cmsghdr *cmsg;
 	char cmsgbuf[CMSG_SPACE(sizeof(*cred))];
@@ -155,10 +160,15 @@ void get_scm_creds_sync(int sock, struct ucred *cred)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 
-	// retry logic is not ideal, especially as we are not
-	// threaded.  Sleep at most 1 second waiting for the client
-	// to send us the scm_cred
-	ret = recvmsg(sock, &msg, 0);
+	FD_ZERO(&rfds);
+	FD_SET(sock, &rfds);
+
+	tv.tv_sec = 1;
+	tv.tv_usec = 0;
+	if (select(sock+1, &rfds, NULL, NULL, &tv) < 0) {
+		return;
+	}
+	ret = recvmsg(sock, &msg, MSG_DONTWAIT);
 	if (ret < 0) {
 		nih_error("Failed to receive scm_cred: %s",
 			  strerror(errno));

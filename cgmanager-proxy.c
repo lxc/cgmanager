@@ -867,7 +867,7 @@ int get_tasks_main (void *parent, const char *controller, const char *cgroup,
 	for (i=0; i<nrpids; i++) {
 		get_scm_creds_sync(sv[0], &tcred);
 		if (tcred.pid == -1) {
-			nih_error("%s: Failed getting pid from server",
+			nih_warn("%s: Failed getting pid from server",
 				__func__);
 			goto out;
 		}
@@ -943,7 +943,7 @@ int get_tasks_recursive_main (void *parent, const char *controller,
 	for (i=0; i<nrpids; i++) {
 		get_scm_creds_sync(sv[0], &tcred);
 		if (tcred.pid == -1) {
-			nih_error("%s: Failed getting pid from server",
+			nih_warn("%s: Failed getting pid from server",
 				__func__);
 			goto out;
 		}
