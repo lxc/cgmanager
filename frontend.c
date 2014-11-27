@@ -1168,10 +1168,7 @@ int cgmanager_remove (void *data, NihDBusMessage *message, const char *controlle
 	return ret;
 }
 
-/*
- * get_tasks - list tasks for a single cgroup
- * returns -1 on error, 0 on success.
- */
+/* get_tasks - list tasks for a single cgroup */
 void get_tasks_scm_complete(struct scm_sock_data *data)
 {
 	struct ucred pcred;
