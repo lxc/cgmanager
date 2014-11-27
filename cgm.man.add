@@ -22,4 +22,4 @@ Then to freeze that cgroup,
 cgm setvalue freezer foo freezer.state FROZEN
 
 [SEE ALSO]
-cgmanager(1)
+cgmanager(8)

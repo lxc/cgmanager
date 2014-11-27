@@ -22,4 +22,4 @@ To set a limit of 100000,
 dbus\-send \-\-print\-reply \-\-address=unix:path=/sys/fs/cgroup/cgmanager/sock \-\-type=method_call /org/linuxcontainers/cgmanager org.linuxcontainers.cgmanager0_0.SetValue string:'memory' string:"compute" string:memory.limit_in_bytes int32:100000 > /dev/null 2>&1
 
 [SEE ALSO]
-cgproxy(1), credentials(7), dbus-send(1)
+cgproxy(8), credentials(7), dbus-send(1)
