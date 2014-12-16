@@ -525,8 +525,7 @@ int chmod_main(const char *controller, const char *cgroup, const char *file,
 	}
 
 	if (file && ( strchr(file, '/') || strchr(file, '\\')) ) {
-		nih_dbus_error_raise_printf (DBUS_ERROR_INVALID_ARGS,
-				"invalid file");
+		nih_error("%s: invalid file", __func__);
 		return -1;
 	}
 
