@@ -30,7 +30,9 @@ lib_LTLIBRARIES = libcgmanager.la
 
 pkginclude_HEADERS = cgmanager-client.h cgmanager.h
 
+if HAVE_HELP2MAN
 man_MANS = cgm.1 cgproxy.8 cgmanager.8
+endif
 
 libcgmanager.pc: libcgmanager.pc.in
 	sed -e 's|[@]LIBCGMANAGER_VERSION_DOTTED[@]|$(LIBCGMANAGER_VERSION_DOTTED)|g' \
@@ -89,6 +91,7 @@ libcgmanager_la_LDFLAGS = -E \
 libcgmanager_la_LIBADD = \
 	$(DBUS_LIBS) $(NIH_LIBS) $(NIH_DBUS_LIBS)
 
+if HAVE_HELP2MAN
 cgmanager.8: cgmanager.c cgmanager cgmanager.man.add
 	$(HELP2MAN) -n "a daemon to manage cgroups" -s 8 -I cgmanager.man.add -N ./cgmanager > cgmanager.8
 
@@ -97,6 +100,7 @@ cgproxy.8: cgmanager-proxy.c cgproxy cgproxy.man.add
 
 cgm.1: cgm cgm.man.add
 	$(HELP2MAN) -n "a client script for cgmanager" -s 1 -I cgm.man.add -N ./cgm > cgm.1
+endif
 
 install-exec-local:
 	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests

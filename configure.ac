@@ -121,6 +121,7 @@ AM_CONDITIONAL([INIT_SCRIPT_UPSTART], [echo "$init_script" |grep -q "upstart"])
 AC_MSG_RESULT($init_script)
 
 AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
+AM_CONDITIONAL([HAVE_HELP2MAN], [test "x$HELP2MAN" != "xfalse // No help2man //" ])
 
 AS_AC_EXPAND(SBINDIR, "$sbindir")
 
