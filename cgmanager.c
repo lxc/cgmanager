@@ -899,7 +899,8 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 
 	*pids = NULL;
 	if (file_read_pids(parent, path, pids, &alloced_pids, &nrpids) < 0) {
-		nih_free(*pids);
+		if (*pids)
+			nih_free(*pids);
 		return -1;
 	}
 	return nrpids;
@@ -1007,7 +1008,8 @@ int get_tasks_recursive_main(void *parent, const char *controller,
 	if (strcmp(controller, "all") != 0 && !strchr(controller, ',')) {
 		if (collect_tasks(parent, controller, cgroup, p, r, pids,
 				&alloced_pids, &nrpids) < 0) {
-			nih_free(*pids);
+			if (*pids)
+				nih_free(*pids);
 			return -1;
 		}
 		return nrpids;
@@ -1028,7 +1030,8 @@ int get_tasks_recursive_main(void *parent, const char *controller,
 		if (ret == -2)  // permission denied - ignore
 			goto next;
 		if (ret != 0) {
-			nih_free(*pids);
+			if (*pids)
+				nih_free(*pids);
 			return -1;
 		}
 next:
