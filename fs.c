@@ -1205,6 +1205,8 @@ char *file_read_string(void *parent, const char *path)
 		memset(string+sz-1024, 0, 1024);
 		ret = read(fd, string+sz-1024, 1024);
 		if (ret < 0) {
+			nih_error("failure reading path %s: %s\n",
+				path, strerror(errno));
 			nih_free(string);
 			string = NULL;
 			goto out;
@@ -1408,10 +1410,12 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		nih_local char *fpath = NULL;
 		fpath = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.procs", path) );
 		if (chown(fpath, uid, gid) < 0)
-			nih_error("Failed to chown procs file %s", fpath);
+			nih_error("Failed to chown procs file %s: %s", fpath,
+				strerror(errno));
 		sprintf(fpath+len, "/tasks");
 		if (chown(fpath, uid, gid) < 0)
-			nih_error("Failed to chown tasks file %s", fpath);
+			nih_error("Failed to chown tasks file %s: %s", fpath,
+				strerror(errno));
 	}
 
 out:
@@ -1471,7 +1475,8 @@ bool set_value_trusted(const char *path, const char *value)
 	if (*value && value[len-1] != '\n')
 		fprintf(f, "\n");
 	if (fclose(f) != 0) {
-		nih_error("Error closing %s", path);
+		nih_error("Error closing %s: %s", path,
+			  strerror(errno));
 		return false;
 	}
 	return true;
