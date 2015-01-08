@@ -789,7 +789,7 @@ int setup_cgroup_mounts(void)
 		return 0;
 	}
 
-	if (mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, 0) < 0)
+	if (mount(NULL, "/", NULL, MS_REC|MS_SLAVE, 0) < 0)
 		nih_warn("Failed to re-mount / non-shared");
 
 	/*
