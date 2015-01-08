@@ -36,8 +36,6 @@ bool sane_cgroup(const char *cgroup)
 		return false;
 	if (strstr(cgroup, ".."))
 		return false;
-	if (strchr(cgroup, '\\'))
-		return false;
 	return true;
 }
 
