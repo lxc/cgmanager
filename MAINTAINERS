@@ -7,6 +7,6 @@ Maintainer
 Person          : Serge Hallyn, Stéphane Graber, James Hunt
 Mail patches to : cgmanager-devel@lists.linuxcontainers.org
 Mailing lists   : cgmanager-devel@lists.linuxcontainers.org
-Web page        : http://cgmanager.linuxcontainers.org
-GIT location    : git://github.com/cgmanager/cgmanager
-IRC             : freenode#cgmanager
+Web page        : https://linuxcontainers.org
+GIT location    : git://github.com/lxc/cgmanager
+IRC             : irc.freenode.net #lxcontainers
