@@ -27,7 +27,7 @@
 extern char *all_controllers;
 struct keys_return_type;
 
-int collect_subsystems(char *extra_mounts);
+int collect_subsystems(char *extra_mounts, char *skip_mounts);
 int setup_cgroup_mounts(void);
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		char *path, int *depth);

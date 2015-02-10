@@ -1341,9 +1341,18 @@ int list_keys_main(void *parent, const char *controller, const char *cgroup,
 }
 
 char *extra_cgroup_mounts;
+char *skip_cgroup_mounts;
 
 static int
-my_setter (NihOption *option, const char *arg)
+skip_mounts_set (NihOption *option, const char *arg)
+{
+	skip_cgroup_mounts = NIH_MUST( strdup(arg) );
+
+	return 0;
+}
+
+static int
+extra_mounts_set (NihOption *option, const char *arg)
 {
 	extra_cgroup_mounts = NIH_MUST( strdup(arg) );
 
@@ -1358,8 +1367,10 @@ my_setter (NihOption *option, const char *arg)
 static NihOption options[] = {
 	{ 0, "max-depth", N_("Maximum cgroup depth"),
 		NULL, NULL, &maxdepth, NULL },
+	{ 'M', "skip", N_("Subsystems to not mount"),
+		NULL, "subsystems to mount", NULL, skip_mounts_set },
 	{ 'm', "mount", N_("Extra subsystems to mount"),
-		NULL, "subsystems to mount", NULL, my_setter },
+		NULL, "subsystems to mount", NULL, extra_mounts_set },
 	{ 0, "daemon", N_("Detach and run in the background"),
 		NULL, NULL, &daemonise, NULL },
 	{ 0, "sigstop", N_("Raise SIGSTOP when ready"),
@@ -1498,7 +1509,7 @@ main (int argc, char *argv[])
 		return -1;
 	}
 
-	if (collect_subsystems(extra_cgroup_mounts) < 0)
+	if (collect_subsystems(extra_cgroup_mounts, skip_cgroup_mounts) < 0)
 	{
 		nih_fatal("failed to collect cgroup subsystems");
 		exit(1);

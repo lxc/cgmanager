@@ -67,6 +67,7 @@ struct controller_mounts {
 	struct controller_mounts *comounted;
 	bool premounted;
 	bool visited;
+	bool skip;
 };
 
 static struct controller_mounts *all_mounts;
@@ -336,6 +337,11 @@ static bool do_mount_subsys(int i)
 	dest = m->path;
 	controller = m->controller;
 	src = m->src;
+
+	if (m->skip) {
+		nih_info("Skipping mount of %s as requested\n", src);
+		return true;
+	}
 
 	if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
 		nih_fatal("Failed to create %s: %s", dest, strerror(errno));
@@ -626,7 +632,7 @@ static void build_controller_mntlist(void)
 	for (i = 0; i < num_controllers; i++) {
 		char *srclist;
 		m = &all_mounts[i];
-		if (m->visited)
+		if (m->visited || m->skip)
 			continue;
 		controller_mnts = realloc(controller_mnts,
 				(num_controller_mnts+1)*(sizeof(char *)));
@@ -667,6 +673,7 @@ static void print_debug_controller_info(void)
 		nih_debug("    src %s path %s options %s",
 			m->src, m->path ? m->path : "(none)", m->options ? m->options : "(none)");
 		nih_debug("    agent: %s", m->agent ? m->agent : "(none)");
+		nih_debug("    skipped: %s", m->skip ? "yes" : "no");
 		nih_debug("    premounted: %s comounted: %s",
 			m->premounted ? "yes" : "no",
 			m->comounted ? m->comounted->controller : "(none)");
@@ -719,7 +726,34 @@ void do_prune_comounts(char *controllers)
 	}
 }
 
-static void build_all_controllers(void)
+/*
+ * @list is a comma-separated list of words.
+ * Return true if @word is in @list.
+ */
+static bool word_in_list(char *word, char *list)
+{
+	char *p = list;
+	size_t wlen;
+
+	if (!list)
+		return false;
+
+	wlen = strlen(word);
+	while (p && *p) {
+		size_t len;
+		char *pe = strchr(p, ',');
+		len = pe ? pe - p : strlen(p);
+		if (len == wlen && strncmp(word, p, len) == 0)
+			return true;
+		if (pe)
+			pe++;
+		p = pe;
+	}
+
+	return false;
+}
+
+static void build_all_controllers(char *skip_mounts)
 {
 	int i;
 	char *c;
@@ -728,6 +762,10 @@ static void build_all_controllers(void)
 		c = all_mounts[i].src;
 		if (strncmp(c, "none,", 5) == 0)
 			c += 5;
+		if (word_in_list(c, skip_mounts)) {
+			all_mounts[i].skip = true;
+			continue;
+		}
 		if (!all_controllers)
 			all_controllers = NIH_MUST( nih_strdup(NULL, c) );
 		else
@@ -737,7 +775,7 @@ static void build_all_controllers(void)
 	do_prune_comounts(all_controllers);
 }
 
-int collect_subsystems(char *extra_mounts)
+int collect_subsystems(char *extra_mounts, char *skip_mounts)
 {
 	/* first collect all already-mounted subsystems */
 	if (!collect_premounted_subsystems())
@@ -760,7 +798,7 @@ int collect_subsystems(char *extra_mounts)
 	if (!collate_premounted_subsystems())
 		return -1;
 
-	build_all_controllers();
+	build_all_controllers(skip_mounts);
 
 	build_controller_mntlist();
 	print_debug_controller_info();
@@ -1570,6 +1608,8 @@ bool move_self_to_root(void)
 		nih_local char *path = NULL;
 
 		if (!all_mounts[i].path)
+			continue;
+		if (all_mounts[i].skip)
 			continue;
 		path = NIH_MUST( nih_sprintf(NULL, "%s/tasks", all_mounts[i].path) );
 		if ((f = fopen(path, "w")) == NULL)
