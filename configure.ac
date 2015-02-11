@@ -25,6 +25,8 @@ AC_PROG_CC_C99
 
 AC_PATH_PROG([NIH_DBUS_TOOL], [nih-dbus-tool])
 
+AC_CHECK_FUNCS([setns pivot_root])
+
 PKG_CHECK_MODULES([NIH], [libnih >= 1.0.3])
 PKG_CHECK_MODULES([NIH_DBUS], [libnih-dbus >= 1.0.0])
 PKG_CHECK_MODULES([DBUS], [dbus-1 >= 1.2.16])

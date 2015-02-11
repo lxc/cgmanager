@@ -56,6 +56,21 @@
 #define AGENT SBINDIR "/cgm-release-agent"
 #define AGENT_LINK_PATH "/run/cgmanager/agents"
 
+/* Define pivot_root() if missing from the C library */
+#ifndef HAVE_PIVOT_ROOT
+static int pivot_root(const char * new_root, const char * put_old)
+{
+#ifdef __NR_pivot_root
+return syscall(__NR_pivot_root, new_root, put_old);
+#else
+errno = ENOSYS;
+return -1;
+#endif
+}
+#else
+extern int pivot_root(const char * new_root, const char * put_old);
+#endif
+
 char *all_controllers;
 
 struct controller_mounts {
@@ -123,6 +138,10 @@ bool setup_base_run_path(void)
 	}
 	if (mkdir("/run/cgmanager/fs", 0755) < 0 && errno != EEXIST) {
 		nih_fatal("%s: failed to create /run/cgmanager/fs", __func__);
+		return false;
+	}
+	if (mount("cgmfs", "/run/cgmanager/fs", "tmpfs", 0, "size=100000,mode=0755") < 0) {
+		nih_fatal("%s: failed to mount tmpfs onto /run/cgmanager/fs", __func__);
 		return false;
 	}
 	if (mkdir(AGENT_LINK_PATH, 0755) < 0 && errno != EEXIST) {
@@ -806,6 +825,116 @@ int collect_subsystems(char *extra_mounts, char *skip_mounts)
 	return 0;
 }
 
+#define NEWROOT "/run/cgmanager/root"
+
+static int do_pivot(void) {
+	int oldroot = -1, newroot = -1;
+
+	oldroot = open("/", O_DIRECTORY | O_RDONLY);
+	if (oldroot < 0) {
+		nih_fatal("%s: Error opening old-/ for fchdir", __func__);
+		return -1;
+	}
+	newroot = open(NEWROOT, O_DIRECTORY | O_RDONLY);
+	if (newroot < 0) {
+		nih_fatal("%s: Error opening new-/ for fchdir", __func__);
+		goto fail;
+	}
+
+	/* change into new root fs */
+	if (fchdir(newroot)) {
+		nih_fatal("%s: can't chdir to new rootfs '%s'", __func__, NEWROOT);
+		goto fail;
+	}
+
+	/* pivot_root into our new root fs */
+	if (pivot_root(".", ".")) {
+		nih_fatal("%s: pivot_root syscall failed: %s",
+				__func__, strerror(errno));
+		goto fail;
+	}
+
+	/*
+	 * at this point the old-root is mounted on top of our new-root
+	 * To unmounted it we must not be chdir'd into it, so escape back
+	 * to old-root
+	 */
+	if (fchdir(oldroot) < 0) {
+		nih_fatal("%s: Error entering oldroot", __func__);
+		goto fail;
+	}
+	if (umount2(".", MNT_DETACH) < 0) {
+		nih_fatal("%s: Error detaching old root", __func__);
+		goto fail;
+	}
+
+	if (fchdir(newroot) < 0) {
+		nih_fatal("%s: Error re-entering newroot", __func__);
+		goto fail;
+	}
+
+	close(oldroot);
+	close(newroot);
+
+	return 0;
+
+fail:
+	if (oldroot != -1)
+		close(oldroot);
+	if (newroot != -1)
+		close(newroot);
+	return -1;
+}
+
+static int pivot_into_new_root(void) {
+	int i, ret;
+	char *createdirs[] = {NEWROOT "/proc", NEWROOT "/run",
+		NEWROOT "/run/cgmanager", NEWROOT "/run/cgmanager/fs", NULL};
+	char path[100];
+
+	/* Mount tmpfs for new root */
+	if (mkdir(NEWROOT, 0755) < 0 && errno != EEXIST) {
+		nih_fatal("%s: Failed to create directory for new root\n", __func__);
+		return -1;
+	}
+	ret = mount("root", NEWROOT, "tmpfs", 0, "size=10000,mode=0755");
+	if (ret < 0) {
+		nih_fatal("%s: Failed to mount tmpfs for root", __func__);
+		return -1;
+	}
+
+	/* create /proc and /run/cgmanager/fs, and move-mount those */
+	for (i = 0; createdirs[i]; i++) {
+		if (mkdir(createdirs[i], 0755) < 0) {
+			nih_fatal("%s: failed to created %s\n", __func__, createdirs[i]);
+			return -1;
+		}
+	}
+
+	ret = snprintf(path, 100, NEWROOT "/proc");
+	if (ret < 0 || ret > 100)
+		return -1;
+	if (mount("/proc", path, NULL, MS_REC|MS_MOVE, 0) < 0) {
+		nih_fatal("%s: failed to move /proc into new root: %s",
+			__func__, strerror(errno));
+		return -1;
+	}
+	ret = snprintf(path, 100, NEWROOT "/run/cgmanager/fs");
+	if (ret < 0 || ret > 100)
+		return -1;
+	if (mount("/run/cgmanager/fs", path, NULL, MS_REC|MS_MOVE, 0) < 0) {
+		nih_fatal("%s: failed to move /run/cgmanager/fs into new root: %s",
+			__func__, strerror(errno));
+		return -1;
+	}
+
+	/* Pivot into new root */
+	if (do_pivot() < 0)
+		return -1;
+
+	return 0;
+}
+
 /**
  * Mount the cgroup filesystems and record the information.
  * This should take configuration data from /etc.  For now,
@@ -827,8 +956,10 @@ int setup_cgroup_mounts(void)
 		return 0;
 	}
 
-	if (mount(NULL, "/", NULL, MS_REC|MS_SLAVE, 0) < 0)
-		nih_warn("Failed to re-mount / non-shared");
+	if (mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, 0) < 0) {
+		nih_warn("Failed to re-mount / private");
+		return -1;
+	}
 
 	/*
 	 * Mount a tmpfs on top of /root in case / is still ro when we
@@ -845,6 +976,12 @@ int setup_cgroup_mounts(void)
 			nih_fatal("Failed mounting cgroups");
 			return -1;
 		}
+	}
+
+	/* Now pivot into a new root */
+	if (pivot_into_new_root() < 0) {
+		nih_fatal("Failed pivoting into new root");
+		return -1;
 	}
 
 	return 0;
