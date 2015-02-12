@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "Test 26: getvalue of siblings"
+echo "Test 27: getvalue of siblings"
 
 cgm remove memory sibling || true
 cgm remove memory sibling1 || true
