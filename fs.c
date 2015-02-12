@@ -1899,3 +1899,34 @@ bool was_premounted(const char *controller)
 		return false;
 	return all_mounts[i].premounted;
 }
+
+/*
+ * Check that (absolute) @path is under @pid's cgroup for @contr
+ */
+bool path_is_under_taskcg(pid_t pid, const char *contr,const char *path)
+{
+	char pcgpath[MAXPATHLEN];
+	size_t plen;
+
+	// Get p's current cgroup in pcgpath
+	if (!compute_pid_cgroup(pid, contr, "", pcgpath, NULL)) {
+		nih_error("%s: Could not determine the proxy's cgroup for %s",
+				__func__, contr);
+		return false;
+	}
+	plen = strlen(pcgpath);
+	// path must start with pcgpath
+	if (strncmp(pcgpath, path, plen) != 0)
+		return false;
+	// If path is equal to pcgpath then that's ok
+	if (plen == strlen(path))
+		return true;
+	/*
+	 * if path is longer than pcpgath, then it must be a subdirectory
+	 * of pcpgpath. I.e. if pcgpath is /xxx then /xxx/a is ok, /xxx2 is
+	 * not.
+	 */
+	if (path[plen] == '/')
+		return true;
+	return false;
+}

@@ -557,17 +557,10 @@ next:
 int get_value_main(void *parent, const char *controller, const char *cgroup,
 		const char *key, struct ucred p, struct ucred r, char **value)
 {
-	char pcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	char path[MAXPATHLEN];
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
-	// Get p's current cgroup in pcgpath
-	if (!compute_pid_cgroup(p.pid, controller, "", pcgpath, NULL)) {
-		nih_error("%s: Could not determine the proxy's cgroup for %s",
-				__func__, controller);
 		return -1;
 	}
 
@@ -583,9 +576,7 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	// Make sure target cgroup is under proxy's
-	int plen = strlen(pcgpath);
-	if (strncmp(pcgpath, path, plen) != 0) {
+	if (!path_is_under_taskcg(p.pid, controller, path)) {
 		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
@@ -622,17 +613,10 @@ int set_value_main(const char *controller, const char *cgroup,
 		struct ucred r)
 
 {
-	char pcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	char path[MAXPATHLEN];
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
-	// Get p's current cgroup in pcgpath
-	if (!compute_pid_cgroup(p.pid, controller, "", pcgpath, NULL)) {
-		nih_error("%s: Could not determine the proxy's cgroup for %s",
-				__func__, controller);
 		return -1;
 	}
 
@@ -642,9 +626,7 @@ int set_value_main(const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	// Make sure target cgroup is under proxy's
-	int plen = strlen(pcgpath);
-	if (strncmp(pcgpath, path, plen) != 0) {
+	if (!path_is_under_taskcg(p.pid, controller, path)) {
 		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
@@ -852,19 +834,12 @@ next:
 int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 			struct ucred p, struct ucred r, int32_t **pids)
 {
-	char pcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	char path[MAXPATHLEN];
 	const char *key = "tasks";
 	int alloced_pids = 0, nrpids = 0;
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
-	// Get p's current cgroup in pcgpath
-	if (!compute_pid_cgroup(p.pid, controller, "", pcgpath, NULL)) {
-		nih_error("%s: Could not determine the proxy's cgroup for %s",
-				__func__, controller);
 		return -1;
 	}
 
@@ -874,9 +849,7 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	// Make sure target cgroup is under proxy's
-	int plen = strlen(pcgpath);
-	if (strncmp(pcgpath, path, plen) != 0) {
+	if (!path_is_under_taskcg(p.pid, controller, path)) {
 		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
@@ -951,18 +924,11 @@ int collect_tasks(void *parent, const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, int32_t **pids,
 		int *alloced_pids, int *nrpids)
 {
-	char pcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	char path[MAXPATHLEN];
 	nih_local char *rpath = NULL;
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
-	// Get p's current cgroup in pcgpath
-	if (!compute_pid_cgroup(p.pid, controller, "", pcgpath, NULL)) {
-		nih_error("%s: Could not determine the proxy's cgroup for %s",
-				__func__, controller);
 		return -1;
 	}
 
@@ -972,9 +938,7 @@ int collect_tasks(void *parent, const char *controller, const char *cgroup,
 		return -2;
 	}
 
-	// Make sure target cgroup is under proxy's
-	int plen = strlen(pcgpath);
-	if (strncmp(pcgpath, path, plen) != 0) {
+	if (!path_is_under_taskcg(p.pid, controller, path)) {
 		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
@@ -1044,18 +1008,11 @@ next:
 int list_children_main(void *parent, const char *controller, const char *cgroup,
 			struct ucred p, struct ucred r, char ***output)
 {
-	char pcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	char path[MAXPATHLEN];
 
 	*output = NULL;
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
-		return -1;
-	}
-
-	// Get p's current cgroup in pcgpath
-	if (!compute_pid_cgroup(p.pid, controller, "", pcgpath, NULL)) {
-		nih_error("%s: Could not determine the proxy's cgroup for %s",
-				__func__, controller);
 		return -1;
 	}
 
@@ -1065,9 +1022,7 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	// Make sure target cgroup is under proxy's
-	int plen = strlen(pcgpath);
-	if (strncmp(pcgpath, path, plen) != 0) {
+	if (!path_is_under_taskcg(p.pid, controller, path)) {
 		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
