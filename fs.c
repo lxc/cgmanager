@@ -902,15 +902,6 @@ static int pivot_into_new_root(void) {
 		return -1;
 	}
 
-	/* create /proc and /run/cgmanager/fs, and move-mount those */
-	for (i = 0; createdirs[i]; i++) {
-		if (mkdir(createdirs[i], 0755) < 0 && errno != EEXIST) {
-			nih_fatal("%s: failed to create %s: %s\n", __func__,
-				createdirs[i], strerror(errno));
-			return -1;
-		}
-	}
-
 	ret = snprintf(path, 100, NEWROOT "/proc");
 	if (ret < 0 || ret > 100)
 		return -1;
@@ -919,6 +910,25 @@ static int pivot_into_new_root(void) {
 			__func__, strerror(errno));
 		return -1;
 	}
+
+	ret = snprintf(path, 100, NEWROOT "/run");
+	if (ret < 0 || ret > 100)
+		return -1;
+	ret = mount("/run", path, NULL, MS_BIND, 0);
+	if (ret < 0) {
+		nih_fatal("%s: failed to move /run into new root: %s",
+			__func__, strerror(errno));
+		return -1;
+	}
+
+	for (i = 0; createdirs[i]; i++) {
+		if (mkdir(createdirs[i], 0755) < 0 && errno != EEXIST) {
+			nih_fatal("%s: failed to create %s : %s\n", __func__,
+				createdirs[i], strerror(errno));
+			return -1;
+		}
+	}
+
 	ret = snprintf(path, 100, NEWROOT "/run/cgmanager/fs");
 	if (ret < 0 || ret > 100)
 		return -1;
