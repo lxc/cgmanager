@@ -888,8 +888,7 @@ fail:
 
 static int pivot_into_new_root(void) {
 	int i, ret;
-	char *createdirs[] = {NEWROOT "/proc", NEWROOT "/run",
-		NEWROOT "/run/cgmanager", NEWROOT "/run/cgmanager/fs", NULL};
+	char *createdirs[] = {NEWROOT "/run/cgmanager", NEWROOT "/run/cgmanager/fs", NULL};
 	char path[100];
 
 	/* Mount tmpfs for new root */
@@ -897,16 +896,17 @@ static int pivot_into_new_root(void) {
 		nih_fatal("%s: Failed to create directory for new root\n", __func__);
 		return -1;
 	}
-	ret = mount("root", NEWROOT, "tmpfs", 0, "size=10000,mode=0755");
+	ret = mount("/", NEWROOT, NULL, MS_BIND, 0);
 	if (ret < 0) {
-		nih_fatal("%s: Failed to mount tmpfs for root", __func__);
+		nih_fatal("%s: Failed to bind-mount / for new root", __func__);
 		return -1;
 	}
 
 	/* create /proc and /run/cgmanager/fs, and move-mount those */
 	for (i = 0; createdirs[i]; i++) {
-		if (mkdir(createdirs[i], 0755) < 0) {
-			nih_fatal("%s: failed to created %s\n", __func__, createdirs[i]);
+		if (mkdir(createdirs[i], 0755) < 0 && errno != EEXIST) {
+			nih_fatal("%s: failed to create %s: %s\n", __func__,
+				createdirs[i], strerror(errno));
 			return -1;
 		}
 	}
