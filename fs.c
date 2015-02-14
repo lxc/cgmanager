@@ -889,7 +889,6 @@ fail:
 static int pivot_into_new_root(void) {
 	int i, ret;
 	char *createdirs[] = {NEWROOT "/run/cgmanager", NEWROOT "/run/cgmanager/fs", NULL};
-	char path[100];
 
 	/* Mount tmpfs for new root */
 	if (mkdir(NEWROOT, 0755) < 0 && errno != EEXIST) {
@@ -902,19 +901,13 @@ static int pivot_into_new_root(void) {
 		return -1;
 	}
 
-	ret = snprintf(path, 100, NEWROOT "/proc");
-	if (ret < 0 || ret > 100)
-		return -1;
-	if (mount("/proc", path, NULL, MS_REC|MS_MOVE, 0) < 0) {
+	if (mount("/proc", NEWROOT "/proc", NULL, MS_REC|MS_MOVE, 0) < 0) {
 		nih_fatal("%s: failed to move /proc into new root: %s",
 			__func__, strerror(errno));
 		return -1;
 	}
 
-	ret = snprintf(path, 100, NEWROOT "/run");
-	if (ret < 0 || ret > 100)
-		return -1;
-	ret = mount("/run", path, NULL, MS_BIND, 0);
+	ret = mount("/run", NEWROOT "/run", NULL, MS_BIND, 0);
 	if (ret < 0) {
 		nih_fatal("%s: failed to move /run into new root: %s",
 			__func__, strerror(errno));
@@ -929,10 +922,7 @@ static int pivot_into_new_root(void) {
 		}
 	}
 
-	ret = snprintf(path, 100, NEWROOT "/run/cgmanager/fs");
-	if (ret < 0 || ret > 100)
-		return -1;
-	if (mount("/run/cgmanager/fs", path, NULL, MS_REC|MS_MOVE, 0) < 0) {
+	if (mount("/run/cgmanager/fs", NEWROOT "/run/cgmanager/fs", NULL, MS_REC|MS_MOVE, 0) < 0) {
 		nih_fatal("%s: failed to move /run/cgmanager/fs into new root: %s",
 			__func__, strerror(errno));
 		return -1;
