@@ -29,6 +29,11 @@ if cgm listchildren freezer prune0 2>/dev/null; then
 	exit 1
 fi
 
+if ! grep  -q cgm-release-agent /proc/$(pidof cgmanager)/root/run/cgmanager/fs/freezer/release_agent; then
+	echo "freezer was pre-mounted;  skipping prune test requiring release agent"
+	exit 0
+fi
+
 # Test that prune effects after all tasks die
 cgm create freezer prune1
 sleep 3 &
