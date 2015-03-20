@@ -48,13 +48,4 @@ if ! which lxc-usernsexec > /dev/null 2>&1; then
 	exit 0
 fi
 
-echo "Running userns tests"
-count=1
-for t in $DIR/usernstest*.sh; do
-	f="./$(basename $t)"
-	$f || { echo "Userns test $count failed."; exit 1; }
-	count=$((count+1))
-done
-
-
 echo "All tests passed"
