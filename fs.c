@@ -623,18 +623,15 @@ again:
 		list = f+len;
 		goto again;
 	}
-	if (f[len] == '\0') {
+	/* now we know for sure that [f-1,f+len+1] == ",f," */
+	if (f[len])
+		memmove(f, f+len+1, strlen(f+len+1)+1);
+	else {
 		if (f > origlist)
 			*(f-1) = '\0';
 		else
 			*f = '\0';
-		return;
 	}
-	/* now we know for sure that [f-1,f+len+1] == ",f," */
-	if (f[len])
-		memmove(f, f+len+1, strlen(f+len+1)+1);
-	else
-		*(f-1) = '\0';
 	goto again;
 }
 
