@@ -1345,6 +1345,10 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 }
 
 #define SYSTEMD_CGPROXY_SLICE "/system.slice/cgproxy.service"
+/*
+ * compute_proxy_cgroup - same as compute_pid_cgroup, but chops of the
+ * final /system.slice/cgproxy.service.
+ */
 bool compute_proxy_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		char *path, int *depth)
 {

@@ -31,6 +31,8 @@ int collect_subsystems(char *extra_mounts, char *skip_mounts);
 int setup_cgroup_mounts(void);
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		char *path, int *depth);
+bool compute_proxy_cgroup(pid_t pid, const char *controller, const char *cgroup,
+		char *path, int *depth);
 bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode);
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid);
 char *file_read_string(void *parent, const char *path);
