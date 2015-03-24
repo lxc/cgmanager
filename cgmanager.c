@@ -38,7 +38,7 @@ int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
 				__func__, controller);
 		return -1;
@@ -73,7 +73,7 @@ int get_pid_cgroup_abs_main(void *parent, const char *controller,struct ucred p,
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
 
 	// Get p's current cgroup in rcgpath
-	if (!compute_pid_cgroup(p.pid, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(p.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
 				__func__, controller);
 		return -1;
@@ -126,7 +126,7 @@ int per_ctrl_move_pid_main(const char *controller, const char *cgroup, struct uc
 	// Get r's current cgroup in rcgpath
 	if (escape)
 		query = p.pid;
-	if (!compute_pid_cgroup(query, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(query, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
                 __func__, controller);
 		return -1;
@@ -256,7 +256,7 @@ int do_create_main(const char *controller, const char *cgroup, struct ucred p,
 
 	*existed = 1;
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, &depth)) {
+	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, &depth)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
                 __func__, controller);
 		return -1;
@@ -384,7 +384,7 @@ int do_chown_main(const char *controller, const char *cgroup, struct ucred p,
 	nih_local char *path = NULL;
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
                 __func__, controller);
 		return -1;
@@ -476,7 +476,7 @@ int do_chmod_main(const char *controller, const char *cgroup, const char *file,
 	nih_local char *path = NULL;
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
                 __func__, controller);
 		return -1;
@@ -564,7 +564,7 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
                 __func__, controller, cgroup);
 		return -1;
@@ -620,7 +620,7 @@ int set_value_main(const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
                 __func__, controller, cgroup);
 		return -1;
@@ -741,7 +741,7 @@ int do_remove_main(const char *controller, const char *cgroup, struct ucred p,
 
 	*existed = 1;
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
                 __func__, controller);
 		return -1;
@@ -843,7 +843,7 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
                 __func__, controller, cgroup);
 		return -1;
@@ -932,7 +932,7 @@ int collect_tasks(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
                 __func__, controller, cgroup);
 		return -2;
@@ -1016,7 +1016,7 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
                 __func__, controller, cgroup);
 		return -1;
@@ -1050,7 +1050,7 @@ int do_remove_on_empty_main(const char *controller, const char *cgroup,
 	}
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
                 __func__, controller);
 		return -1;
@@ -1180,7 +1180,7 @@ int do_prune_main(const char *controller, const char *cgroup,
 	nih_local char *working = NULL, *wcgroup = NULL;
 
 	// Get r's current cgroup in rcgpath
-	if (!compute_pid_cgroup(r.pid, controller, "", rcgpath, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, NULL)) {
 		nih_error("%s: Could not determine the requestor's cgroup for %s",
                 __func__, controller);
 		return -1;
@@ -1272,7 +1272,7 @@ int list_keys_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	if (!compute_pid_cgroup(r.pid, controller, cgroup, path, NULL)) {
+	if (!compute_proxy_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
                 __func__, controller, cgroup);
 		return -1;

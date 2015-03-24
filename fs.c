@@ -1344,6 +1344,28 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 	return true;
 }
 
+#define SYSTEMD_CGPROXY_SLICE "/system.slice/cgproxy.service"
+bool compute_proxy_cgroup(pid_t pid, const char *controller, const char *cgroup,
+		char *path, int *depth)
+{
+	bool ret;
+	size_t slen = strlen(SYSTEMD_CGPROXY_SLICE);
+	size_t pathlen;
+
+	ret = compute_pid_cgroup(pid, controller, cgroup, path, depth);
+	if (!ret)
+		return ret;
+
+	pathlen = strlen(path);
+	if (pathlen <= slen)
+		return ret;
+
+	char *point = path + pathlen - slen;
+	if (strncmp(point, SYSTEMD_CGPROXY_SLICE, slen) == 0)
+		*point = '\0';
+	return ret;
+}
+
 /*
  * file_read_string:
  *
