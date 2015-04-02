@@ -32,10 +32,16 @@
 static int maxdepth = 16;
 
 /* GetPidCgroup */
-int get_pid_cgroup_main(void *parent, const char *controller,struct ucred p,
+int get_pid_cgroup_main(void *parent, const char *controller, struct ucred p,
 			 struct ucred r, struct ucred v, char **output)
 {
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
+
+	if (!(prune_verify_comounts(controller))) {
+		nih_error("%s: Multiple controllers given: %s",
+				__func__, controller);
+		return -1;
+	}
 
 	// Get r's current cgroup in rcgpath
 	if (!compute_proxy_cgroup(r.pid, controller, "", rcgpath, NULL)) {
@@ -71,6 +77,12 @@ int get_pid_cgroup_abs_main(void *parent, const char *controller,struct ucred p,
 			 struct ucred r, struct ucred v, char **output)
 {
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
+
+	if (!(prune_verify_comounts(controller))) {
+		nih_error("%s: Multiple controllers given: %s",
+				__func__, controller);
+		return -1;
+	}
 
 	// Get p's current cgroup in rcgpath
 	if (!compute_proxy_cgroup(p.pid, controller, "", rcgpath, NULL)) {
@@ -559,6 +571,12 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 {
 	char path[MAXPATHLEN];
 
+	if (!(prune_verify_comounts(controller))) {
+		nih_error("%s: Multiple controllers given: %s",
+				__func__, controller);
+		return -1;
+	}
+
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
 		return -1;
@@ -614,6 +632,12 @@ int set_value_main(const char *controller, const char *cgroup,
 
 {
 	char path[MAXPATHLEN];
+
+	if (!(prune_verify_comounts(controller))) {
+		nih_error("%s: Multiple controllers given: %s",
+				__func__, controller);
+		return -1;
+	}
 
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
@@ -843,6 +867,12 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 		return -1;
 	}
 
+	if (!(prune_verify_comounts(controller))) {
+		nih_error("%s: Multiple controllers given: %s",
+				__func__, controller);
+		return -1;
+	}
+
 	if (!compute_proxy_cgroup(r.pid, controller, cgroup, path, NULL)) {
 		nih_error("%s: Could not determine the requested cgroup (%s:%s)",
                 __func__, controller, cgroup);
@@ -1013,6 +1043,12 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 	*output = NULL;
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!(prune_verify_comounts(controller))) {
+		nih_error("%s: Multiple controllers given: %s",
+				__func__, controller);
 		return -1;
 	}
 
@@ -1269,6 +1305,12 @@ int list_keys_main(void *parent, const char *controller, const char *cgroup,
 	*output = NULL;
 	if (!sane_cgroup(cgroup)) {
 		nih_error("%s: unsafe cgroup", __func__);
+		return -1;
+	}
+
+	if (!(prune_verify_comounts(controller))) {
+		nih_error("%s: Multiple controllers given: %s",
+				__func__, controller);
 		return -1;
 	}
 

@@ -57,6 +57,7 @@ bool setup_base_run_path(void);
 bool create_agent_symlinks(void);
 bool was_premounted(const char *controller);
 void do_prune_comounts(char *controllers);
+bool prune_verify_comounts(char *controllers);
 void do_list_controllers(void *parent, char ***output);
 void convert_directory_contents(struct keys_return_type **keys, struct ucred r);
 bool path_is_under_taskcg(pid_t pid, const char *contr,const char *path);

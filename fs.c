@@ -750,6 +750,26 @@ void do_prune_comounts(char *controllers)
 }
 
 /*
+ * If we are passed 'cpu', do nothing and return true.
+ * If we are passed 'cpu,cpuacct,devices', and all three are comounted,
+ *   set controllers to 'cpu' and return true.
+ * If we are passed 'cpu,cpuacct,devices', and all three are not comounted,
+ *   return false.
+ */
+bool prune_verify_comounts(char *controllers)
+{
+	char *comma;
+	do_prune_comounts(controllers);
+	comma = strchr(controllers, ',');
+	if (!comma)
+		return true;
+	if (*(comma+1) != '\0')
+		return false;
+	*comma = '\0';
+	return true;
+}
+
+/*
  * @list is a comma-separated list of words.
  * Return true if @word is in @list.
  */
