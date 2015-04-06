@@ -985,16 +985,6 @@ int setup_cgroup_mounts(void)
 		return -1;
 	}
 
-	/*
-	 * Mount a tmpfs on top of /root in case / is still ro when we
-	 * started, so we can write the org_freedesktop_general.lock
-	 */
-	if (dir_exists("/root")) {
-		if (mount("root", "/root", "tmpfs", 0, "size=10000") < 0) {
-			nih_warn("Failed to mount a writeable tmpfs onto /root");
-		}
-	}
-
 	for (i=0; i<num_controllers; i++) {
 		if (!do_mount_subsys(i)) {
 			nih_fatal("Failed mounting cgroups");
@@ -1006,6 +996,16 @@ int setup_cgroup_mounts(void)
 	if (pivot_into_new_root() < 0) {
 		nih_fatal("Failed pivoting into new root");
 		return -1;
+	}
+
+	/*
+	 * Mount a tmpfs on top of /root in case / is still ro when we
+	 * started, so we can write the org_freedesktop_general.lock
+	 */
+	if (dir_exists("/root")) {
+		if (mount("root", "/root", "tmpfs", 0, "size=10000") < 0) {
+			nih_warn("Failed to mount a writeable tmpfs onto /root");
+		}
 	}
 
 	return 0;
