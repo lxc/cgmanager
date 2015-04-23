@@ -103,10 +103,10 @@ cgm.1: cgm cgm.man.add
 endif
 
 install-exec-local:
-	$(MKDIR_P) $(DESTDIR)/usr/share/cgmanager/tests
+	$(MKDIR_P) $(DESTDIR)$(datarootdir)/cgmanager/tests
 	cd tests; \
 	for f in *.sh; do \
-	install -c -m 755 $$f $(DESTDIR)/usr/share/cgmanager/tests; \
+	install -c -m 755 $$f $(DESTDIR)$(datarootdir)/cgmanager/tests; \
 	done
 
 rpm: dist
