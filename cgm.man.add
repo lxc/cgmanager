@@ -21,5 +21,17 @@ Then to freeze that cgroup,
 .br
 cgm setvalue freezer foo freezer.state FROZEN
 
+[NOTES]
+
+In order to protect the host from root in containers, cgmanager locks
+prevents tasks from administering cgroups which are not under their
+own.  The exceptions are that root in a container may escape up to
+the cgroup of its cgproxy, and root on the host may escape to the
+root cgroup.
+
+This means that a user in freezer cgroup /foo cannot list cgroups in
+/.  However, as root he can use movepidabs to escape to /, then
+list cgroups in /.
+
 [SEE ALSO]
 cgmanager(8)
