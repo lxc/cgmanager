@@ -3,6 +3,8 @@
 AC_PREREQ(2.61)
 AC_INIT([cgmanager], [0.36], [cgmanager-devel@lists.linuxcontainers.org])
 
+AM_INIT_AUTOMAKE
+
 AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_FILES([
@@ -16,11 +18,9 @@ AC_CONFIG_FILES([
 	libcgmanager.pc.in
 	cgmanager.spec])
 
-AM_INIT_AUTOMAKE
-
+AC_CONFIG_MACRO_DIR([m4])
 LT_INIT
 AC_PROG_CC
-
 AC_PROG_CC_C99
 
 AC_PATH_PROG([NIH_DBUS_TOOL], [nih-dbus-tool])
