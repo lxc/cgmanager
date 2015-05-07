@@ -590,12 +590,12 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
 	if (!path_is_under_taskcg(p.pid, controller, path)) {
-		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
+		nih_debug("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
 	}
@@ -611,7 +611,7 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 
 	/* Check access rights to the file itself */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
@@ -651,14 +651,14 @@ int set_value_main(const char *controller, const char *cgroup,
 	}
 
 	if (!path_is_under_taskcg(p.pid, controller, path)) {
-		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
+		nih_debug("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
@@ -673,7 +673,7 @@ int set_value_main(const char *controller, const char *cgroup,
 
 	/* Check access rights to the file itself */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
@@ -880,14 +880,14 @@ int get_tasks_main(void *parent, const char *controller, const char *cgroup,
 	}
 
 	if (!path_is_under_taskcg(p.pid, controller, path)) {
-		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
+		nih_debug("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
@@ -969,14 +969,14 @@ int collect_tasks(void *parent, const char *controller, const char *cgroup,
 	}
 
 	if (!path_is_under_taskcg(p.pid, controller, path)) {
-		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
+		nih_debug("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -2;
 	}
 
@@ -1059,14 +1059,14 @@ int list_children_main(void *parent, const char *controller, const char *cgroup,
 	}
 
 	if (!path_is_under_taskcg(p.pid, controller, path)) {
-		nih_error("%s: target cgroup is not below r (%d)'s", __func__,
+		nih_debug("%s: target cgroup is not below r (%d)'s", __func__,
 			r.pid);
 		return -1;
 	}
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 
@@ -1322,7 +1322,7 @@ int list_keys_main(void *parent, const char *controller, const char *cgroup,
 
 	/* Check access rights to the cgroup directory */
 	if (!may_access(r.pid, r.uid, r.gid, path, O_RDONLY)) {
-		nih_error("%s: Pid %d may not access %s\n", __func__, r.pid, path);
+		nih_debug("%s: Pid %d may not access %s\n", __func__, r.pid, path);
 		return -1;
 	}
 

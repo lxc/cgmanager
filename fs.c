@@ -1216,7 +1216,7 @@ bool may_access(pid_t pid, uid_t uid, gid_t gid, const char *path, int mode)
 
 	ret = stat(path, &sb);
 	if (ret < 0) {
-		nih_error("Could not look up %s\n", path);
+		nih_debug("Could not look up %s\n", path);
 		return false;
 	}
 
