@@ -87,15 +87,6 @@ static bool cgm_dbus_connect(void)
 		dbus_error_free(&dbus_error);
 		return false;
 	}
-	if (nih_dbus_setup(connection, NULL) < 0) {
-		NihError *nerr;
-		nerr = nih_error_get();
-		nih_free(nerr);
-		dbus_error_free(&dbus_error);
-		dbus_connection_unref(connection);
-		connection = NULL;
-		return false;
-	}
 	dbus_connection_set_exit_on_disconnect(connection, FALSE);
 	dbus_error_free(&dbus_error);
 	cgroup_manager = nih_dbus_proxy_new(NULL, connection,
@@ -132,6 +123,7 @@ static void do_function(void *arguments)
 	char path[100];
 	int existed;
 	char *value;
+	bool err = false;
 
 	if (!cgm_dbus_connect()) {
 		fprintf(stderr, "Error connecting to dbus\n");
@@ -142,19 +134,29 @@ static void do_function(void *arguments)
 
 	if (connect_only) {
 		if (cgmanager_create_sync(NULL, cgroup_manager, "freezer", path, &existed) != 0) {
-			fprintf(stderr, "Error creating freezer cgroup\n");
-			exit(1);
+			NihError *nerr = nih_error_get();
+			fprintf(stderr, "Error creating freezer cgroup: %s\n", nerr->message);
+			nih_free(nerr);
+			err = true;
 		}
 		if (cgmanager_get_value_sync(NULL, cgroup_manager, "freezer", path, "freezer.state", &value) != 0) {
-			fprintf(stderr, "Error querying freezer cgroup\n");
-			exit(1);
+			NihError *nerr = nih_error_get();
+			fprintf(stderr, "Error querying freezer cgroup: %s\n", nerr->message);
+			nih_free(nerr);
+			err = true;
 		}
 		if (cgmanager_remove_sync(NULL, cgroup_manager, "freezer", path, 1, &existed) != 0) {
-			fprintf(stderr, "Error removing freezer cgroup\n");
-			exit(1);
+			NihError *nerr = nih_error_get();
+			fprintf(stderr, "Error removing freezer cgroup: %s\n", nerr->message);
+			nih_free(nerr);
+			err = true;
 		}
 	}
 	cgm_dbus_disconnect();
+	if (err) {
+		fflush(stderr);
+		exit(1);
+	}
 }
 
 static void *concurrent(void *arguments)
