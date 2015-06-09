@@ -254,7 +254,7 @@ static bool complete_dbus_request(DBusMessage *message,
 	return true;
 }
 
-int get_pid_cgroup_main (void *parent, const char *controller,
+int get_pid_cgroup_main (void *parent, char *controller,
 		struct ucred p, struct ucred r, struct ucred v, char **output)
 {
 	DBusMessage *message;
@@ -304,7 +304,7 @@ out:
 	return ret;
 }
 
-int get_pid_cgroup_abs_main (void *parent, const char *controller,
+int get_pid_cgroup_abs_main (void *parent, char *controller,
 		struct ucred p, struct ucred r, struct ucred v, char **output)
 {
 	DBusMessage *message;
@@ -619,7 +619,7 @@ out:
 	return ret;
 }
 
-int get_value_main (void *parent, const char *controller, const char *cgroup,
+int get_value_main (void *parent, char *controller, const char *cgroup,
 		 const char *key, struct ucred p, struct ucred r, char **value)
 {
 	DBusMessage *message;
@@ -682,7 +682,7 @@ out:
 	return ret;
 }
 
-int set_value_main (const char *controller, const char *cgroup,
+int set_value_main (char *controller, const char *cgroup,
 		 const char *key, const char *value, struct ucred p,
 		 struct ucred r)
 {
@@ -805,7 +805,7 @@ out:
 	return ret;
 }
 
-int get_tasks_main (void *parent, const char *controller, const char *cgroup,
+int get_tasks_main (void *parent, char *controller, const char *cgroup,
 		    struct ucred p, struct ucred r, int32_t **pids)
 {
 	DBusMessage *message;
@@ -956,7 +956,7 @@ out:
 	return ret;
 }
 
-int list_children_main (void *parent, const char *controller, const char *cgroup,
+int list_children_main (void *parent, char *controller, const char *cgroup,
 		    struct ucred p, struct ucred r, char ***output)
 {
 	DBusMessage *message;
@@ -1244,7 +1244,7 @@ static char *find_eol(char *s)
 	return s;
 }
 
-int list_keys_main (void *parent, const char *controller, const char *cgroup,
+int list_keys_main (void *parent, char *controller, const char *cgroup,
 		    struct ucred p, struct ucred r,
 		    struct keys_return_type ***output)
 {

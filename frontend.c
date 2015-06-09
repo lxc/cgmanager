@@ -217,7 +217,7 @@ void get_pid_scm_complete(struct scm_sock_data *data)
  * Caller requests the cgroup of @pid in a given @controller
  */
 int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
-			const char *controller, int sockfd)
+			char *controller, int sockfd)
 {
 	struct scm_sock_data *d;
 
@@ -248,7 +248,7 @@ int cgmanager_get_pid_cgroup_scm (void *data, NihDBusMessage *message,
  * Caller requests the cgroup of @pid in a given @controller
  */
 int cgmanager_get_pid_cgroup (void *data, NihDBusMessage *message,
-			const char *controller, int plain_pid, char **output)
+			char *controller, int plain_pid, char **output)
 {
 	int fd = 0, ret;
 	struct ucred rcred, vcred;
@@ -325,7 +325,7 @@ void get_pid_abs_scm_complete(struct scm_sock_data *data)
  * to the proxy's
  */
 int cgmanager_get_pid_cgroup_abs_scm (void *data, NihDBusMessage *message,
-			const char *controller, int sockfd)
+			char *controller, int sockfd)
 {
 	struct scm_sock_data *d;
 
@@ -357,7 +357,7 @@ int cgmanager_get_pid_cgroup_abs_scm (void *data, NihDBusMessage *message,
  * to the proxy's
  */
 int cgmanager_get_pid_cgroup_abs (void *data, NihDBusMessage *message,
-			const char *controller, int plain_pid, char **output)
+			char *controller, int plain_pid, char **output)
 {
 	int fd = 0, ret;
 	struct ucred rcred, vcred;
@@ -919,7 +919,7 @@ void get_value_complete(struct scm_sock_data *data)
 }
 
 int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
+				 char *controller, const char *req_cgroup,
 				 const char *key, int sockfd)
 {
 	struct scm_sock_data *d;
@@ -958,7 +958,7 @@ int cgmanager_get_value_scm (void *data, NihDBusMessage *message,
  * pretend to be the cgroup root which is annoying in itself
  */
 int cgmanager_get_value (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
+				 char *controller, const char *req_cgroup,
 				 const char *key, char **value)
 
 {
@@ -1007,7 +1007,7 @@ void set_value_complete(struct scm_sock_data *data)
 }
 
 int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
+				 char *controller, const char *req_cgroup,
 				 const char *key, const char *value, int sockfd)
 {
 	struct scm_sock_data *d;
@@ -1043,7 +1043,7 @@ int cgmanager_set_value_scm (void *data, NihDBusMessage *message,
  * to the caller's cgroup.
  */
 int cgmanager_set_value (void *data, NihDBusMessage *message,
-				 const char *controller, const char *req_cgroup,
+				 char *controller, const char *req_cgroup,
 				 const char *key, const char *value)
 
 {
@@ -1209,7 +1209,7 @@ again:
 }
 
 int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
-		 const char *controller, const char *cgroup, int sockfd)
+		 char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
 
@@ -1239,7 +1239,7 @@ int cgmanager_get_tasks_scm (void *data, NihDBusMessage *message,
  * Caller requests the number of tasks in @cgroup in @controller
  * returns nrpids, or -1 on error.
  */
-int cgmanager_get_tasks (void *data, NihDBusMessage *message, const char *controller,
+int cgmanager_get_tasks (void *data, NihDBusMessage *message, char *controller,
 			const char *cgroup, int32_t **pids, size_t *nrpids)
 {
 	int fd = 0, ret;
@@ -1452,7 +1452,7 @@ void list_children_scm_complete(struct scm_sock_data *data)
 }
 
 int cgmanager_list_children_scm (void *data, NihDBusMessage *message,
-		 const char *controller, const char *cgroup, int sockfd)
+		 char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
 
@@ -1483,7 +1483,7 @@ int cgmanager_list_children_scm (void *data, NihDBusMessage *message,
  * returns nrpids, or -1 on error.
  */
 int cgmanager_list_children (void *data, NihDBusMessage *message,
-		const char *controller, const char *cgroup, char ***output)
+		char *controller, const char *cgroup, char ***output)
 {
 	int fd = 0, ret;
 	struct ucred rcred;
@@ -1781,7 +1781,7 @@ void list_keys_scm_complete(struct scm_sock_data *data)
 }
 
 int cgmanager_list_keys_scm (void *data, NihDBusMessage *message,
-		 const char *controller, const char *cgroup, int sockfd)
+		 char *controller, const char *cgroup, int sockfd)
 {
 	struct scm_sock_data *d;
 
@@ -1812,7 +1812,7 @@ int cgmanager_list_keys_scm (void *data, NihDBusMessage *message,
  * returns nrkeys, or -1 on error.
  */
 int cgmanager_list_keys (void *data, NihDBusMessage *message,
-		const char *controller, const char *cgroup,
+		char *controller, const char *cgroup,
 		struct keys_return_type ***output)
 {
 	int fd = 0, ret;

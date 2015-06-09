@@ -32,7 +32,7 @@
 static int maxdepth = 16;
 
 /* GetPidCgroup */
-int get_pid_cgroup_main(void *parent, const char *controller, struct ucred p,
+int get_pid_cgroup_main(void *parent, char *controller, struct ucred p,
 			 struct ucred r, struct ucred v, char **output)
 {
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
@@ -73,7 +73,7 @@ int get_pid_cgroup_main(void *parent, const char *controller, struct ucred p,
 }
 
 /* GetPidCgroupAbs */
-int get_pid_cgroup_abs_main(void *parent, const char *controller,struct ucred p,
+int get_pid_cgroup_abs_main(void *parent, char *controller,struct ucred p,
 			 struct ucred r, struct ucred v, char **output)
 {
 	char rcgpath[MAXPATHLEN], vcgpath[MAXPATHLEN];
@@ -566,7 +566,7 @@ next:
 	return 0;
 }
 
-int get_value_main(void *parent, const char *controller, const char *cgroup,
+int get_value_main(void *parent, char *controller, const char *cgroup,
 		const char *key, struct ucred p, struct ucred r, char **value)
 {
 	char path[MAXPATHLEN];
@@ -626,7 +626,7 @@ int get_value_main(void *parent, const char *controller, const char *cgroup,
 	return 0;
 }
 
-int set_value_main(const char *controller, const char *cgroup,
+int set_value_main(char *controller, const char *cgroup,
 		const char *key, const char *value, struct ucred p,
 		struct ucred r)
 
@@ -855,7 +855,7 @@ next:
 	return 0;
 }
 
-int get_tasks_main(void *parent, const char *controller, const char *cgroup,
+int get_tasks_main(void *parent, char *controller, const char *cgroup,
 			struct ucred p, struct ucred r, int32_t **pids)
 {
 	char path[MAXPATHLEN];
@@ -1035,7 +1035,7 @@ next:
 	return nrpids;
 }
 
-int list_children_main(void *parent, const char *controller, const char *cgroup,
+int list_children_main(void *parent, char *controller, const char *cgroup,
 			struct ucred p, struct ucred r, char ***output)
 {
 	char path[MAXPATHLEN];
@@ -1295,7 +1295,7 @@ int list_controllers_main(void *parent, char ***output)
 	return 0;
 }
 
-int list_keys_main(void *parent, const char *controller, const char *cgroup,
+int list_keys_main(void *parent, char *controller, const char *cgroup,
 			struct ucred p, struct ucred r,
 			struct keys_return_type ***output)
 {

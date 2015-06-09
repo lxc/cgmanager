@@ -119,10 +119,10 @@ struct keys_return_type {
 	uint32_t perms;
 };
 
-int get_pid_cgroup_main(void *parent, const char *controller,
+int get_pid_cgroup_main(void *parent, char *controller,
 		struct ucred p, struct ucred r, struct ucred v, char **output);
 void get_pid_scm_complete(struct scm_sock_data *data);
-int get_pid_cgroup_abs_main(void *parent, const char *controller,
+int get_pid_cgroup_abs_main(void *parent, char *controller,
 		struct ucred p, struct ucred r, struct ucred v, char **output);
 void get_pid_abs_scm_complete(struct scm_sock_data *data);
 int move_pid_main(const char *controller, const char *cgroup,
@@ -140,24 +140,24 @@ void chown_scm_complete(struct scm_sock_data *data);
 int chmod_main(const char *controller, const char *cgroup, const char *file,
 		struct ucred p, struct ucred r, int mode);
 void chmod_scm_complete(struct scm_sock_data *data);
-int get_value_main(void *parent, const char *controller,
+int get_value_main(void *parent, char *controller,
 		const char *req_cgroup, const char *key,
 		struct ucred p, struct ucred r, char **value);
 void get_value_complete(struct scm_sock_data *data);
-int set_value_main(const char *controller, const char *req_cgroup,
+int set_value_main(char *controller, const char *req_cgroup,
 		const char *key, const char *value,
 		struct ucred p, struct ucred r);
 void set_value_complete(struct scm_sock_data *data);
 int remove_main(const char *controller, const char *cgroup, struct ucred p,
 		struct ucred r, int recursive, int32_t *existed);
 void remove_scm_complete(struct scm_sock_data *data);
-int get_tasks_main (void *parent, const char *controller, const char *cgroup,
+int get_tasks_main (void *parent, char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, int32_t **pids);
 void get_tasks_scm_complete(struct scm_sock_data *data);
 int get_tasks_recursive_main (void *parent, const char *controller,
 		const char *cgroup, struct ucred p, struct ucred r, int32_t **pids);
 void get_tasks_recursive_scm_complete(struct scm_sock_data *data);
-int list_children_main (void *parent, const char *controller, const char *cgroup,
+int list_children_main (void *parent, char *controller, const char *cgroup,
 		struct ucred p, struct ucred r, char ***output);
 void list_children_scm_complete(struct scm_sock_data *data);
 
@@ -171,7 +171,7 @@ void prune_scm_complete(struct scm_sock_data *data);
 
 int list_controllers_main (void *parent, char ***output);
 
-int list_keys_main (void *parent, const char *controller, const char *cgroup,
+int list_keys_main (void *parent, char *controller, const char *cgroup,
 			struct ucred p, struct ucred r,
 			struct keys_return_type ***output);
 void list_keys_scm_complete (struct scm_sock_data *data);
