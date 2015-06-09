@@ -51,6 +51,7 @@
 #include <nih-dbus/dbus_proxy.h>
 
 #include "frontend.h"  // for keys_return_type
+#include "fs.h"        // for #defines
 
 /* defines relating to the release agent */
 #define AGENT SBINDIR "/cgm-release-agent"
@@ -83,6 +84,7 @@ struct controller_mounts {
 	bool premounted;
 	bool visited;
 	bool skip;
+	bool unified;
 };
 
 static struct controller_mounts *all_mounts;
@@ -246,19 +248,10 @@ static bool fill_in_controller(struct controller_mounts *m, char *controller,
 	nih_local char *dest = NULL;
 
 	dest = NIH_MUST( nih_sprintf(NULL, "%s/%s", base_path, src) );
-	m->controller = strdup(controller);
-	if (!m->controller) {
-		nih_fatal("Out of memory mounting controllers");
-		return false;
-	}
+	m->controller = NIH_MUST( strdup(controller) );
 	m->options = NULL;
-	m->path = strdup(dest);
-	m->src = strdup(src);
-	if (!m->path ||
-			!m->src) {
-		nih_fatal("Out of memory mounting controllers");
-		return false;
-	}
+	m->path = NIH_MUST( strdup(dest) );
+	m->src = NIH_MUST( strdup(src) );
 	nih_info(_("Arranged to mount %s onto %s"), m->controller, m->path);
 	return true;
 }
@@ -295,7 +288,6 @@ static bool save_mount_subsys(char *s)
 	insert_pt = find_controller_in_mounts(controller, &found);
 	if (found)
 		return true;
-
 	tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
 	if (!tmp) {
 		nih_fatal("Out of memory mounting controllers");
@@ -366,6 +358,16 @@ static bool do_mount_subsys(int i)
 		nih_fatal("Failed to create %s: %s", dest, strerror(errno));
 		return false;
 	}
+
+	if (m->unified) {
+		if (mount(m->controller, dest, "cgroup", 0, "__DEVEL__sane_behavior") < 0) {
+			nih_error("Failed mounting %s: %s\n", m->controller,
+					strerror(errno));
+			return false;
+		}
+		return true;
+	}
+
 	if (m->premounted)
 		ret = mount(src, dest, "cgroup", 0, m->options);
 	else
@@ -426,8 +428,11 @@ static bool process_mounted_subsystem(char *options)
 	while (tok) {
 		if (strncmp(tok, "name=", 5) == 0) {
 			i = find_controller_in_mounts(tok+5, &found);
-			if (found) // jinkeys, multiple mounts already
+			if (found) {
+				if (all_mounts[i].unified)
+					return true;
 				goto next;
+			}
 			if (!save_mount_subsys(tok))
 				return false;
 			i = find_controller_in_mounts(tok+5, &found);
@@ -440,8 +445,11 @@ static bool process_mounted_subsystem(char *options)
 				NIH_MUST( nih_strcat_sprintf(&cp_opts, NULL, ",%s", tok) );
 		} else if (is_kernel_controller(tok)) {
 			i = find_controller_in_mounts(tok, &found);
-			if (found) // jinkeys, multiple mounts already
+			if (found) {
+				if (all_mounts[i].unified)
+					return true;
 				goto next;
+			}
 			if (!save_mount_subsys(tok))
 				return false;
 			i = find_controller_in_mounts(tok, &found);
@@ -531,6 +539,8 @@ static bool collate_premounted_subsystems(void)
 
 		first = &all_mounts[i];
 		if (!first->premounted)
+			continue;
+		if (first->unified)
 			continue;
 		if (first->comounted) // already linked
 			continue;
@@ -700,6 +710,7 @@ static void print_debug_controller_info(void)
 		nih_debug("    premounted: %s comounted: %s",
 			m->premounted ? "yes" : "no",
 			m->comounted ? m->comounted->controller : "(none)");
+		nih_debug("    unified: %s", m->unified ? "yes" : "no");
 	}
 }
 
@@ -710,7 +721,7 @@ void do_list_controllers(void *parent, char ***output)
 	nih_assert(output);
 	*output = NIH_MUST( nih_alloc(parent, (num_controller_mnts+1) * sizeof(char *)) );
 	(*output)[num_controller_mnts] = NULL;
-	
+
 	/* XXX
 	 * This will actually not be right.
 	 * if we have freezer,devices co-mounted, we'll have two separate
@@ -818,9 +829,257 @@ static void build_all_controllers(char *skip_mounts)
 	do_prune_comounts(all_controllers);
 }
 
+/*
+ * Check whether the unified hierarchy is available
+ */
+static bool unified_hierarchy_present(void)
+{
+	FILE *f;
+	char *line = NULL;
+	size_t len = 0;
+	bool ret = false;
+
+	if ((f = fopen("/proc/self/cgroup", "r")) == NULL)
+		return false;
+
+	while (getline(&line, &len, f) != -1) {
+		if (strncmp(line, "0:", 2) == 0) {
+			ret = true;
+			break;
+		}
+	}
+
+	fclose(f);
+	free(line);
+	return ret;
+}
+
+/*
+ * Mount a transient instance of the unified hierarchy, so that
+ * we can pin the controllers currently enabled there
+ */
+static bool mount_transient_unified(void)
+{
+	if (mkdir(UNIFIED_DIR, 0755) < 0 && errno != EEXIST)
+		return false;
+	if (mount("cgroup", UNIFIED_DIR, "cgroup", 0, "__DEVEL__sane_behavior") < 0) {
+		nih_error("Error mounting unified: %s\n", strerror(errno));
+		return false;
+	}
+	return true;
+}
+
+static void mark_unified_controllers_comounted(void)
+{
+	int i;
+	struct controller_mounts *first = NULL, *last = NULL;
+
+	for (i = 0; i < num_controllers; i++) {
+		if (!all_mounts[i].unified)
+			continue;
+		if (!first) {
+			first = last = &all_mounts[i];
+			continue;
+		}
+		last->comounted = &all_mounts[i];
+		last = &all_mounts[i];
+	}
+	if (last && last != first)
+		last->comounted = first;
+}
+
+static bool record_unified_controllers(char *ctrl_list)
+{
+	struct controller_mounts *tmp;
+	int i, insert_pt;
+	bool found;
+	char *tok;
+
+	tok = strtok(ctrl_list, " ");
+	while (tok) {
+		insert_pt = find_controller_in_mounts(tok, &found);
+		if (found) {
+			/*
+			 * Something in the program flow is not right.
+			 * We must not know what's actually going on.
+			 */
+			nih_error("Impossible: found duplicate in unified (%s)", tok);
+			return false;
+		}
+
+		tmp = realloc(all_mounts, (num_controllers+1) * sizeof(*all_mounts));
+		if (!tmp) {
+			nih_fatal("Out of memory mounting controllers");
+			return false;
+		}
+		all_mounts = tmp;
+
+		for (i = num_controllers; i > insert_pt; i--)
+			all_mounts[i] = all_mounts[i-1];
+		zero_out(&all_mounts[insert_pt]);
+
+		if (!fill_in_controller(&all_mounts[insert_pt], tok, tok))
+			return false;
+		all_mounts[insert_pt].unified = true;
+		num_controllers++;
+		tok = strtok(NULL, " ");
+	}
+
+	return true;
+}
+
+static inline void drop_newlines(char *s)
+{
+	int l;
+
+	for (l=strlen(s); l>0 && s[l-1] == '\n'; l--)
+		s[l-1] = '\0';
+}
+
+static char *read_oneline(const char *from)
+{
+	char *line = NULL;
+	FILE *f = fopen(from, "r");
+	size_t len = 0;
+	if (!f)
+		return NULL;
+	if (getline(&line, &len, f) == -1) {
+		fclose(f);
+		return NULL;
+	}
+	fclose(f);
+
+	drop_newlines(line);
+	return line;
+}
+
+static bool write_string(const char *fnam, char *string)
+{
+	FILE *f;
+	size_t len, ret;
+
+	if (!(f = fopen(fnam, "w")))
+		return false;
+	len = strlen(string);
+	ret = fwrite(string, 1, len, f);
+	if (ret != len) {
+		nih_error("Error writing to file: %s", strerror(errno));
+		fclose(f);
+		return false;
+	}
+	if (fclose(f) < 0) {
+		nih_error("Error writing to file: %s", strerror(errno));
+		return false;
+	}
+	return true;
+}
+
+static bool pin_and_process_unified(void)
+{
+	nih_local char  *ctrlcopy = NULL,
+			*ctrlline = NULL;
+	char path[MAXPATHLEN];
+	char *line = NULL, *tok;
+	FILE *f;
+
+	if (mkdir(UNIFIED_PIN, 0755) < 0 && errno != EEXIST)
+		return false;
+
+	sprintf(path, "%s/cgroup.controllers", UNIFIED_DIR);
+	line = read_oneline(path);
+	if (!line || strlen(line) == 0) {
+		free(line);
+		return true;
+	}
+
+	ctrlcopy = NIH_MUST( nih_strdup(NULL, line) );
+	tok = strtok(line, " ");
+	while (tok) {
+		NIH_MUST( nih_strcat_sprintf(&ctrlline, NULL, "+%s ", tok) );
+		tok = strtok(NULL, " ");
+	}
+	free(line);
+
+	sprintf(path, "%s/cgroup.subtree_control", UNIFIED_DIR);
+	if (!write_string(path, ctrlline)) {
+		nih_error("Error pinning unified controllers");
+		return false;
+	}
+
+	sprintf(path, "%s/cgroup.subtree_control", UNIFIED_PIN);
+	if (!write_string(path, ctrlline)) {
+		nih_error("Error pinning unified controllers");
+		return false;
+	}
+
+	sprintf(path, "%s/cgroup.procs", UNIFIED_DIR);
+	if (!(f = fopen(path, "w")))
+		return true;
+	fprintf(f, "%d", (int)getpid());
+	fclose(f);
+
+	nih_debug("pinned the following controllers unified: %s\n", ctrlline);
+
+	return record_unified_controllers(ctrlcopy);
+}
+
+static bool do_mount_unified(void)
+{
+	int i;
+	bool found = false;
+	nih_local char *dest = NULL;
+
+	for (i = 0; i < num_controllers; i++) {
+		if (all_mounts[i].unified) {
+			found = true;
+			break;
+		}
+	}
+	if (!found)
+		return true;
+
+	dest = NIH_MUST( nih_sprintf(NULL, "%s/%s", base_path, ".cgm_unified") );
+	if (mkdir(dest, 0755) < 0 && errno != EEXIST) {
+		nih_fatal("Failed to create %s: %s", dest, strerror(errno));
+		return false;
+	}
+
+	if (mount("unified", dest, "cgroup", 0, "__DEVEL__sane_behavior") < 0) {
+		nih_fatal("Failed to mount unified hierarchy: %s\n", strerror(errno));
+		return false;
+	}
+
+	return true;
+}
+
+static void umount_transient_unified(void)
+{
+	umount(UNIFIED_DIR);
+	rmdir(UNIFIED_DIR);
+}
+
+static bool process_unified_hierarchy(void)
+{
+	bool ret = false;
+
+	if (!unified_hierarchy_present())
+		return true;
+	if (!mount_transient_unified())
+		return false;
+	if (pin_and_process_unified())
+		ret = true;
+
+	umount_transient_unified();
+	return ret;
+}
+
 int collect_subsystems(char *extra_mounts, char *skip_mounts)
 {
-	/* first collect all already-mounted subsystems */
+	/* first mount and pin anything currently in the unified hierarchy */
+	if (!process_unified_hierarchy())
+		return -1;
+
+	/* next collect all already-mounted subsystems */
 	if (!collect_premounted_subsystems())
 		return -1;
 
@@ -841,6 +1100,7 @@ int collect_subsystems(char *extra_mounts, char *skip_mounts)
 	if (!collate_premounted_subsystems())
 		return -1;
 
+	mark_unified_controllers_comounted();
 	build_all_controllers(skip_mounts);
 
 	build_controller_mntlist();
@@ -985,6 +1245,9 @@ int setup_cgroup_mounts(void)
 		return -1;
 	}
 
+	if (!do_mount_unified())
+		return -1;
+
 	for (i=0; i<num_controllers; i++) {
 		if (!do_mount_subsys(i)) {
 			nih_fatal("Failed mounting cgroups");
@@ -1063,14 +1326,6 @@ bool create_agent_symlinks(void)
 	return true;
 }
 
-static inline void drop_newlines(char *s)
-{
-	int l;
-
-	for (l=strlen(s); l>0 && s[l-1] == '\n'; l--)
-		s[l-1] = '\0';
-}
-
 /*
  * The user will pass in 'cpuset' or 'systemd'.  /proc/self/cgroup will
  * show 'cpuset:' or 'name=systemd:'.  We have to account for that.
@@ -1084,6 +1339,26 @@ static bool is_same_controller(const char *cmp, const char *cnt)
 	if (strcmp(cmp+5, cnt) == 0)
 		return true;
 	return false;
+}
+
+/*
+ * In unified hierarchy tasks must be in a leaf node.  Cgmanager
+ * creates .cgm_leaf for tasks.  Ignore that.
+ */
+static void chop_leaf(char *path)
+{
+	size_t len;
+	char *cmp;
+
+	if (!path)
+		return;
+
+	len = strlen(path);
+	if (len < strlen(U_LEAF))
+		return;
+	cmp = path + len - strlen(U_LEAF_NAME);
+	if (strcmp(cmp, U_LEAF_NAME) == 0)
+		*cmp = '\0';
 }
 
 /*
@@ -1127,6 +1402,8 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 found:
 	fclose(f);
 	free(line);
+	if (is_unified_controller(controller))
+		chop_leaf(cgroup);
 	return cgroup;
 }
 
@@ -1275,6 +1552,16 @@ const char *get_controller_path(const char *controller)
 		return NULL;
 	}
 	return all_mounts[i].path;
+}
+
+bool is_unified_controller(const char *controller)
+{
+	int i;
+	for (i = 0; i < num_controllers; i++)
+		if (strcmp(all_mounts[i].controller, controller) == 0 &&
+				all_mounts[i].unified)
+			return true;
+	return false;
 }
 
 int get_path_depth(const char *p)
@@ -1635,12 +1922,12 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		nih_local char *fpath = NULL;
 		fpath = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.procs", path) );
 		if (chown(fpath, uid, gid) < 0)
-			nih_error("Failed to chown procs file %s: %s", fpath,
-				strerror(errno));
+			nih_error("%s: Failed to chown procs file %s: %s", __func__,
+					fpath, strerror(errno));
 		sprintf(fpath+len, "/tasks");
 		if (chown(fpath, uid, gid) < 0)
-			nih_error("Failed to chown tasks file %s: %s", fpath,
-				strerror(errno));
+			nih_warn("%s: Failed to chown the tasks file %s: %s\n",
+					__func__, fpath, strerror(errno));
 	}
 
 out:
@@ -1706,9 +1993,11 @@ bool set_value_trusted(const char *path, const char *value)
 	}
 	return true;
 }
-bool set_value(const char *path, const char *value)
+bool set_value(const char *controller, const char *path, const char *value)
 {
 	int i;
+	char *p;
+	nih_local char *upath = NULL, *file = NULL;
 
 	nih_assert (path);
 
@@ -1724,7 +2013,24 @@ bool set_value(const char *path, const char *value)
 		}
 	}
 
-	return set_value_trusted(path, value);
+	if (!set_value_trusted(path, value))
+		return false;
+
+	if (!is_unified_controller(controller))
+		return true;
+	upath = NIH_MUST( nih_strdup(NULL, path) );
+	p = strrchr(upath, '/');
+	if (!p)
+		return false;  // can't happen
+	file = NIH_MUST( nih_strdup(NULL, p+1) );
+	*p = '\0';
+	NIH_MUST( nih_strcat(&upath, NULL, U_LEAF) );
+	if (!dir_exists(upath))
+		return true;
+	NIH_MUST( nih_strcat(&upath, NULL, "/") );
+	NIH_MUST( nih_strcat(&upath, NULL, file) );
+
+	return (set_value_trusted(upath, value));
 }
 
 /*
@@ -1798,6 +2104,8 @@ bool move_self_to_root(void)
 			continue;
 		if (all_mounts[i].skip)
 			continue;
+		if (all_mounts[i].unified)
+			continue;
 		path = NIH_MUST( nih_sprintf(NULL, "%s/tasks", all_mounts[i].path) );
 		if ((f = fopen(path, "w")) == NULL)
 			return false;
@@ -1842,6 +2150,8 @@ int get_directory_children(void *parent, const char *path, char ***output)
 	(*output)[0] = NULL;
 	while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
 		if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
+			continue;
+		if (!strcmp(direntp->d_name, U_LEAF_NAME))
 			continue;
 		if (direntp->d_type != DT_DIR)
 			continue;
@@ -1979,4 +2289,120 @@ bool path_is_under_taskcg(pid_t pid, const char *contr,const char *path)
 	if (path[plen] == '/')
 		return true;
 	return false;
+}
+
+static bool do_copy_controllers(const char *from, const char *to)
+{
+	nih_local char  *src = NULL,
+		  *dest = NULL,
+		  *ctrlline = NULL;
+	char *line = NULL, *tok, *savetok;
+	src = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.subtree_control", from) );
+	dest = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.subtree_control", to) );
+	line = read_oneline(src);
+	if (!line)
+		return true;
+
+	tok = strtok_r(line, " ", &savetok);
+	while (tok) {
+		NIH_MUST( nih_strcat_sprintf(&ctrlline, NULL, "+%s ", tok) );
+		tok = strtok_r(NULL, " ", &savetok);
+	}
+	free(line);
+	return write_string(dest, ctrlline);
+}
+
+bool unified_copy_controllers(const char *controller, const char *path)
+{
+	nih_local char *p = NULL;
+	char *pe;
+
+	if (!is_unified_controller(controller))
+		return true;
+
+	p = NIH_MUST( nih_strdup(NULL, path) );
+	pe = strrchr(p, '/');
+	if (pe)
+		*pe = '\0';
+	return do_copy_controllers(p, path);
+}
+
+bool create_leaf(const char *controller, const char *path, uid_t u, gid_t g)
+{
+	nih_local char *p = NULL;
+
+	if (!is_unified_controller(controller))
+		return true;
+
+	NIH_MUST( nih_strcat_sprintf(&p, NULL, "%s%s", path, U_LEAF) );
+	if (mkdir(p, 755) < 0 && errno != EEXIST)
+		return false;
+	if (mkdir(p, 755) < 0 && errno == EEXIST)
+		return true;
+	if (chown(p, u, g) < 0)
+		return false;
+	return true;
+}
+
+static bool copy_owner_perms_from_to(const char *from, const char *to)
+{
+	struct stat sb;
+	struct dirent dirent, *direntp;
+	bool error = false;
+	DIR *d;
+
+	if (stat(from, &sb) < 0)
+		return false;
+	if (chown(to, sb.st_uid, sb.st_gid) < 0)
+		return false;
+	if (chmod(to, sb.st_mode) < 0)
+		return false;
+
+	d = opendir(from);
+	if (!d)
+		return false;
+
+	while (readdir_r(d, &dirent, &direntp) == 0 && direntp) {
+		nih_local char  *srcp = NULL,
+			  *dstp = NULL;
+
+		if (!strcmp(direntp->d_name, ".") || !strcmp(direntp->d_name, ".."))
+			continue;
+		srcp = NIH_MUST( nih_sprintf(NULL, "%s/%s", from, direntp->d_name) );
+		dstp = NIH_MUST( nih_sprintf(NULL, "%s/%s", to, direntp->d_name) );
+		if (!file_exists(dstp))
+			continue;
+		if (stat(srcp, &sb) < 0)
+			continue;
+		if (chown(dstp, sb.st_uid, sb.st_gid) < 0) {
+			nih_error("Failed to chown file %s to %u:%u",
+					dstp, sb.st_uid, sb.st_gid);
+			error = true;
+		}
+		if (chmod(dstp, sb.st_mode) < 0) {
+			nih_error("Failed to chmod file %s to %o",
+					dstp, sb.st_mode);
+			error = true;
+		}
+	}
+	closedir(d);
+
+	return !error;
+}
+
+bool ensure_leafdir(const char *controller, const char *path)
+{
+	nih_local char *p = NIH_MUST( nih_sprintf(NULL, "%s%s", path, U_LEAF) );
+
+	if (mkdir(p, 0755) < 0) {
+		if (errno != EEXIST)
+			return false;
+		// existed, don't change perms
+		return true;
+	}
+	if (!copy_owner_perms_from_to(path, p)) {
+		rmdir(p);
+		return false;
+	}
+	return true;
 }

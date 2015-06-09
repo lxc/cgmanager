@@ -132,8 +132,13 @@ int per_ctrl_move_pid_main(const char *controller, const char *cgroup, struct uc
 		struct ucred r, struct ucred v, bool escape)
 {
 	char rcgpath[MAXPATHLEN], path[MAXPATHLEN];
+	bool unified = false;
 	FILE *f;
 	pid_t query = r.pid;
+	size_t maxlen;
+
+	if (is_unified_controller(controller))
+		unified = true;
 
 	// Get r's current cgroup in rcgpath
 	if (escape)
@@ -150,8 +155,14 @@ int per_ctrl_move_pid_main(const char *controller, const char *cgroup, struct uc
 		return -1;
 	}
 
-	/* rcgpath + / + cgroup + /tasks + \0 */
-	if (strlen(rcgpath) + strlen(cgroup) > MAXPATHLEN - 8) {
+	if (unified) {
+		/* rcgpath + / + cgroup + "/.cgm_leaf/cgroup.procs" + \0 */
+		maxlen = strlen(rcgpath) + strlen(cgroup) + strlen(U_LEAF "/cgroup.procs") + 2;
+	} else {
+		/* rcgpath + / + cgroup + /tasks + \0 */
+		maxlen = strlen(rcgpath) + strlen(cgroup) + 8;
+	}
+	if (maxlen > MAXPATHLEN) {
 		nih_error("%s: Path name too long", __func__);
 		return -1;
 	}
@@ -168,8 +179,17 @@ int per_ctrl_move_pid_main(const char *controller, const char *cgroup, struct uc
 			r.pid, r.uid, r.gid, path);
 		return -1;
 	}
+
 	// is r allowed to write to tasks file?
-	strncat(path, "/tasks", MAXPATHLEN-1);
+	if (unified) {
+		if (!ensure_leafdir(controller, path))
+			return -1;
+		strcat(path, U_LEAF);
+		strcat(path, "/cgroup.procs");
+	} else {
+		strncat(path, "/tasks", MAXPATHLEN-1);
+	}
+
 	if (!may_access(r.pid, r.uid, r.gid, path, O_WRONLY)) {
 		nih_error("%s: pid %d (uid %u gid %u) may not write to %s", __func__,
 			r.pid, r.uid, r.gid, path);
@@ -324,6 +344,12 @@ int do_create_main(const char *controller, const char *cgroup, struct ucred p,
 			nih_error("%s: failed to create %s", __func__, path);
 			return -2;
 		}
+		if (!unified_copy_controllers(controller, path)) {
+			nih_error("%s: Failed to set cg controllers on %s", __func__,
+					path);
+			rmdir(path);
+			return -1;
+		}
 		if (!chown_cgroup_path(path, r.uid, r.gid, true)) {
 			nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
 				path, r.uid, r.gid);
@@ -429,6 +455,14 @@ int do_chown_main(const char *controller, const char *cgroup, struct ucred p,
 		nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
 			path, v.uid, v.gid);
 		return -2;
+	}
+	if (is_unified_controller(controller)) {
+		NIH_MUST( nih_strcat(&path, NULL, U_LEAF) );
+		if (dir_exists(path) && !chown_cgroup_path(path, v.uid, v.gid, false)) {
+			nih_warn("%s: Failed to chown leaf directory for %s to %u:%u",
+				__func__, path, v.uid, v.gid);
+			return -2;
+		}
 	}
 
 	return 0;
@@ -678,7 +712,7 @@ int set_value_main(char *controller, const char *cgroup,
 	}
 
 	/* read and return the value */
-	if (!set_value(path, value)) {
+	if (!set_value(controller, path, value)) {
 		nih_error("%s: Failed to set value %s to %s", __func__, path, value);
 		return -1;
 	}
@@ -801,6 +835,14 @@ int do_remove_main(const char *controller, const char *cgroup, struct ucred p,
 		return -2;
 	}
 
+	if (is_unified_controller(controller)) {
+		nih_local char *fpath = NULL;
+		fpath = NIH_MUST( nih_sprintf(NULL, "%s%s", working, U_LEAF) );
+		if (rmdir(fpath) < 0) {
+			nih_error("%s: Failed to remove %s: %s", __func__, fpath, strerror(errno));
+			return errno == EPERM ? -2 : -1;
+		}
+	}
 	if (!recursive) {
 		if (rmdir(working) < 0) {
 			nih_error("%s: Failed to remove %s: %s", __func__, working, strerror(errno));

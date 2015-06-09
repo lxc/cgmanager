@@ -24,6 +24,11 @@
  * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
  */
 
+#define UNIFIED_DIR CGDIR "/.cgm_unified"
+#define UNIFIED_PIN UNIFIED_DIR "/.cgpin"
+#define U_LEAF_NAME ".cgm_leaf"
+#define U_LEAF "/" U_LEAF_NAME
+
 extern char *all_controllers;
 struct keys_return_type;
 
@@ -43,7 +48,7 @@ const char *get_controller_path(const char *controller);
 bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer);
 bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children);
 bool chmod_cgroup_path(const char *path, int mode);
-bool set_value(const char *path, const char *value);
+bool set_value(const char *controller, const char *path, const char *value);
 bool set_value_trusted(const char *path, const char *value);
 unsigned long read_pid_ns_link(int pid);
 unsigned long read_user_ns_link(int pid);
@@ -61,3 +66,7 @@ bool prune_verify_comounts(char *controllers);
 void do_list_controllers(void *parent, char ***output);
 void convert_directory_contents(struct keys_return_type **keys, struct ucred r);
 bool path_is_under_taskcg(pid_t pid, const char *contr,const char *path);
+bool unified_copy_controllers(const char *controller, const char *path);
+bool is_unified_controller(const char *controller);
+bool create_leaf(const char *controller, const char *path, uid_t u, gid_t g);
+bool ensure_leafdir(const char *controller, const char *path);
