@@ -127,4 +127,29 @@ AM_CONDITIONAL([HAVE_HELP2MAN], [test "x$HELP2MAN" != "xfalse // No help2man //"
 
 AS_AC_EXPAND(SBINDIR, "$sbindir")
 
+AC_ARG_WITH(
+	[pamdir],
+	[AS_HELP_STRING([--with-pamdir=PATH],[Specify the directory where PAM modules are stored])],
+	[pamdir="${withval}"],
+	[
+		if test "${prefix}" = "/usr"; then
+			pamdir="/lib${libdir##*/lib}/security"
+		else
+			pamdir="\$(libdir)/security"
+		fi
+	]
+)
+
+AC_ARG_VAR([PAM_CFLAGS], [C compiler flags for pam])
+AC_ARG_VAR([PAM_LIBS], [linker flags for pam])
+AC_CHECK_LIB(
+	[pam],
+	[pam_authenticate],
+	[PAM_LIBS="-lpam"],
+	[AC_MSG_ERROR([*** libpam not found.])
+	])
+
+AC_SUBST(PAM_LIBS)
+AC_SUBST([pamdir])
+
 AC_OUTPUT

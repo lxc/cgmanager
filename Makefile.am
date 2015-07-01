@@ -28,6 +28,8 @@ bin_PROGRAMS = cgm
 
 lib_LTLIBRARIES = libcgmanager.la
 
+SUBDIRS = config
+
 pkginclude_HEADERS = cgmanager-client.h cgmanager.h
 
 if HAVE_HELP2MAN
@@ -131,6 +133,16 @@ TESTS_CGM_CONCURRENT: tests/cgm-concurrent.o
 	$(CCLD) -o tests/cgm-concurrent tests/cgm-concurrent.o \
 		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lpthread -lcgmanager
 
-tests: TESTS_CGM_CONCURRENT TESTS_SCM TEST_NSTEST
+pam_LTLIBRARIES = pam_cgm.la
+pam_cgm_la_SOURCES = pam/pam_cgm.c pam/cgmanager.c pam/cgmanager.h
+pam_cgm_la_CFLAGS = $(AM_CFLAGS)
+pam_cgm_la_LIBADD = $(AM_LIBS) $(PAM_LIBS) -L$(top_srcdir) -lcgmanager
+pam_cgm_la_LDFLAGS = $(AM_LDFLAGS) -module -avoid-version -shared
+pam_cgm_la_DEPENDENCIES = libcgmanager.la
 
-SUBDIRS = config
+install-data-hook:	install-pamLTLIBRARIES
+	rm -f "$(DESTDIR)$(pamdir)/pam_cgm.la"
+	rm -f "$(DESTDIR)$(pamdir)/pam_cgm.a"
+uninstall-local:
+	rm -f "$(DESTDIR)$(pamdir)/pam_cgm.so"
+tests: TESTS_CGM_CONCURRENT TESTS_SCM TEST_NSTEST
