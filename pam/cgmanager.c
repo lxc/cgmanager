@@ -39,7 +39,7 @@
 #include <stdbool.h>
 
 #include <nih-dbus/dbus_connection.h>
-#include <cgmanager/cgmanager-client.h>
+#include "cgmanager-client.h"
 #include <nih/alloc.h>
 #include <nih/error.h>
 #include <nih/string.h>
