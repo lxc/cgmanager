@@ -28,6 +28,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <sched.h>
+#include <sys/statvfs.h>
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -2405,4 +2406,25 @@ bool ensure_leafdir(const char *controller, const char *path)
 		return false;
 	}
 	return true;
+}
+
+void turn_mount_rw(const char *path)
+{
+	if (mount("", path, "cgroup", MS_REMOUNT, NULL) < 0) {
+		nih_error("Failed to turn %s mount readonly: %m", path);
+		exit(1);
+	}
+	nih_debug("Turned %s from ro->rw", path);
+}
+
+bool is_ro_mount(const char *path)
+{
+	struct statvfs sb;
+
+	if (statvfs(path, &sb) < 0) {
+		nih_error("statvfs failed on %s: %m", path);
+		exit(1);
+	}
+
+	return sb.f_flag & MS_RDONLY;
 }

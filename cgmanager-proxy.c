@@ -68,6 +68,11 @@ int setup_proxy(void)
 	bool exists_upper = false, exists_lower = false;
 	NihError *err;
 
+	/* When running in container, /sys/fs/cgroup will have been
+	   already mounted.  But it may be ro */
+	if (is_ro_mount(CGDIR))
+		turn_mount_rw(CGDIR);
+
 	/*
 	 * If /sys/fs/cgroup/cgmanager.lower exists,
 	 *    if /sys/fs/cgroup/cgmanager exists, then exit (proxy already running)

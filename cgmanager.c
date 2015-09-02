@@ -19,7 +19,6 @@
 
 #include <frontend.h>
 #include <sys/resource.h>
-#include <sys/statvfs.h>
 #include <sys/vfs.h>
 #include <linux/fs.h>
 
@@ -1460,27 +1459,6 @@ static void mount_tmpfs_at(const char *path)
 		exit(1);
 	}
 	nih_debug("Mounted tmpfs onto %s", path);
-}
-
-static bool is_ro_mount(const char *path)
-{
-	struct statvfs sb;
-
-	if (statvfs(path, &sb) < 0) {
-		nih_error("statvfs failed on %s: %m", path);
-		exit(1);
-	}
-
-	return sb.f_flag & MS_RDONLY;
-}
-
-static void turn_mount_rw(const char *path)
-{
-	if (mount("", path, "cgroup", MS_REMOUNT, NULL) < 0) {
-		nih_error("Failed to turn %s mount readonly: %m", path);
-		exit(1);
-	}
-	nih_debug("Turned %s from ro->rw", path);
 }
 
 /*

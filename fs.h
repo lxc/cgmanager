@@ -70,3 +70,5 @@ bool unified_copy_controllers(const char *controller, const char *path);
 bool is_unified_controller(const char *controller);
 bool create_leaf(const char *controller, const char *path, uid_t u, gid_t g);
 bool ensure_leafdir(const char *controller, const char *path);
+void turn_mount_rw(const char *path);
+bool is_ro_mount(const char *path);
