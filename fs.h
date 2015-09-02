@@ -65,7 +65,7 @@ void do_prune_comounts(char *controllers);
 bool prune_verify_comounts(char *controllers);
 void do_list_controllers(void *parent, char ***output);
 void convert_directory_contents(struct keys_return_type **keys, struct ucred r);
-bool path_is_under_taskcg(pid_t pid, const char *contr,const char *path);
+bool path_is_under_proxycg(pid_t pid, const char *contr,const char *path);
 bool unified_copy_controllers(const char *controller, const char *path);
 bool is_unified_controller(const char *controller);
 bool create_leaf(const char *controller, const char *path, uid_t u, gid_t g);

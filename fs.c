@@ -2263,13 +2263,13 @@ bool was_premounted(const char *controller)
 /*
  * Check that (absolute) @path is under @pid's cgroup for @contr
  */
-bool path_is_under_taskcg(pid_t pid, const char *contr,const char *path)
+bool path_is_under_proxycg(pid_t pid, const char *contr,const char *path)
 {
 	char pcgpath[MAXPATHLEN];
 	size_t plen;
 
 	// Get p's current cgroup in pcgpath
-	if (!compute_pid_cgroup(pid, contr, "", pcgpath, NULL)) {
+	if (!compute_proxy_cgroup(pid, contr, "", pcgpath, NULL)) {
 		nih_error("%s: Could not determine the proxy's cgroup for %s",
 				__func__, contr);
 		return false;
