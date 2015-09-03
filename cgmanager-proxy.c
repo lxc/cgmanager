@@ -1459,10 +1459,5 @@ main (int argc, char *argv[])
 
 	ret = nih_main_loop ();
 
-	/* Destroy any PID file we may have created */
-	if (daemonise) {
-		nih_main_unlink_pidfile();
-	}
-
 	return ret;
 }
