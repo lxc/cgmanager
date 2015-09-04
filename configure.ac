@@ -78,7 +78,7 @@ AM_CONDITIONAL([DISTRO_UBUNTU], [test "x$with_distro" = "xubuntu"])
 AC_MSG_CHECKING([for init system type])
 AC_ARG_WITH([init-script],
 	    [AC_HELP_STRING([--with-init-script@<:@=TYPE@<:@,TYPE,...@:>@@:>@],
-			    [Type(s) of init script to install: sysvinit, systemd, upstart, openrc
+			    [Type(s) of init script to install: sysvinit, systemd, upstart, openrc,
 			     distro @<:@default=distro@:>@])],[],[with_init_script=distro])
 case "$with_init_script" in
 	distro)
