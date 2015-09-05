@@ -1,7 +1,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.61)
-AC_INIT([cgmanager], [0.38], [cgmanager-devel@lists.linuxcontainers.org])
+AC_INIT([cgmanager], [0.39], [cgmanager-devel@lists.linuxcontainers.org])
 
 AM_INIT_AUTOMAKE
 
