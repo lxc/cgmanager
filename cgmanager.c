@@ -1478,17 +1478,17 @@ static bool setup_cgroup_dir(void)
 		return false;
 	}
 
+	if (dir_is_sysfs(CGDIR))
+		mount_tmpfs_at(CGDIR);
+	else if (is_ro_mount(CGDIR))
+		turn_mount_rw(CGDIR);
+
 	if (file_exists(CGMANAGER_SOCK)) {
 		if (unlink(CGMANAGER_SOCK) < 0) {
 			nih_error("%s: failed to delete stale cgmanager socket", __func__);
 			return false;
 		}
 	}
-
-	if (dir_is_sysfs(CGDIR))
-		mount_tmpfs_at(CGDIR);
-	else if (is_ro_mount(CGDIR))
-		turn_mount_rw(CGDIR);
 
 	return mkdir_cgmanager_dir();
 }
