@@ -9,6 +9,7 @@ LIBCGMANAGER_VERSION_DOTTED = $(VERSION_CURRENT).$(VERSION_REVISION).$(VERSION_A
 
 AM_CFLAGS = -Wall -ggdb -D_GNU_SOURCE -DSBINDIR=\"$(SBINDIR)\"
 AM_CFLAGS += $(DBUS_CFLAGS) $(NIH_CFLAGS) $(NIH_DBUS_CFLAGS)
+AM_CFLAGS += -DLIBEXECDIR=\"$(LIBEXECDIR)\"
 AM_LDFLAGS = $(DBUS_LIBS) $(NIH_LIBS) $(NIH_DBUS_LIBS)
 client_files_OUTPUTS = cgmanager-client.c cgmanager-client.h
 manager_files_OUTPUTS = org.linuxcontainers.cgmanager.c org.linuxcontainers.cgmanager.h
@@ -23,8 +24,10 @@ CLEANFILES = \
 	*.o *.so \
 	libcgmanager.pc.in
 
-sbin_PROGRAMS = cgmanager cgproxy cgm-release-agent
+sbin_PROGRAMS = cgmanager cgproxy
 bin_PROGRAMS = cgm
+
+pkglibexec_PROGRAMS = cgm-release-agent
 
 lib_LTLIBRARIES = libcgmanager.la
 

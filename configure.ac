@@ -126,6 +126,7 @@ AC_PATH_PROG(HELP2MAN, help2man, false // No help2man //)
 AM_CONDITIONAL([HAVE_HELP2MAN], [test "x$HELP2MAN" != "xfalse // No help2man //" ])
 
 AS_AC_EXPAND(SBINDIR, "$sbindir")
+AS_AC_EXPAND(LIBEXECDIR, "$libexecdir")
 
 AC_ARG_WITH(
 	[pamdir],

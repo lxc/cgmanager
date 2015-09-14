@@ -55,7 +55,7 @@
 #include "fs.h"        // for #defines
 
 /* defines relating to the release agent */
-#define AGENT SBINDIR "/cgm-release-agent"
+#define AGENT LIBEXECDIR "/cgmanager/cgm-release-agent"
 #define AGENT_LINK_PATH "/run/cgmanager/agents"
 
 /* Define pivot_root() if missing from the C library */
