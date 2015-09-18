@@ -3,7 +3,7 @@
 AC_PREREQ(2.61)
 AC_INIT([cgmanager], [0.39], [cgmanager-devel@lists.linuxcontainers.org])
 
-AM_INIT_AUTOMAKE
+AM_INIT_AUTOMAKE([subdir-objects])
 
 AC_GNU_SOURCE
 AC_CONFIG_HEADERS([config.h])
