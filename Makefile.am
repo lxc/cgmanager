@@ -136,6 +136,7 @@ TESTS_CGM_CONCURRENT: tests/cgm-concurrent.o
 	$(CCLD) -o tests/cgm-concurrent tests/cgm-concurrent.o \
 		$(NIH_LIBS) $(NIH_DBUS_LIBS) $(DBUS_LIBS) -lpthread -lcgmanager
 
+if HAVE_PAM
 pam_LTLIBRARIES = pam_cgm.la
 pam_cgm_la_SOURCES = pam/pam_cgm.c pam/cgmanager.c pam/cgmanager.h
 pam_cgm_la_CFLAGS = $(AM_CFLAGS)
@@ -148,4 +149,6 @@ install-data-hook:	install-pamLTLIBRARIES
 	rm -f "$(DESTDIR)$(pamdir)/pam_cgm.a"
 uninstall-local:
 	rm -f "$(DESTDIR)$(pamdir)/pam_cgm.so"
+endif
+
 tests: TESTS_CGM_CONCURRENT TESTS_SCM TEST_NSTEST

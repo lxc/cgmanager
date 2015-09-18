@@ -130,7 +130,8 @@ AS_AC_EXPAND(LIBEXECDIR, "$libexecdir")
 
 AC_ARG_WITH(
 	[pamdir],
-	[AS_HELP_STRING([--with-pamdir=PATH],[Specify the directory where PAM modules are stored])],
+	[AS_HELP_STRING([--with-pamdir=PATH],[Specify the directory where PAM modules are stored,
+						or "none" if PAM modules are not to be built])],
 	[pamdir="${withval}"],
 	[
 		if test "${prefix}" = "/usr"; then
@@ -141,16 +142,19 @@ AC_ARG_WITH(
 	]
 )
 
-AC_ARG_VAR([PAM_CFLAGS], [C compiler flags for pam])
-AC_ARG_VAR([PAM_LIBS], [linker flags for pam])
-AC_CHECK_LIB(
-	[pam],
-	[pam_authenticate],
-	[PAM_LIBS="-lpam"],
-	[AC_MSG_ERROR([*** libpam not found.])
-	])
+AM_CONDITIONAL([HAVE_PAM], [test x"$pamdir" != "xnone"])
+if test "z$pamdir" != "znone"; then
+	AC_ARG_VAR([PAM_CFLAGS], [C compiler flags for pam])
+	AC_ARG_VAR([PAM_LIBS], [linker flags for pam])
+	AC_CHECK_LIB(
+		[pam],
+		[pam_authenticate],
+		[PAM_LIBS="-lpam"],
+		[AC_MSG_ERROR([*** libpam not found.])
+		])
 
-AC_SUBST(PAM_LIBS)
-AC_SUBST([pamdir])
+	AC_SUBST(PAM_LIBS)
+	AC_SUBST([pamdir])
+fi
 
 AC_OUTPUT
