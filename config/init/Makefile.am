@@ -1,1 +1,1 @@
-SUBDIRS = systemd sysvinit upstart
+SUBDIRS = systemd sysvinit upstart openrc
