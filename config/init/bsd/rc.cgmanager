@@ -1,0 +1,55 @@
+#!/bin/sh
+#
+# /etc/rc.d/rc.cgmanager - start/stop the cgroup manager
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+
+CGMDAEMON=/usr/sbin/cgmanager
+CGPDAEMON=/usr/sbin/cgproxy
+NAME=cgmanager
+DESC="cgroup management daemon"
+
+test -x $CGMDAEMON || exit 0
+
+if [ -f /etc/default/$NAME ]; then
+  # get cgmanager options if specified
+  . /etc/default/$NAME
+fi
+
+
+start_cgmanager() {
+  # Kill any existing cgproxy
+  /etc/rc.d/rc.cgproxy stop >/dev/null 2>&1 || true
+  # check whether to start cgproxy or cgmanager
+  if $CGPDAEMON --check-master; then
+    NESTED=yes /etc/rc.d/rc.cgproxy start || true && { exit 0; }
+  fi
+
+  $CGMDAEMON --daemon
+}
+
+stop_cgmanager() {
+  # If the cgmanager stops, the proxy must also stop
+  /etc/rc.d/rc.cgproxy stop >/dev/null 2>&1 || true
+
+  /usr/bin/pkill $NAME
+}
+
+restart_cgmanager() {
+  stop_cgmanager
+  start_cgmanager
+}
+
+case "$1" in
+'start')
+  start_cgmanager
+  ;;
+'stop')
+  stop_cgmanager
+  ;;
+'restart')
+  restart_cgmanager
+  ;;
+*)
+  echo "usage $0 start|stop|restart"
+esac

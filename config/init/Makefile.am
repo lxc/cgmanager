@@ -1,1 +1,1 @@
-SUBDIRS = systemd sysvinit upstart
+SUBDIRS = bsd systemd sysvinit upstart

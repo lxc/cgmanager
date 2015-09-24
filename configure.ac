@@ -11,6 +11,7 @@ AC_CONFIG_FILES([
 	Makefile
 	config/Makefile
 	config/init/Makefile
+	config/init/bsd/Makefile
 	config/init/systemd/Makefile
 	config/init/sysvinit/Makefile
 	config/init/upstart/Makefile
@@ -77,7 +78,7 @@ AM_CONDITIONAL([DISTRO_UBUNTU], [test "x$with_distro" = "xubuntu"])
 AC_MSG_CHECKING([for init system type])
 AC_ARG_WITH([init-script],
 	    [AC_HELP_STRING([--with-init-script@<:@=TYPE@<:@,TYPE,...@:>@@:>@],
-			    [Type(s) of init script to install: sysvinit, systemd, upstart,
+			    [Type(s) of init script to install: bsd, sysvinit, systemd, upstart,
 			     distro @<:@default=distro@:>@])],[],[with_init_script=distro])
 case "$with_init_script" in
 	distro)
@@ -94,6 +95,9 @@ case "$with_init_script" in
 			ubuntu)
 				init_script=upstart
 				;;
+			slackware)
+				init_script=bsd
+				;;
 			*)
 				echo -n "Linux distribution init system unknown."
 				init_script=
@@ -109,7 +113,7 @@ esac
 (IFS="," ; for init_sys in $init_script;
 do
 	case "$init_sys" in
-		none|sysvinit|systemd|upstart)
+		none|bsd|sysvinit|systemd|upstart)
 			;;
 		*)
 			exit 1
@@ -117,6 +121,7 @@ do
 	esac
 done) || AC_MSG_ERROR([Unknown init system type in $init_script])
 
+AM_CONDITIONAL([INIT_SCRIPT_BSD], [echo "$init_script" |grep -q "bsd"])
 AM_CONDITIONAL([INIT_SCRIPT_SYSV], [echo "$init_script" |grep -q "sysvinit"])
 AM_CONDITIONAL([INIT_SCRIPT_SYSTEMD], [echo "$init_script" |grep -q "systemd"])
 AM_CONDITIONAL([INIT_SCRIPT_UPSTART], [echo "$init_script" |grep -q "upstart"])
