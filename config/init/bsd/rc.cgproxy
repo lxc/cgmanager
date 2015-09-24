@@ -1,0 +1,62 @@
+#!/bin/sh
+#
+# /etc/rc.d/rc.cgproxy - start/stop the cgroup proxy manager
+
+PATH=/sbin:/usr/sbin:/bin:/usr/bin
+
+CGMDAEMON=/usr/sbin/cgmanager
+CGPDAEMON=/usr/sbin/cgproxy
+NAME=cgproxy
+DESC="cgroup proxy management daemon"
+
+test -x $CGPDAEMON || exit 0
+
+if [ -f /etc/default/$NAME ]; then
+  # get cgproxy options if specified
+  . /etc/default/$NAME
+fi
+
+
+start_cgproxy() {
+  # cgproxy should only run on container unless on older kernel
+  if [ -e /proc/self/ns/pid ] && [ "$NESTED" != "yes" ]; then
+    exit 0
+  fi
+
+  $CGPDAEMON --daemon
+  sleep 1
+}
+
+stop_cgproxy() {
+  /usr/bin/pkill $NAME && return
+
+  # Try again if we're still here
+  echo "Waiting to finish $NAME ..."
+  sleep 1
+  /usr/bin/pkill -TERM $NAME && return
+
+  echo "Still waiting to finish $NAME ..."
+  sleep 5
+  /usr/bin/pkill -KILL $NAME && return
+
+  echo "Couldn't finish $NAME !!!"
+}
+
+restart_cgproxy() {
+  stop_cgproxy
+  start_cgproxy
+}
+
+case "$1" in
+'start')
+  start_cgproxy
+  ;;
+'stop')
+  stop_cgproxy
+  ;;
+'restart')
+  restart_cgproxy
+  ;;
+*)
+  echo "usage $0 start|stop|restart"
+esac
