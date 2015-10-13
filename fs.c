@@ -1312,6 +1312,7 @@ bool create_agent_symlinks(void)
 		}
 		nih_info("buf is %s", buf);
 		if (!file_exists(buf)) {
+			unlink(buf); // in case link dest moved
 			if (symlink(AGENT, buf) < 0) {
 				nih_error("failed to create release agent for %s",
 					all_mounts[i].controller);
