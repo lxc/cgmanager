@@ -1653,7 +1653,47 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 	return true;
 }
 
+#define SYSTEMD_INIT_SLICE "/init.scope"
 #define SYSTEMD_CGPROXY_SLICE "/system.slice/cgproxy.service"
+
+static inline bool check_init_slice(char *path, size_t pathlen)
+{
+	size_t slen = strlen(SYSTEMD_INIT_SLICE);
+	char *point;
+
+	if (pathlen <= slen)
+		return false;
+
+	point = path + pathlen - slen;
+	if (strncmp(point, SYSTEMD_INIT_SLICE, slen) == 0) {
+		if (path == point) // keep a single '/'
+			*(point+1) = '\0';
+		else // drop trailling '/'
+			*point = '\0';
+		return true;
+	}
+	return false;
+}
+
+static inline bool check_cgproxy_slice(char *path, size_t pathlen)
+{
+	size_t slen = strlen(SYSTEMD_CGPROXY_SLICE);
+	char *point;
+
+	if (pathlen <= slen)
+		return false;
+
+	point = path + pathlen - slen;
+	if (strncmp(point, SYSTEMD_CGPROXY_SLICE, slen) == 0) {
+		if (path == point) // keep a single '/'
+			*(point+1) = '\0';
+		else // drop trailling '/'
+			*point = '\0';
+		return true;
+	}
+	return false;
+}
+
 /*
  * compute_proxy_cgroup - same as compute_pid_cgroup, but chops of the
  * final /system.slice/cgproxy.service.
@@ -1661,22 +1701,21 @@ bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
 bool compute_proxy_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		char *path, int *depth)
 {
-	bool ret;
-	size_t slen = strlen(SYSTEMD_CGPROXY_SLICE);
 	size_t pathlen;
+	char *point;
 
-	ret = compute_pid_cgroup(pid, controller, cgroup, path, depth);
-	if (!ret)
-		return ret;
+	if (!compute_pid_cgroup(pid, controller, cgroup, path, depth))
+		return false;
 
 	pathlen = strlen(path);
-	if (pathlen <= slen)
-		return ret;
 
-	char *point = path + pathlen - slen;
-	if (strncmp(point, SYSTEMD_CGPROXY_SLICE, slen) == 0)
-		*point = '\0';
-	return ret;
+	if (check_init_slice(path, pathlen))
+		return true;
+
+	if (check_cgproxy_slice(path, pathlen))
+		return true;
+
+	return true;
 }
 
 /*
