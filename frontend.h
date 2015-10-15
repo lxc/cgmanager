@@ -70,6 +70,7 @@
 #ifndef __frontend_c
 extern int daemonise;
 extern int sigstop;
+extern int use_hierarchy;
 extern bool setns_pid_supported;
 extern unsigned long mypidns;
 extern bool setns_user_supported;

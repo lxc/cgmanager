@@ -1413,6 +1413,8 @@ static NihOption options[] = {
 		NULL, NULL, &daemonise, NULL },
 	{ 0, "sigstop", N_("Raise SIGSTOP when ready"),
 		NULL, NULL, &sigstop, NULL },
+	{ 0, "use-hierarchy", N_("Set memory.use_hierarchy"),
+		NULL, NULL, &use_hierarchy, NULL },
 
 	NIH_OPTION_LAST
 };
