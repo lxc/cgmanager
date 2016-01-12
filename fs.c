@@ -1702,7 +1702,6 @@ bool compute_proxy_cgroup(pid_t pid, const char *controller, const char *cgroup,
 		char *path, int *depth)
 {
 	size_t pathlen;
-	char *point;
 
 	if (!compute_pid_cgroup(pid, controller, cgroup, path, depth))
 		return false;
