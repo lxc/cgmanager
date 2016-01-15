@@ -121,7 +121,6 @@ bool cgm_autoremove(const char *cg)
 	if ( cgmanager_remove_on_empty_sync(NULL, cgroup_manager, ctrl_list, cg) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to remove-on-empty (%s:%s) failed: %s\n", ctrl_list, cg, nerr->message);
 		nih_free(nerr);
 		return false;
 	}
