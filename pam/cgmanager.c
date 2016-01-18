@@ -109,7 +109,6 @@ bool cgm_create(const char *cg, int32_t *existed)
 	if ( cgmanager_create_sync(NULL, cgroup_manager, ctrl_list, cg, existed) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to create failed (%s:%s): %s\n", ctrl_list, cg, nerr->message);
 		nih_free(nerr);
 		return false;
 	}
@@ -133,7 +132,6 @@ bool cgm_enter(const char *cg)
 				(int32_t) getpid()) != 0 ) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to move_pid (%s:%s, %d) failed: %s\n", ctrl_list, cg, (int)getpid(), nerr->message);
 		nih_free(nerr);
 		return false;
 	}
@@ -145,7 +143,6 @@ bool cgm_chown(const char *cg, uid_t uid, gid_t gid)
 	if ( cgmanager_chown_sync(NULL, cgroup_manager, ctrl_list, cg, uid, gid) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to chown (%s:%s, %d, %d) failed: %s\n", ctrl_list, cg, uid, gid, nerr->message);
 		nih_free(nerr);
 		return false;
 	}
@@ -158,7 +155,6 @@ char **cgm_list_controllers(void)
 	if ( cgmanager_list_controllers_sync(NULL, cgroup_manager, &controllers) != 0 ) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to list_controllers failed: %s\n", nerr->message);
 		nih_free(nerr);
 		return NULL;
 	}
@@ -179,7 +175,6 @@ char **cgm_list_children(const char *cg)
 	if ( cgmanager_list_children_sync(NULL, cgroup_manager, ctrl, cg, &children) != 0 ) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to list_children failed: %s\n", nerr->message);
 		nih_free(nerr);
 		return NULL;
 	}
@@ -194,7 +189,6 @@ bool cgm_cg_has_tasks(const char *cg)
 	if ( cgmanager_get_tasks_recursive_sync(NULL, cgroup_manager, ctrl_list, cg, &pids, &len) != 0 ) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "call to get_tasks_recursive failed: %s\n", nerr->message);
 		nih_free(nerr);
 		return false;
 	}
@@ -209,7 +203,6 @@ void cgm_clear_cgroup(const char *cg)
 	if ( cgmanager_remove_sync(NULL, cgroup_manager, ctrl_list, cg, recursive, &existed) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "warning: call to remove(%s) failed: %s\n", cg, nerr->message);
 		nih_free(nerr);
 	}
 }
@@ -219,7 +212,6 @@ void cgm_escape(void)
 	if ( cgmanager_move_pid_abs_sync(NULL, cgroup_manager, ctrl_list, "/", (int32_t) getpid()) != 0) {
 		NihError *nerr;
 		nerr = nih_error_get();
-		fprintf(stderr, "warning: attempt to escape to root cgroup failed: %s\n", nerr->message);
 		nih_free(nerr);
 	}
 }
