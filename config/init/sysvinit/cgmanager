@@ -15,15 +15,15 @@
 
 # Do NOT "set -e"
 
-PATH=/sbin:/bin
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-DAEMON=/sbin/cgmanager
+DAEMON="$(which cgmanager)"
 NAME=cgmanager
 DESC="cgroup management daemon"
 
 BASEOPTS="--daemon -m name=systemd"
 
-test -x $DAEMON || exit 0
+test -x "$DAEMON" || exit 0
 
 PIDFILE=/run/$NAME.pid
 
