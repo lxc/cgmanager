@@ -1387,6 +1387,8 @@ main (int argc, char *argv[])
 
 	nih_main_init (argv[0]);
 
+	nih_main_set_pidfile (CGPROXY_PIDFILE);
+
 	nih_option_set_synopsis (_("Control group proxy"));
 	nih_option_set_help (_("The cgroup manager proxy"));
 

@@ -7,3 +7,5 @@
 #define CGMANAGER_DBUS_PATH "unix:path=" CGMANAGER_SOCK
 #define CGPROXY_DBUS_PATH "unix:path=" CGPROXY_SOCK
 
+#define CGMANAGER_PIDFILE "/run/cgmanager.pid"
+#define CGPROXY_PIDFILE "/run/cgproxy.pid"

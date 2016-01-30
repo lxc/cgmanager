@@ -1507,6 +1507,8 @@ main (int argc, char *argv[])
 	nih_option_set_synopsis (_("Control group manager"));
 	nih_option_set_help (_("The cgroup manager daemon"));
 
+	nih_main_set_pidfile (CGMANAGER_PIDFILE);
+
 	args = nih_option_parser (NULL, argc, argv, options, FALSE);
 	if (! args)
 		exit (1);
