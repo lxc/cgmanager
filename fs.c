@@ -143,10 +143,6 @@ bool setup_base_run_path(void)
 		nih_fatal("%s: failed to create /run/cgmanager/fs", __func__);
 		return false;
 	}
-	if (mount("cgmfs", "/run/cgmanager/fs", "tmpfs", 0, "size=100000,mode=0755") < 0) {
-		nih_fatal("%s: failed to mount tmpfs onto /run/cgmanager/fs", __func__);
-		return false;
-	}
 	if (mkdir(AGENT_LINK_PATH, 0755) < 0 && errno != EEXIST) {
 		nih_fatal("%s: failed to create %s", __func__, AGENT_LINK_PATH);
 		return false;
@@ -1244,6 +1240,11 @@ int setup_cgroup_mounts(void)
 	if (mount(NULL, "/", NULL, MS_REC|MS_PRIVATE, 0) < 0) {
 		nih_warn("Failed to re-mount / private");
 		return -1;
+	}
+
+	if (mount("cgmfs", "/run/cgmanager/fs", "tmpfs", 0, "size=100000,mode=0755") < 0) {
+		nih_fatal("%s: failed to mount tmpfs onto /run/cgmanager/fs", __func__);
+		return false;
 	}
 
 	if (!do_mount_unified())
