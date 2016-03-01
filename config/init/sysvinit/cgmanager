@@ -15,15 +15,15 @@
 
 # Do NOT "set -e"
 
-PATH=/sbin:/bin
+PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
 
-DAEMON=/sbin/cgmanager
+DAEMON="$(which cgmanager)"
 NAME=cgmanager
 DESC="cgroup management daemon"
 
 BASEOPTS="--daemon -m name=systemd"
 
-test -x $DAEMON || exit 0
+test -x "$DAEMON" || exit 0
 
 PIDFILE=/run/$NAME.pid
 
@@ -79,7 +79,7 @@ do_start()
 	# Kill any existing cgproxy
 	/etc/init.d/cgproxy stop >/dev/null 2>&1 || true
 	# check whether to start cgproxy or cgmanager
-	if /sbin/cgproxy --check-master; then
+	if cgproxy --check-master; then
 		NESTED=yes /etc/init.d/cgproxy start || true && { exit 0; }
 	fi
 
