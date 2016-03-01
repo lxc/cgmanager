@@ -68,10 +68,18 @@ static void get_active_controllers(void)
 
 static bool is_in_list(char *which, char **list) {
 	int i;
+	size_t wlen = strlen(which);
 
 	for (i = 0; list[i]; i++) {
-		if (strcmp(which, list[i]) == 0)
-			return true;
+		char *o = list[i];
+		while (o) {
+			char *p = index(o, ',');
+			size_t len = p ? p - o : strlen(o);
+
+			if (len == wlen && strncmp(o, which, wlen) == 0)
+				return true;
+			o = p ? p + 1 : NULL;
+		}
 	}
 	return false;
 }
@@ -188,8 +196,14 @@ int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc,
 		mysyslog(LOG_ERR, "Failed to connect to cgmanager\n");
 		return PAM_SESSION_ERR;
 	}
-	if (argc > 1 && strcmp(argv[0], "-c") == 0)
+	if (argc > 1 && strcmp(argv[0], "-c") == 0) {
 		ctrl_list = validate_and_dup(argv[1]);
+		if (!ctrl_list) {
+			cgm_dbus_disconnect();
+			mysyslog(LOG_ERR, "PAM-CGM: bad controller arguments\n");
+			return PAM_SESSION_ERR;
+		}
+	}
 	if (!ctrl_list)
 		get_active_controllers();
 	cgm_escape();
