@@ -4,9 +4,8 @@
  * Author: Serge Hallyn <serge.hallyn@ubuntu.com>
  *
  * When a user logs in, this pam module will create cgroups which
- * the user may administer, for all controllers except name=systemd,
- * or for any controllers listed on the command line (if any are
- * listed).
+ * the user may administer, for any controllers listed on the command
+ * line or, if none are listed, then all available controllers.
  *
  * The cgroup created will be "user/$user/0" for the first session,
  * "user/$user/1" for the second, etc.
@@ -62,8 +61,6 @@ static void get_active_controllers(void)
 		return;
 	}
 	for (i = 0; list[i]; i++) {
-		if (strcmp(list[i], "name=systemd") == 0)
-			continue;
 		NIH_MUST( nih_strcat_sprintf(&ctrl_list, NULL, "%s%s",
 			ctrl_list ? "," : "", list[i]) );
 	}
