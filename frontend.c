@@ -20,7 +20,7 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#define __frontend_c
+#define CGM_FRONTEND_C
 #include <frontend.h>
 
 int daemonise = FALSE;

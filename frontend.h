@@ -20,8 +20,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef __frontend_h
-#define __frontend_h
+#ifndef CGM_FRONTEND_H
+#define CGM_FRONTEND_H
 
 #include <stdio.h>
 #include <stdlib.h>
