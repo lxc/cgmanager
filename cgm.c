@@ -29,6 +29,7 @@
 #include <stdbool.h>
 #include "cgmanager.h"
 #include "cgmanager-client.h"
+#include "config.h"
 
 #include <nih/macros.h>
 #include <nih/alloc.h>
@@ -490,7 +491,7 @@ void do_apiversion(void)
 
 void print_version(void)
 {
-	printf("0.29");
+	printf("%s", VERSION);
 	exit(0);
 }
 
