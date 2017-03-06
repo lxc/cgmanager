@@ -1,3 +1,10 @@
+# Deprecated
+
+Please note that the CGManager project has been deprecated in favor of
+using the kernel's CGroup Namespace or lxcfs' simulated cgroupfs.
+
+See https://s3hh.wordpress.com/2016/06/18/whither-cgmanager/ for details.
+
 === Intro ===
 
 This is a motivation, description and explanation of the cgmanager
