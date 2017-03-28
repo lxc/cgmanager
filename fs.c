@@ -400,8 +400,8 @@ static bool do_mount_subsys(int i)
 }
 
 const char *controllers[] = { "blkio", "cpuset", "cpu", "cpuacct", "debug",
-			"devices", "freezer", "memory", "net_cls", "net_prio",
-			NULL };
+			"devices", "freezer", "hugetlb", "memory", "net_cls",
+			"net_prio", "perf_event", "pids", NULL };
 
 static bool is_kernel_controller(const char *c)
 {
