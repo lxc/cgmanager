@@ -386,7 +386,7 @@ static bool do_mount_subsys(int i)
 	if (strcmp(controller, "cpuset") == 0) {
 		set_clone_children(dest); // TODO make this optional?
 		nih_info(_("set clone_children"));
-	} else if (strcmp(controller, "memory") == 0) {
+	} else if (strcmp(controller, "memory") == 0 && use_hierarchy) {
 		set_use_hierarchy(dest);  // TODO make this optional?
 		nih_info(_("set memory.use_hierarchy"));
 	}

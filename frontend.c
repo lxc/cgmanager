@@ -25,6 +25,7 @@
 
 int daemonise = FALSE;
 int sigstop = FALSE;
+int use_hierarchy = FALSE;
 bool setns_pid_supported = false;
 unsigned long mypidns;
 bool setns_user_supported = false;
