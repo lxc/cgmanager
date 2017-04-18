@@ -26,6 +26,7 @@ BASEOPTS="--daemon -m name=systemd"
 test -x "$DAEMON" || exit 0
 
 PIDFILE=/run/$NAME.pid
+CGMOUNT=/run/cgmanager/fs
 
 if [ -f /etc/default/cgmanager ]; then
 	# get cgmanager_opts if specified
@@ -64,6 +65,14 @@ do_stop()
 	[ "$?" = 2 ] && return 2
 	# Many daemons don't delete their pidfiles when they exit.
 	rm -f $PIDFILE
+
+	# cgmanager does not clean up the cgmfs mount point, so they
+	# stack up on top of each other every invocation if we do not
+	# try to unmount each stop (note: if we terminate outside
+	# control of this stop script, they will pile up anyways)
+	grep -q -m 1 "^cgmfs $CGMOUNT " /proc/self/mounts &&
+		umount $CGMOUNT
+
 	return "$RETVAL"
 }
 
