@@ -336,6 +336,17 @@ static bool set_release_agent(struct controller_mounts *m)
 	return true;
 }
 
+static bool do_mount_unified(char *src, char *dest)
+{
+	if (mount(src, dest, "cgroup2", 0, NULL) == 0)
+		return true;
+
+	if (errno != ENODEV)
+		return false;
+
+	return mount(src, dest, "cgroup", 0, "__DEVEL__sane_behavior") == 0;
+}
+
 static bool do_mount_subsys(int i)
 {
 	char *src, *dest, *controller;
@@ -357,7 +368,7 @@ static bool do_mount_subsys(int i)
 	}
 
 	if (m->unified) {
-		if (mount(m->controller, dest, "cgroup", 0, "__DEVEL__sane_behavior") < 0) {
+		if (!do_mount_unified(m->controller, dest)) {
 			nih_error("Failed mounting %s: %s\n", m->controller,
 					strerror(errno));
 			return false;
@@ -859,7 +870,7 @@ static bool mount_transient_unified(void)
 {
 	if (mkdir(UNIFIED_DIR, 0755) < 0 && errno != EEXIST)
 		return false;
-	if (mount("cgroup", UNIFIED_DIR, "cgroup", 0, "__DEVEL__sane_behavior") < 0) {
+	if (!do_mount_unified("cgroup", UNIFIED_DIR)) {
 		nih_error("Error mounting unified: %s\n", strerror(errno));
 		return false;
 	}
@@ -1020,7 +1031,7 @@ static bool pin_and_process_unified(void)
 	return record_unified_controllers(ctrlcopy);
 }
 
-static bool do_mount_unified(void)
+static bool mount_unified(void)
 {
 	int i;
 	bool found = false;
@@ -1041,7 +1052,7 @@ static bool do_mount_unified(void)
 		return false;
 	}
 
-	if (mount("unified", dest, "cgroup", 0, "__DEVEL__sane_behavior") < 0) {
+	if (!do_mount_unified("unified", dest)) {
 		nih_fatal("Failed to mount unified hierarchy: %s\n", strerror(errno));
 		return false;
 	}
@@ -1247,7 +1258,7 @@ int setup_cgroup_mounts(void)
 		return false;
 	}
 
-	if (!do_mount_unified())
+	if (!mount_unified())
 		return -1;
 
 	for (i=0; i<num_controllers; i++) {
