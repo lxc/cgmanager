@@ -140,7 +140,7 @@ if HAVE_PAM
 pam_LTLIBRARIES = pam_cgm.la
 pam_cgm_la_SOURCES = pam/pam_cgm.c pam/cgmanager.c pam/cgmanager.h
 pam_cgm_la_CFLAGS = $(AM_CFLAGS)
-pam_cgm_la_LIBADD = $(AM_LIBS) $(PAM_LIBS) -L$(top_srcdir) -lcgmanager
+pam_cgm_la_LIBADD = $(AM_LIBS) $(PAM_LIBS) -L$(top_srcdir) -lpthread -lpopt -lcgmanager
 pam_cgm_la_LDFLAGS = $(AM_LDFLAGS) -module -avoid-version -shared
 pam_cgm_la_DEPENDENCIES = libcgmanager.la
 
