@@ -582,6 +582,7 @@ static bool collect_kernel_subsystems(void)
 	FILE *cgf;
 	char line[400];
 	bool bret = false;
+	bool is_io_unified = is_unified_controller("io");
 
 	if ((cgf = fopen("/proc/cgroups", "r")) == NULL) {
 		nih_fatal ("Error opening /proc/cgroups: %s", strerror(errno));
@@ -604,6 +605,13 @@ static bool collect_kernel_subsystems(void)
 			continue;
 
 		if (*(p+1) != '1')
+			continue;
+
+		/*
+		 * if unified "io" controller is enabled then "blkio"
+		 * v1 controller is not available for use
+		 */
+		if (strcmp(line, "blkio") == 0 && is_io_unified)
 			continue;
 
 		if (!save_mount_subsys(line)) {
@@ -1386,6 +1394,7 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 	char path[100];
 	char *line = NULL, *cgroup = NULL;
 	size_t len = 0;
+	bool is_unified = is_unified_controller(controller);
 
 	sprintf(path, "/proc/%d/cgroup", pid);
 	if ((f = fopen(path, "r")) == NULL) {
@@ -1394,26 +1403,52 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 	}
 	while (getline(&line, &len, f) != -1) {
 		char *c1, *c2;
-		char *token, *saveptr = NULL;
+		char *endptr;
+		long cnr;
+
 		if ((c1 = strchr(line, ':')) == NULL)
 			continue;
+		if (c1 == line)
+			continue;
+		*c1 = '\0';
+
+		cnr = strtol(line, &endptr, 10);
+		if (*endptr != '\0')
+			continue;
+
 		if ((c2 = strchr(++c1, ':')) == NULL)
 			continue;
 		*c2 = '\0';
-		for (; (token = strtok_r(c1, ",", &saveptr)); c1 = NULL) {
-			if (!is_same_controller(token, controller))
+
+		if (is_unified) {
+			if (cnr != 0)
 				continue;
-			if (strlen(c2+1) + 1 > MAXPATHLEN) {
-				nih_error("cgroup name too long");
-				goto found;
-			}
-			strncpy(retv, c2+1, strlen(c2+1)+1);
-			drop_newlines(retv);
-			cgroup = retv;
-			goto found;
+		} else {
+			char *token, *saveptr = NULL;
+
+			if (cnr == 0)
+				continue;
+
+			for (; (token = strtok_r(c1, ",", &saveptr));
+			     c1 = NULL)
+				if (is_same_controller(token, controller))
+					break;
+
+			if (token == NULL)
+				continue;
 		}
+
+		if (strlen(c2 + 1) + 1 > MAXPATHLEN) {
+			nih_error("cgroup name too long");
+			break;
+		}
+
+		strncpy(retv, c2 + 1, strlen(c2 + 1) + 1);
+		drop_newlines(retv);
+		cgroup = retv;
+		break;
 	}
-found:
+
 	fclose(f);
 	free(line);
 	if (is_unified_controller(controller))
@@ -1938,12 +1973,10 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
  *
  * Return true so long as we could chown the directory itself.
  */
-bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children)
+bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid,
+		       bool all_children, bool is_unified)
 {
-	int len;
-
 	nih_assert (path);
-	len = strlen(path);
 	if (chown(path, uid, gid) < 0)
 		return false;
 
@@ -1952,7 +1985,7 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		struct dirent dirent, *direntp;
 		DIR *d;
 
-		if (len >= MAXPATHLEN)
+		if (strlen(path) >= MAXPATHLEN)
 			return true;
 
 		d = opendir(path);
@@ -1970,16 +2003,17 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		}
 		closedir(d);
 	} else {
-		// chown only the tasks and procs files
+		// chown only the tasks or procs file
 		nih_local char *fpath = NULL;
-		fpath = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.procs", path) );
+
+		fpath = NIH_MUST( nih_sprintf(NULL, "%s/%s", path,
+					      is_unified ?
+					      "cgroup.procs" :
+					      "tasks") );
 		if (chown(fpath, uid, gid) < 0)
-			nih_error("%s: Failed to chown procs file %s: %s", __func__,
-					fpath, strerror(errno));
-		sprintf(fpath+len, "/tasks");
-		if (chown(fpath, uid, gid) < 0)
-			nih_warn("%s: Failed to chown the tasks file %s: %s\n",
-					__func__, fpath, strerror(errno));
+			nih_error("%s: Failed to chown %s file %s: %s",
+				  __func__, is_unified ? "procs" : "tasks",
+				  fpath, strerror(errno));
 	}
 
 out:

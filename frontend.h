@@ -35,6 +35,7 @@
 #include <stdbool.h>
 #include <libgen.h>
 #include <unistd.h>
+#include <sys/inotify.h>
 #include <sys/mount.h>
 #include <dirent.h>
 
