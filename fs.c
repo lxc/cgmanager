@@ -117,6 +117,31 @@ bool dir_exists(const char *path)
 	return true;
 }
 
+char *allow_autoremove_premounted;
+int autoremove_premounted_set_release_agent = FALSE;
+
+bool premounted_should_allow_autoremove(const char *controller)
+{
+	nih_local char *allowed = NULL;
+	char *ctrl;
+
+	if (allow_autoremove_premounted == NULL)
+		return false;
+
+	if (strcmp(allow_autoremove_premounted, "all") == 0)
+		return true;
+
+	allowed = NIH_MUST( nih_strdup(NULL, allow_autoremove_premounted) );
+
+	nih_assert(controller != NULL);
+	for (ctrl = strtok(allowed, ","); ctrl != NULL;
+	     ctrl = strtok(NULL, ","))
+		if (strcmp(controller, ctrl) == 0)
+			return true;
+
+	return false;
+}
+
 /*
  * Where do we want to mount the controllers?  We used to mount
  * them under a tmpfs under /sys/fs/cgroup, for all to share.  Now
@@ -312,12 +337,43 @@ static bool set_release_agent(struct controller_mounts *m)
 	FILE *f;
 	nih_local char *path = NULL;
 
-	if (m->premounted) {
+	if (m->premounted &&
+	    !(premounted_should_allow_autoremove(m->controller)
+	      && autoremove_premounted_set_release_agent)) {
 		nih_info("%s was pre-mounted, not setting a release agent",
 			m->controller);
 		return true;
 	}
 	path = NIH_MUST( nih_sprintf(NULL, "%s/release_agent", m->path) );
+
+	if (m->premounted) {
+		char buf[128];
+		size_t read;
+		bool was_set = false;
+
+		f = fopen(path, "r");
+		if (f == NULL) {
+			nih_error("failed to open %s for reading", path);
+			return false;
+		}
+
+		while (!was_set && (read = fread(buf, 1, sizeof(buf), f)) > 0) {
+			size_t ctr;
+
+			for (ctr = 0; !was_set && ctr < read; ctr++)
+				if (!isspace(buf[ctr]))
+					was_set = true;
+		}
+
+		fclose(f);
+
+		if (was_set) {
+			nih_info("%s was pre-mounted and already has a release agent, not setting our one",
+				 m->controller);
+			return true;
+		}
+	}
+
 	if ((f = fopen(path, "w")) == NULL) {
 		nih_error("failed to open %s for writing", path);
 		return false;
@@ -1321,7 +1377,9 @@ bool create_agent_symlinks(void)
 	}
 
 	for (i=0; i<num_controllers; i++) {
-		if (all_mounts[i].premounted)
+		if (all_mounts[i].premounted &&
+		    !(premounted_should_allow_autoremove(all_mounts[i].controller) &&
+		      autoremove_premounted_set_release_agent))
 			continue;
 
 		ret = snprintf(buf+plen, MAXPATHLEN-plen, "cgm-release-agent.%s",

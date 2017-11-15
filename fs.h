@@ -30,8 +30,11 @@
 #define U_LEAF "/" U_LEAF_NAME
 
 extern char *all_controllers;
+extern char *allow_autoremove_premounted;
+extern int autoremove_premounted_set_release_agent;
 struct keys_return_type;
 
+bool premounted_should_allow_autoremove(const char *controller);
 int collect_subsystems(char *extra_mounts, char *skip_mounts);
 int setup_cgroup_mounts(void);
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,

@@ -1385,8 +1385,9 @@ int do_remove_on_empty_main(const char *controller, const char *cgroup,
 	size_t cgroup_len;
 	nih_local char *working = NULL, *wcgroup = NULL;
 
-	if (was_premounted(controller)) {
-		nih_error("remove-on-empty request for pre-mounted controller");
+	if (was_premounted(controller) &&
+	    !premounted_should_allow_autoremove(controller)) {
+		nih_warn("remove-on-empty request for pre-mounted controller");
 		return -2;
 	}
 
@@ -1461,7 +1462,7 @@ int remove_on_empty_main(const char *controller, const char *cgroup,
 	tok = strtok(c, ",");
 	while (tok) {
 		ret = do_remove_on_empty_main(tok, cgroup, p, r);
-		if (ret == -2)  // pre-mounted, autoremove not an option, ignore
+		if (ret == -2)  // autoremove not supported, ignore
 			goto next;
 		if (ret != 0)
 			return -1;
@@ -1555,7 +1556,9 @@ int do_prune_main(const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	do_recursive_prune(working, !was_premounted(controller));
+	do_recursive_prune(working,
+			   !was_premounted(controller) ||
+			   premounted_should_allow_autoremove(controller));
 
 	return 0;
 }
@@ -1664,6 +1667,14 @@ extra_mounts_set (NihOption *option, const char *arg)
 	return 0;
 }
 
+static int
+allow_autoremove_premounted_set (NihOption *option, const char *arg)
+{
+	allow_autoremove_premounted = NIH_MUST( strdup(arg) );
+
+	return 0;
+}
+
 /**
  * options:
  *
@@ -1676,6 +1687,13 @@ static NihOption options[] = {
 		NULL, "subsystems to mount", NULL, skip_mounts_set },
 	{ 'm', "mount", N_("Extra subsystems to mount"),
 		NULL, "subsystems to mount", NULL, extra_mounts_set },
+	{ 0, "allow-autoremove-premounted",
+	  N_("v1 controllers (comma separated) for which we allow autoremove even though they were premounted or \"all\" to allow it on all such controllers"),
+	  NULL, "premounted_controllers", NULL,
+	  allow_autoremove_premounted_set },
+	{ 0, "autoremove-premounted-set-release-agent",
+	  N_("Set our release agent for premounted v1 controllers with autoremove enabled that do not have an agent already set"),
+	  NULL, NULL, &autoremove_premounted_set_release_agent, NULL },
 	{ 0, "daemon", N_("Detach and run in the background"),
 		NULL, NULL, &daemonise, NULL },
 	{ 0, "sigstop", N_("Raise SIGSTOP when ready"),
