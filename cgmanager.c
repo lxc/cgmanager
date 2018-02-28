@@ -22,6 +22,14 @@
 #include <sys/vfs.h>
 #include <linux/fs.h>
 
+struct autoremove_entry {
+	NihList entry;
+
+	char *gpath, *evpath, *dirname;
+	int wd_cg, wd_events;
+	NihIo *io;
+};
+
 /*
  * Maximum depth of directories we allow in Create
  * Default is 16.  Figure 4 directories per level of container
@@ -29,6 +37,8 @@
  * 4 containers deep.
  */
 static int maxdepth = 16;
+
+static NihList autoremove_entries;
 
 /* GetPidCgroup */
 int get_pid_cgroup_main(void *parent, char *controller, struct ucred p,
@@ -349,7 +359,8 @@ int do_create_main(const char *controller, const char *cgroup, struct ucred p,
 			rmdir(path);
 			return -1;
 		}
-		if (!chown_cgroup_path(path, r.uid, r.gid, true)) {
+		if (!chown_cgroup_path(path, r.uid, r.gid, true,
+				       is_unified_controller(controller))) {
 			nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
 				path, r.uid, r.gid);
 			rmdir(path);
@@ -450,14 +461,15 @@ int do_chown_main(const char *controller, const char *cgroup, struct ucred p,
 	}
 
 	// go ahead and chown it.
-	if (!chown_cgroup_path(path, v.uid, v.gid, false)) {
+	if (!chown_cgroup_path(path, v.uid, v.gid, false,
+			       is_unified_controller(controller))) {
 		nih_error("%s: Failed to change ownership on %s to %u:%u", __func__,
 			path, v.uid, v.gid);
 		return -2;
 	}
 	if (is_unified_controller(controller)) {
 		NIH_MUST( nih_strcat(&path, NULL, U_LEAF) );
-		if (dir_exists(path) && !chown_cgroup_path(path, v.uid, v.gid, false)) {
+		if (dir_exists(path) && !chown_cgroup_path(path, v.uid, v.gid, false, true)) {
 			nih_warn("%s: Failed to chown leaf directory for %s to %u:%u",
 				__func__, path, v.uid, v.gid);
 			return -2;
@@ -900,7 +912,8 @@ int get_tasks_main(void *parent, char *controller, const char *cgroup,
 			struct ucred p, struct ucred r, int32_t **pids)
 {
 	char path[MAXPATHLEN];
-	const char *key = "tasks";
+	const char *key = is_unified_controller(controller) ?
+			  U_LEAF_NAME "/cgroup.procs" : "tasks";
 	int alloced_pids = 0, nrpids = 0;
 
 	if (!sane_cgroup(cgroup)) {
@@ -950,16 +963,17 @@ int get_tasks_main(void *parent, char *controller, const char *cgroup,
 	return nrpids;
 }
 
-int do_collect_tasks(void *parent, char **path, int32_t **pids,
-			int *alloced_pids, int *nrpids)
+static int do_collect_tasks(void *parent, char **path, int32_t **pids,
+			    int *alloced_pids, int *nrpids, bool is_unified)
 {
 	struct dirent dirent, *direntp;
 	DIR *dir;
-	const char *key = "tasks";
+	const char *key = is_unified ? U_LEAF_NAME "/cgroup.procs" : "tasks";
 
 	dir = opendir(*path);
 	if (!dir) {
-		nih_warn("%s: Failed to open dir %s for recursive deletion", __func__, *path);
+		nih_warn("%s: Failed to open dir %s for recursive collection",
+			 __func__, *path);
 		return -2;
 	}
 
@@ -971,7 +985,8 @@ int do_collect_tasks(void *parent, char **path, int32_t **pids,
 		if (!direntp)
 			break;
 		if (!strcmp(direntp->d_name, ".") ||
-		    !strcmp(direntp->d_name, ".."))
+		    !strcmp(direntp->d_name, "..") ||
+		    !strcmp(direntp->d_name, U_LEAF_NAME))
 			continue;
 		childname = NIH_MUST( nih_sprintf(NULL, "%s/%s", *path, direntp->d_name) );
 		rc = lstat(childname, &mystat);
@@ -979,7 +994,8 @@ int do_collect_tasks(void *parent, char **path, int32_t **pids,
 			continue;
 		if (S_ISDIR(mystat.st_mode))
 			if (do_collect_tasks(parent, &childname, pids,
-						alloced_pids, nrpids) == -1)
+					     alloced_pids, nrpids,
+					     is_unified) == -1)
 				nih_info("%s: error descending subdirs", __func__);
 	}
 
@@ -1022,7 +1038,8 @@ int collect_tasks(void *parent, const char *controller, const char *cgroup,
 	}
 
 	rpath = NIH_MUST( nih_strdup(NULL, path) );
-	return do_collect_tasks(parent, &rpath, pids, alloced_pids, nrpids);
+	return do_collect_tasks(parent, &rpath, pids, alloced_pids, nrpids,
+				is_unified_controller(controller));
 }
 
 int get_tasks_recursive_main(void *parent, const char *controller,
@@ -1114,6 +1131,253 @@ int list_children_main(void *parent, char *controller, const char *cgroup,
 	return get_directory_children(parent, path, output);
 }
 
+static int autoremove_entry_destroy(struct autoremove_entry *entry)
+{
+	nih_assert(entry != NULL);
+
+	nih_assert(entry->gpath != NULL);
+	nih_discard(entry->gpath);
+
+	nih_assert(entry->evpath != NULL);
+	nih_discard(entry->evpath);
+
+	nih_assert(entry->dirname != NULL);
+	nih_discard(entry->dirname);
+
+	if (entry->io != NULL)
+		nih_discard(entry->io);
+
+	nih_list_destroy(&entry->entry);
+
+	return 0;
+}
+
+/* if this function returns true then discontinue watching the events file */
+static bool autoremove_events_modified(struct autoremove_entry *entry)
+{
+	FILE *f;
+	char line[1024];
+	int pop_val = -1;
+	nih_local char *leafpath = NULL;
+
+	nih_assert(entry != NULL);
+	nih_assert(entry->evpath != NULL);
+
+	f = fopen(entry->evpath, "r");
+	if (!f) {
+		nih_error("%s: Cannot open %s in watcher: %s",
+			  __func__, entry->evpath, strerror(errno));
+		return false;
+	}
+
+	while (fgets(line, 1024, f) != NULL) {
+		int val;
+
+		if (sscanf(line, " populated %d", &val) != 1)
+			continue;
+
+		pop_val = !!val;
+		break;
+	}
+
+	fclose(f);
+
+	if (pop_val == -1) {
+		nih_error("%s: Cannot find or parse populated value in %s",
+			  __func__, entry->evpath);
+		return false;
+	} else if (pop_val == 1)
+		return false;
+
+	nih_assert(entry->gpath != NULL);
+	leafpath = NIH_MUST( nih_sprintf(NULL, "%s%s", entry->gpath, U_LEAF) );
+	if (rmdir(leafpath) < 0) {
+		if (errno == EBUSY)
+			return false;
+
+		nih_error("%s: Failed to remove %s: %s", __func__, leafpath,
+			  strerror(errno));
+	}
+
+	if (rmdir(entry->gpath) < 0) {
+		if (errno == EBUSY)
+			return false;
+
+		nih_error("%s: Failed to remove %s: %s", __func__, entry->gpath,
+			  strerror(errno));
+		return false;
+	}
+
+	nih_info(_("Removed %s as it was empty"), entry->gpath);
+	return true;
+}
+
+static void autoremove_inotify_read(void *data, NihIo *io, const char *buf,
+				    size_t len)
+{
+	struct autoremove_entry *entry = data;
+	struct inotify_event *event;
+
+	nih_assert(entry != NULL);
+	nih_assert(io != NULL);
+	nih_assert(buf != NULL);
+
+	bool should_exit = false;
+	while (len >= sizeof(*event)) {
+		size_t esize;
+
+		event = (struct inotify_event *)buf;
+		esize = sizeof(*event) + event->len;
+		if (len < esize)
+			break;
+
+		if (event->wd != entry->wd_cg &&
+		    event->wd != entry->wd_events) {
+			nih_error("%s: Got unknown watch descriptor %d (expected %d or %d) while watching %s",
+				  __func__, event->wd, entry->wd_cg,
+				  entry->wd_events, entry->gpath);
+			goto next;
+		}
+
+		if (event->mask & IN_IGNORED) {
+			nih_info(_("%s watch was removed"),
+				 entry->gpath);
+			should_exit = true;
+			goto next;
+		}
+
+		if (event->mask & IN_DELETE &&
+		    event->wd == entry->wd_cg)
+			do {
+				if (event->len < 1) {
+					nih_warn("got DELETE inotify event without object name");
+					break;
+				}
+
+				if (strcmp(event->name, entry->dirname) != 0)
+					break;
+
+				nih_info(_("%s was removed by somebody else"),
+					 entry->gpath);
+				should_exit = true;
+				goto next;
+			} while (0);
+
+		if (event->mask & IN_MODIFY &&
+		    event->wd == entry->wd_events)
+			if (autoremove_events_modified(entry)) {
+				should_exit = true;
+				goto next;
+			}
+
+	next:
+		nih_io_buffer_shrink(io->recv_buf, esize);
+		len -= esize;
+
+		if (should_exit) {
+			nih_discard(entry);
+			return;
+		}
+	}
+}
+
+static int do_remove_on_empty_unified(const char *path)
+{
+	nih_local char *wpath = NIH_MUST( nih_alloc(NULL, PATH_MAX) );
+	nih_local char *evpath = NULL;
+	nih_local char *parentpath = NULL;
+	char *lastpart;
+	struct autoremove_entry *entry;
+	int ifd, wd_cg, wd_events;
+
+	if (realpath(path, wpath) == NULL || strlen(wpath) < 1) {
+		nih_error("%s: Failed to expand path %s: %s", __func__, path,
+			  strerror(errno));
+		return -1;
+	}
+
+	if (wpath[strlen(wpath) - 1] == '/')
+		wpath[strlen(wpath) - 1] = '\0';
+
+	NIH_LIST_FOREACH(&autoremove_entries, lentry) {
+		entry = (struct autoremove_entry *)lentry;
+
+		nih_assert(entry != NULL);
+		nih_assert(entry->gpath != NULL);
+
+		if (strcmp(entry->gpath, wpath) == 0)
+			return 0;
+	}
+
+	evpath = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.events", wpath) );
+
+	parentpath = NIH_MUST( nih_strdup(NULL, wpath) );
+	lastpart = strrchr(parentpath, '/');
+	if (lastpart == NULL) {
+		nih_error("%s: Failed to get last directory in path %s (%s)",
+			  __func__, parentpath, path);
+		return -1;
+	}
+	*lastpart = '\0';
+	lastpart++;
+
+	ifd = inotify_init1(IN_CLOEXEC);
+	if (ifd < 0) {
+		nih_error("%s: Failed to init inotify for %s: %s", __func__,
+			  path, strerror(errno));
+		return -1;
+	}
+
+	/*
+	 * IN_DELETE_SELF or IN_IGNORED events aren't generated for a cgroup
+	 * (or its files) that is being removed, we have to monitor parent cgroup
+	 * directory for IN_DELETE events instead
+	 */
+	wd_cg = inotify_add_watch(ifd, parentpath, IN_DELETE);
+	if (wd_cg < 0) {
+		nih_error("%s: Failed to add watch for %s: %s", __func__, parentpath,
+			  strerror(errno));
+		close(ifd);
+		return -1;
+	}
+
+	wd_events = inotify_add_watch(ifd, evpath, IN_MODIFY);
+	if (wd_events < 0) {
+		nih_error("%s: Failed to add watch for %s: %s", __func__, evpath,
+			  strerror(errno));
+		close(ifd);
+		return -1;
+	}
+
+	entry = NIH_MUST( nih_alloc(NULL, sizeof(*entry)) );
+	nih_list_init(&entry->entry);
+	entry->gpath = NIH_MUST( nih_strdup(NULL, wpath) );
+	entry->evpath = NIH_MUST( nih_strdup(NULL, evpath) );
+	entry->dirname = NIH_MUST( nih_strdup(NULL, lastpart) );
+	entry->wd_cg = wd_cg;
+	entry->wd_events = wd_events;
+	entry->io = NULL;
+
+	nih_list_add(&autoremove_entries, &entry->entry);
+	nih_alloc_set_destructor(entry, autoremove_entry_destroy);
+
+	entry->io = nih_io_reopen(NULL, ifd, NIH_IO_STREAM,
+				  autoremove_inotify_read,
+				  NULL, NULL, entry);
+	if (entry->io == NULL) {
+		nih_error("%s: Failed to add IO for watch for %s",
+			  __func__, evpath);
+		nih_discard(entry);
+		close(ifd);
+		return -1;
+	}
+
+	if (autoremove_events_modified(entry))
+		nih_discard(entry);
+
+	return 0;
+}
+
 int do_remove_on_empty_main(const char *controller, const char *cgroup,
 		struct ucred p, struct ucred r)
 {
@@ -1121,8 +1385,9 @@ int do_remove_on_empty_main(const char *controller, const char *cgroup,
 	size_t cgroup_len;
 	nih_local char *working = NULL, *wcgroup = NULL;
 
-	if (was_premounted(controller)) {
-		nih_error("remove-on-empty request for pre-mounted controller");
+	if (was_premounted(controller) &&
+	    !premounted_should_allow_autoremove(controller)) {
+		nih_warn("remove-on-empty request for pre-mounted controller");
 		return -2;
 	}
 
@@ -1157,6 +1422,9 @@ int do_remove_on_empty_main(const char *controller, const char *cgroup,
 			r.pid, r.uid, r.gid, working);
 		return -1;
 	}
+
+	if (is_unified_controller(controller))
+		return do_remove_on_empty_unified(working);
 
 	NIH_MUST( nih_strcat(&working, NULL, "/notify_on_release") );
 
@@ -1194,7 +1462,7 @@ int remove_on_empty_main(const char *controller, const char *cgroup,
 	tok = strtok(c, ",");
 	while (tok) {
 		ret = do_remove_on_empty_main(tok, cgroup, p, r);
-		if (ret == -2)  // pre-mounted, autoremove not an option, ignore
+		if (ret == -2)  // autoremove not supported, ignore
 			goto next;
 		if (ret != 0)
 			return -1;
@@ -1288,7 +1556,9 @@ int do_prune_main(const char *controller, const char *cgroup,
 		return -1;
 	}
 
-	do_recursive_prune(working, !was_premounted(controller));
+	do_recursive_prune(working,
+			   !was_premounted(controller) ||
+			   premounted_should_allow_autoremove(controller));
 
 	return 0;
 }
@@ -1397,6 +1667,14 @@ extra_mounts_set (NihOption *option, const char *arg)
 	return 0;
 }
 
+static int
+allow_autoremove_premounted_set (NihOption *option, const char *arg)
+{
+	allow_autoremove_premounted = NIH_MUST( strdup(arg) );
+
+	return 0;
+}
+
 /**
  * options:
  *
@@ -1409,6 +1687,13 @@ static NihOption options[] = {
 		NULL, "subsystems to mount", NULL, skip_mounts_set },
 	{ 'm', "mount", N_("Extra subsystems to mount"),
 		NULL, "subsystems to mount", NULL, extra_mounts_set },
+	{ 0, "allow-autoremove-premounted",
+	  N_("v1 controllers (comma separated) for which we allow autoremove even though they were premounted or \"all\" to allow it on all such controllers"),
+	  NULL, "premounted_controllers", NULL,
+	  allow_autoremove_premounted_set },
+	{ 0, "autoremove-premounted-set-release-agent",
+	  N_("Set our release agent for premounted v1 controllers with autoremove enabled that do not have an agent already set"),
+	  NULL, NULL, &autoremove_premounted_set_release_agent, NULL },
 	{ 0, "daemon", N_("Detach and run in the background"),
 		NULL, NULL, &daemonise, NULL },
 	{ 0, "sigstop", N_("Raise SIGSTOP when ready"),
@@ -1502,6 +1787,8 @@ main (int argc, char *argv[])
 	struct stat sb;
 	struct rlimit newrlimit;
 
+	nih_list_init(&autoremove_entries);
+
 	nih_main_init (argv[0]);
 
 	nih_option_set_synopsis (_("Control group manager"));
@@ -1583,6 +1870,9 @@ main (int argc, char *argv[])
 		raise(SIGSTOP);
 
 	ret = nih_main_loop ();
+
+	while (!NIH_LIST_EMPTY(&autoremove_entries))
+		nih_free(autoremove_entries.next);
 
 	return ret;
 }

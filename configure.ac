@@ -163,6 +163,9 @@ if test "z$pamdir" != "znone"; then
 		[AC_MSG_ERROR([*** libpam not found.])
 		])
 
+	AC_CHECK_LIB([popt],[poptGetContext],,
+		AC_MSG_ERROR([libpopt required but not found]))
+
 	AC_SUBST(PAM_LIBS)
 	AC_SUBST([pamdir])
 fi

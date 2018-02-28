@@ -117,6 +117,31 @@ bool dir_exists(const char *path)
 	return true;
 }
 
+char *allow_autoremove_premounted;
+int autoremove_premounted_set_release_agent = FALSE;
+
+bool premounted_should_allow_autoremove(const char *controller)
+{
+	nih_local char *allowed = NULL;
+	char *ctrl;
+
+	if (allow_autoremove_premounted == NULL)
+		return false;
+
+	if (strcmp(allow_autoremove_premounted, "all") == 0)
+		return true;
+
+	allowed = NIH_MUST( nih_strdup(NULL, allow_autoremove_premounted) );
+
+	nih_assert(controller != NULL);
+	for (ctrl = strtok(allowed, ","); ctrl != NULL;
+	     ctrl = strtok(NULL, ","))
+		if (strcmp(controller, ctrl) == 0)
+			return true;
+
+	return false;
+}
+
 /*
  * Where do we want to mount the controllers?  We used to mount
  * them under a tmpfs under /sys/fs/cgroup, for all to share.  Now
@@ -312,12 +337,43 @@ static bool set_release_agent(struct controller_mounts *m)
 	FILE *f;
 	nih_local char *path = NULL;
 
-	if (m->premounted) {
+	if (m->premounted &&
+	    !(premounted_should_allow_autoremove(m->controller)
+	      && autoremove_premounted_set_release_agent)) {
 		nih_info("%s was pre-mounted, not setting a release agent",
 			m->controller);
 		return true;
 	}
 	path = NIH_MUST( nih_sprintf(NULL, "%s/release_agent", m->path) );
+
+	if (m->premounted) {
+		char buf[128];
+		size_t read;
+		bool was_set = false;
+
+		f = fopen(path, "r");
+		if (f == NULL) {
+			nih_error("failed to open %s for reading", path);
+			return false;
+		}
+
+		while (!was_set && (read = fread(buf, 1, sizeof(buf), f)) > 0) {
+			size_t ctr;
+
+			for (ctr = 0; !was_set && ctr < read; ctr++)
+				if (!isspace(buf[ctr]))
+					was_set = true;
+		}
+
+		fclose(f);
+
+		if (was_set) {
+			nih_info("%s was pre-mounted and already has a release agent, not setting our one",
+				 m->controller);
+			return true;
+		}
+	}
+
 	if ((f = fopen(path, "w")) == NULL) {
 		nih_error("failed to open %s for writing", path);
 		return false;
@@ -582,6 +638,7 @@ static bool collect_kernel_subsystems(void)
 	FILE *cgf;
 	char line[400];
 	bool bret = false;
+	bool is_io_unified = is_unified_controller("io");
 
 	if ((cgf = fopen("/proc/cgroups", "r")) == NULL) {
 		nih_fatal ("Error opening /proc/cgroups: %s", strerror(errno));
@@ -604,6 +661,13 @@ static bool collect_kernel_subsystems(void)
 			continue;
 
 		if (*(p+1) != '1')
+			continue;
+
+		/*
+		 * if unified "io" controller is enabled then "blkio"
+		 * v1 controller is not available for use
+		 */
+		if (strcmp(line, "blkio") == 0 && is_io_unified)
 			continue;
 
 		if (!save_mount_subsys(line)) {
@@ -1313,7 +1377,9 @@ bool create_agent_symlinks(void)
 	}
 
 	for (i=0; i<num_controllers; i++) {
-		if (all_mounts[i].premounted)
+		if (all_mounts[i].premounted &&
+		    !(premounted_should_allow_autoremove(all_mounts[i].controller) &&
+		      autoremove_premounted_set_release_agent))
 			continue;
 
 		ret = snprintf(buf+plen, MAXPATHLEN-plen, "cgm-release-agent.%s",
@@ -1386,6 +1452,7 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 	char path[100];
 	char *line = NULL, *cgroup = NULL;
 	size_t len = 0;
+	bool is_unified = is_unified_controller(controller);
 
 	sprintf(path, "/proc/%d/cgroup", pid);
 	if ((f = fopen(path, "r")) == NULL) {
@@ -1394,26 +1461,52 @@ static inline char *pid_cgroup(pid_t pid, const char *controller, char *retv)
 	}
 	while (getline(&line, &len, f) != -1) {
 		char *c1, *c2;
-		char *token, *saveptr = NULL;
+		char *endptr;
+		long cnr;
+
 		if ((c1 = strchr(line, ':')) == NULL)
 			continue;
+		if (c1 == line)
+			continue;
+		*c1 = '\0';
+
+		cnr = strtol(line, &endptr, 10);
+		if (*endptr != '\0')
+			continue;
+
 		if ((c2 = strchr(++c1, ':')) == NULL)
 			continue;
 		*c2 = '\0';
-		for (; (token = strtok_r(c1, ",", &saveptr)); c1 = NULL) {
-			if (!is_same_controller(token, controller))
+
+		if (is_unified) {
+			if (cnr != 0)
 				continue;
-			if (strlen(c2+1) + 1 > MAXPATHLEN) {
-				nih_error("cgroup name too long");
-				goto found;
-			}
-			strncpy(retv, c2+1, strlen(c2+1)+1);
-			drop_newlines(retv);
-			cgroup = retv;
-			goto found;
+		} else {
+			char *token, *saveptr = NULL;
+
+			if (cnr == 0)
+				continue;
+
+			for (; (token = strtok_r(c1, ",", &saveptr));
+			     c1 = NULL)
+				if (is_same_controller(token, controller))
+					break;
+
+			if (token == NULL)
+				continue;
 		}
+
+		if (strlen(c2 + 1) + 1 > MAXPATHLEN) {
+			nih_error("cgroup name too long");
+			break;
+		}
+
+		strncpy(retv, c2 + 1, strlen(c2 + 1) + 1);
+		drop_newlines(retv);
+		cgroup = retv;
+		break;
 	}
-found:
+
 	fclose(f);
 	free(line);
 	if (is_unified_controller(controller))
@@ -1938,12 +2031,10 @@ void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid)
  *
  * Return true so long as we could chown the directory itself.
  */
-bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children)
+bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid,
+		       bool all_children, bool is_unified)
 {
-	int len;
-
 	nih_assert (path);
-	len = strlen(path);
 	if (chown(path, uid, gid) < 0)
 		return false;
 
@@ -1952,7 +2043,7 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		struct dirent dirent, *direntp;
 		DIR *d;
 
-		if (len >= MAXPATHLEN)
+		if (strlen(path) >= MAXPATHLEN)
 			return true;
 
 		d = opendir(path);
@@ -1970,16 +2061,17 @@ bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children
 		}
 		closedir(d);
 	} else {
-		// chown only the tasks and procs files
+		// chown only the tasks or procs file
 		nih_local char *fpath = NULL;
-		fpath = NIH_MUST( nih_sprintf(NULL, "%s/cgroup.procs", path) );
+
+		fpath = NIH_MUST( nih_sprintf(NULL, "%s/%s", path,
+					      is_unified ?
+					      "cgroup.procs" :
+					      "tasks") );
 		if (chown(fpath, uid, gid) < 0)
-			nih_error("%s: Failed to chown procs file %s: %s", __func__,
-					fpath, strerror(errno));
-		sprintf(fpath+len, "/tasks");
-		if (chown(fpath, uid, gid) < 0)
-			nih_warn("%s: Failed to chown the tasks file %s: %s\n",
-					__func__, fpath, strerror(errno));
+			nih_error("%s: Failed to chown %s file %s: %s",
+				  __func__, is_unified ? "procs" : "tasks",
+				  fpath, strerror(errno));
 	}
 
 out:

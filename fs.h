@@ -30,8 +30,11 @@
 #define U_LEAF "/" U_LEAF_NAME
 
 extern char *all_controllers;
+extern char *allow_autoremove_premounted;
+extern int autoremove_premounted_set_release_agent;
 struct keys_return_type;
 
+bool premounted_should_allow_autoremove(const char *controller);
 int collect_subsystems(char *extra_mounts, char *skip_mounts);
 int setup_cgroup_mounts(void);
 bool compute_pid_cgroup(pid_t pid, const char *controller, const char *cgroup,
@@ -46,7 +49,8 @@ int file_read_pids(void *parent, const char *path, int32_t **pids,
 void get_pid_creds(pid_t pid, uid_t *uid, gid_t *gid);
 const char *get_controller_path(const char *controller);
 bool hostuid_to_ns(uid_t uid, pid_t pid, uid_t *answer);
-bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid, bool all_children);
+bool chown_cgroup_path(const char *path, uid_t uid, gid_t gid,
+		       bool all_children, bool is_unified);
 bool chmod_cgroup_path(const char *path, int mode);
 bool set_value(const char *controller, const char *path, const char *value);
 bool set_value_trusted(const char *path, const char *value);
