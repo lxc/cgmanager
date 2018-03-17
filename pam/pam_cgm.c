@@ -843,7 +843,9 @@ int pam_sm_close_session(pam_handle_t *pamh, int flags, int argc,
 	if (ret != PAM_SUCCESS) {
 		mysyslog(LOG_ERR, "cannot get handle data (%d)\n", ret);
 		return ret;
-	} else
+	} else if (hd_ptr == NULL)
+		return PAM_SUCCESS;
+	else
 		hd = (struct handle_data *)hd_ptr;
 
 	if (!hd->session_open) {
